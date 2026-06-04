@@ -36,3 +36,5 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+.keystone/
+node_modules/
