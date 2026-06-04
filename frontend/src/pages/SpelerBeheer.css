@@ -1,0 +1,113 @@
+.sb-header {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 12px;
+  margin-bottom: 20px; flex-wrap: wrap;
+}
+
+/* Stats */
+.sb-stats {
+  display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px;
+}
+.sb-stat {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 10px 16px;
+  display: flex; flex-direction: column; align-items: center; min-width: 62px;
+  flex: 1;
+}
+.sb-stat-val { font-family: var(--font-display); font-size: 26px; line-height: 1; }
+.sb-stat-lbl {
+  font-family: var(--font-heading); font-size: 10px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase; color: var(--red); margin-top: 2px;
+}
+
+/* Toolbar */
+.sb-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap; margin-bottom: 16px;
+}
+.sb-search { flex: 1; min-width: 140px; }
+.sb-select { width: 150px; min-width: 120px; }
+.sb-sort-label {
+  font-family: var(--font-heading); font-size: 11px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-dim);
+  margin-left: 4px; white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .sb-select { width: 100%; }
+  .sb-search { width: 100%; }
+  .sb-sort-label { display: none; }
+}
+
+.sb-toggles {
+  display: flex; background: var(--bg-elevated);
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+}
+.sb-toggle {
+  padding: 7px 12px; font-family: var(--font-heading); font-size: 12px;
+  font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+  background: none; color: var(--text-dim); border: none; cursor: pointer; transition: all .12s;
+  white-space: nowrap; min-height: 38px;
+}
+.sb-toggle:hover  { color: var(--white); background: rgba(255,255,255,0.07); }
+.sb-toggle.active { background: var(--red); color: #fff; }
+
+/* Table */
+.sb-table-wrap { margin-top: 4px; overflow-x: auto; }
+.sb-table .sb-num {
+  font-family: var(--font-display); font-size: 16px; color: var(--red);
+  text-align: right; padding-right: 16px; white-space: nowrap;
+}
+.sb-table .sb-name { font-weight: 500; font-size: 14px; }
+.sb-table .sb-row-inactive td { opacity: 0.45; }
+
+.sb-pos-badge {
+  display: inline-block; padding: 3px 10px; border-radius: 2px;
+  font-family: var(--font-heading); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap;
+}
+.sb-pos-keeper     { background: rgba(59,130,246,0.2);  color: #93c5fd; }
+.sb-pos-defender   { background: rgba(34,197,94,0.15);  color: #86efac; }
+.sb-pos-midfielder { background: rgba(245,158,11,0.15); color: #fcd34d; }
+.sb-pos-forward    { background: rgba(239,68,68,0.2);   color: #fca5a5; }
+.sb-pos-none { color: var(--text-dim); }
+
+.sb-row-actions { display: flex; gap: 4px; justify-content: flex-end; opacity: 0; transition: opacity .12s; }
+tr:hover .sb-row-actions { opacity: 1; }
+@media (max-width: 768px) {
+  .sb-row-actions { opacity: 1; }
+}
+
+.form-group { margin-bottom: 16px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+@media (max-width: 480px) { .modal-actions { flex-direction: column-reverse; } .modal-actions .btn { width: 100%; justify-content: center; } }
+
+/* ── Mobile/Desktop visibility ── */
+.sb-desktop-only { display: table; }
+.sb-mobile-only  { display: none; }
+@media (max-width: 640px) {
+  .sb-desktop-only { display: none; }
+  .sb-mobile-only  { display: block; }
+}
+
+/* ── Mobile player cards ── */
+.sb-mobile-list { padding: 6px 0; }
+.sb-mobile-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-bottom: 1px solid var(--border-soft);
+}
+.sb-mobile-card:last-child { border-bottom: none; }
+.sb-mobile-card.sb-row-inactive { opacity: 0.45; }
+
+.sb-mobile-num {
+  font-family: var(--font-display); font-size: 20px;
+  color: var(--red); width: 36px; text-align: right; flex-shrink: 0;
+}
+.sb-mobile-info { flex: 1; min-width: 0; }
+.sb-mobile-name {
+  font-size: 15px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-bottom: 3px;
+}
+.sb-mobile-meta { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
