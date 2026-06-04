@@ -160,3 +160,16 @@
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
+
+/* ── Header user / logout ── */
+.header-user {
+  display: flex; align-items: center; gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.header-trainer-name {
+  font-family: var(--font-heading); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.5px; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;
+}
+@media (max-width: 600px) { .header-trainer-name { display: none; } }

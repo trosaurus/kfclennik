@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useTeam } from '../lib/TeamContext';
 import { getSeasonStats, SeasonPlayerStats, formatDuration, POSITION_LABELS } from '../lib/api';
 import './Seizoen.css';
 
 export default function Seizoen() {
   const [stats, setStats]       = useState<SeasonPlayerStats[]>([]);
+  const { teamId } = useTeam();
   const [loading, setLoading]   = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [view, setView]         = useState<'players' | 'matrix'>('players');

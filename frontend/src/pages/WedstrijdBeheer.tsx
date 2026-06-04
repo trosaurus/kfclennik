@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRef } from 'react';
+import { useTeam } from '../lib/TeamContext';
 import {
   getMatches, createMatch, updateMatch, deleteMatch,
   getPlayers, getAttendancesForMatch, setAttendance,
@@ -20,6 +21,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
 type View = 'list' | 'detail';
 
 export default function WedstrijdBeheer() {
+  const { teamId } = useTeam();
   const [matches, setMatches] = useState<Match[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +50,7 @@ export default function WedstrijdBeheer() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [m, p] = await Promise.all([getMatches(), getPlayers()]);
+      const [m, p] = await Promise.all([getMatches(teamId ?? undefined), getPlayers(teamId ?? undefined)]);
       setMatches(m);
       setPlayers(p.filter(pl => pl.active === 'true'));
     } finally { setLoading(false); }
@@ -78,7 +80,7 @@ export default function WedstrijdBeheer() {
     if (!createForm.opponent.trim() || !createForm.date) return;
     setSaving(true);
     try {
-      await createMatch({ opponent: createForm.opponent.trim(), date: new Date(createForm.date).toISOString(), location: createForm.location });
+      await createMatch({ opponent: createForm.opponent.trim(), date: new Date(createForm.date).toISOString(), location: createForm.location, teamId: teamId ?? undefined });
       setShowCreateModal(false);
       setCreateForm({ opponent: '', date: '', location: 'home' });
       await loadAll();
@@ -153,7 +155,7 @@ export default function WedstrijdBeheer() {
     if (!file) return;
     setImporting(true);
     try {
-      const result = await importMatchesCSV(file, createMatch);
+      const result = await importMatchesCSV(file, (m) => createMatch({ ...m, teamId: teamId ?? undefined }));
       setImportResult(result);
       await loadAll();
     } finally {

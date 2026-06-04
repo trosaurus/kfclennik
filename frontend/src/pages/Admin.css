@@ -1,0 +1,35 @@
+.adm-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+.adm-tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border-soft); }
+.adm-tab {
+  padding: 10px 18px; background: none; border: none; border-bottom: 2px solid transparent;
+  margin-bottom: -1px; font-family: var(--font-heading); font-size: 13px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); cursor: pointer;
+  transition: all .12s; display: flex; align-items: center; gap: 7px;
+}
+.adm-tab:hover { color: var(--white); }
+.adm-tab.active { color: var(--white); border-bottom-color: var(--red); }
+.adm-tab-count {
+  background: var(--bg-elevated); color: var(--text-mid); font-family: var(--font-display);
+  font-size: 14px; padding: 0 6px; border-radius: 3px;
+}
+.adm-tab.active .adm-tab-count { background: var(--red); color: white; }
+
+.adm-toolbar { margin-bottom: 16px; }
+
+.adm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+
+.adm-team-card { padding: 16px; }
+.adm-team-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.adm-category-badge { background: var(--red); color: white; font-family: var(--font-display); font-size: 18px; padding: 2px 10px; border-radius: 3px; }
+.adm-format-tag { font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 1px; background: var(--bg-elevated); color: var(--text-mid); padding: 2px 7px; border-radius: 2px; }
+.adm-team-actions { margin-left: auto; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+.adm-team-card:hover .adm-team-actions { opacity: 1; }
+.adm-team-name { font-family: var(--font-display); font-size: 22px; letter-spacing: 1px; margin-bottom: 2px; }
+.adm-team-club { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+.adm-team-trainer { font-size: 13px; color: var(--text-mid); display: flex; align-items: center; gap: 5px; }
+.adm-trainer-icon { font-size: 12px; }
+
+.form-group { margin-bottom: 16px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-soft); }

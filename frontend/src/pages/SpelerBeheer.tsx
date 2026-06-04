@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useRef } from 'react';
+import { useTeam } from '../lib/TeamContext';
 import {
   getPlayers, createPlayer, updatePlayer, deletePlayer,
   exportPlayersCSV, importPlayersCSV,
@@ -10,6 +11,7 @@ import './SpelerBeheer.css';
 type SortKey = 'name' | 'number' | 'position';
 
 export default function SpelerBeheer() {
+  const { teamId } = useTeam();
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -29,7 +31,7 @@ export default function SpelerBeheer() {
 
   async function load() {
     setLoading(true);
-    try { setPlayers(await getPlayers()); } finally { setLoading(false); }
+    try { setPlayers(await getPlayers(teamId ?? undefined)); } finally { setLoading(false); }
   }
 
   function openCreate() {
@@ -57,7 +59,8 @@ export default function SpelerBeheer() {
         await updatePlayer(editPlayer.id, input);
       } else {
         input.active = 'true';
-        await createPlayer(input as { name: string; number?: number; position?: string });
+        if (teamId) input.teamId = teamId;
+        await createPlayer(input as { name: string; number?: number; position?: string; teamId?: string });
       }
       setShowModal(false);
       await load();
@@ -99,7 +102,7 @@ export default function SpelerBeheer() {
     if (!file) return;
     setImporting(true);
     try {
-      const result = await importPlayersCSV(file, createPlayer);
+      const result = await importPlayersCSV(file, (p) => createPlayer({ ...p, teamId: teamId ?? undefined }));
       setImportResult(result);
       await load();
     } finally {

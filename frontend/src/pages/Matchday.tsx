@@ -13,6 +13,7 @@ import {
 } from '../lib/api';
 import './Matchday.css';
 import FieldView, { PositionTimeStats } from './FieldView';
+import { useTeam } from '../lib/TeamContext';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,7 @@ interface PlayerState {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Matchday() {
+  const { teamId, category } = useTeam();
   const [allMatches, setAllMatches]     = useState<Match[]>([]);
   const [match, setMatch]               = useState<Match | null>(null);
   const [allPlayers, setAllPlayers]     = useState<Player[]>([]);
@@ -69,7 +71,8 @@ export default function Matchday() {
   async function boot() {
     setLoading(true);
     try {
-      const [matches, players] = await Promise.all([getMatches(), getPlayers()]);
+      const tid = teamId ?? undefined;
+      const [matches, players] = await Promise.all([getMatches(tid), getPlayers(tid)]);
       setAllMatches(matches);
       setAllPlayers(players.filter(p => p.active === 'true'));
       const motw = getMatchOfTheWeek(matches);
@@ -158,15 +161,20 @@ export default function Matchday() {
         if (onFieldAtts.length === 0) onFieldAtts = selectedAtts;
       }
 
-      // Start sessions for on-field players, with field positions if assigned
+      // Start sessions ONLY for players with an assigned field position.
+      // Players without a position = bench → no session → timer doesn't run.
       const assignment = fieldAssignments[periodNumber] || {};
-      // Build reverse map: playerId → posKey
       const playerToPos: Record<string, string> = {};
       Object.entries(assignment).forEach(([pos, pid]) => { playerToPos[pid] = pos; });
 
       for (const att of onFieldAtts) {
-        const posKey = playerToPos[att.player.id] ?? undefined;
-        await startPlayTimeSession(att.id, periodNumber, posKey);
+        const posKey = playerToPos[att.player.id];
+        // Only start a session if the player has a field position assigned
+        if (posKey) {
+          await startPlayTimeSession(att.id, periodNumber, posKey);
+        }
+        // Players without a posKey sit on the bench — no session started,
+        // their timer stays at 0 until they're dragged onto the field.
       }
 
       // Update match
@@ -243,10 +251,16 @@ export default function Matchday() {
 
   // ── Player time ────────────────────────────────────────────────────────────
 
+  // Only count the live (ticking) portion when the session is truly active.
+  // A player on the bench has no active session — their timer shows completed seconds only.
   function getLiveSeconds(attId: string): number {
     void tick;
     const attSess = sessions.filter(s => s.attendance.id === attId);
-    let total = attSess.reduce((acc, s) => acc + (s.durationSeconds || 0), 0);
+    // Sum all completed sessions
+    let total = attSess
+      .filter(s => s.active !== 'true')
+      .reduce((acc, s) => acc + (s.durationSeconds || 0), 0);
+    // Add live elapsed for the single active session (only exists when on field)
     const active = attSess.find(s => s.active === 'true');
     if (active) total += Math.max(0, Math.floor((Date.now() - new Date(active.startTime).getTime()) / 1000));
     return total;
@@ -255,7 +269,11 @@ export default function Matchday() {
   function getLiveSecondsByPeriod(attId: string, period: number): number {
     void tick;
     const attSess = sessions.filter(s => s.attendance.id === attId && s.period === period);
-    let total = attSess.reduce((acc, s) => acc + (s.durationSeconds || 0), 0);
+    // Sum completed sessions for this period
+    let total = attSess
+      .filter(s => s.active !== 'true')
+      .reduce((acc, s) => acc + (s.durationSeconds || 0), 0);
+    // Add live elapsed only if active (= on field)
     const active = attSess.find(s => s.active === 'true');
     if (active) total += Math.max(0, Math.floor((Date.now() - new Date(active.startTime).getTime()) / 1000));
     return total;
@@ -269,6 +287,16 @@ export default function Matchday() {
         return { player: a.player, attendance: a, activeSession, totalSeconds: getLiveSeconds(a.id), onField: !!activeSession };
       })
       .sort((a, b) => (a.player.number ?? 99) - (b.player.number ?? 99));
+  }
+
+  // ── Optimistic session stop — immediately update local state ─────────────
+  function optimisticStopSession(sessionId: string, startTime: string) {
+    const elapsed = Math.max(0, Math.floor((Date.now() - new Date(startTime).getTime()) / 1000));
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId
+        ? { ...s, active: 'false', durationSeconds: elapsed, endTime: new Date().toISOString() }
+        : s
+    ));
   }
 
   // ── Field assignment ──────────────────────────────────────────────────────
@@ -313,6 +341,8 @@ export default function Matchday() {
     setBusyPlayer(ps.player.id);
     try {
       if (ps.onField && ps.activeSession) {
+        // Optimistic: immediately stop timer in UI before DB roundtrip
+        optimisticStopSession(ps.activeSession.id, ps.activeSession.startTime);
         await stopPlayTimeSession(ps.activeSession.id, ps.activeSession.startTime);
       } else {
         await startPlayTimeSession(ps.attendance.id, match.currentPeriod);
@@ -327,6 +357,7 @@ export default function Matchday() {
     if (!match || !outState.activeSession) return;
     setBusyPlayer(outState.player.id);
     try {
+      optimisticStopSession(outState.activeSession.id, outState.activeSession.startTime);
       await stopPlayTimeSession(outState.activeSession.id, outState.activeSession.startTime);
       let inAtt = attendances.find(a => a.player.id === inPlayer.id);
       if (!inAtt || inAtt.selected !== 'true') {
@@ -484,6 +515,7 @@ export default function Matchday() {
           attendances={attendances}
           fieldAssignments={fieldAssignments}
           onPreAssign={handlePreAssign}
+          teamCategory={category ?? 'U13'}
           onToggleAttendance={async (playerId, sel) => {
             await setAttendance(m!.id, playerId, true, sel);
             await refresh();
@@ -505,7 +537,12 @@ export default function Matchday() {
               attendances={attendances}
               allPlayers={playerStates.map(ps => ps.player)}
               tick={tick}
+              category={category ?? 'U13'}
               onRefresh={refresh}
+              onSessionStop={(sessionId) => {
+                const sess = sessions.find(s => s.id === sessionId);
+                if (sess) optimisticStopSession(sessionId, sess.startTime);
+              }}
             />
           </div>
 
@@ -572,6 +609,7 @@ export default function Matchday() {
           attendances={attendances}
           allPlayers={playerStates.map(ps => ps.player)}
           tick={tick}
+          category={category ?? 'U13'}
         />
       )}
 
@@ -587,6 +625,7 @@ export default function Matchday() {
           attendances={attendances}
           allPlayers={playerStates.map(ps => ps.player)}
           tick={0}
+          category={category ?? 'U13'}
         />
       )}
 
@@ -733,13 +772,15 @@ function PlayerRow({ ps, isPlaying, busy, onToggle, onSub, periodSec, playerGoal
     <div className={`md-player-row ${ps.onField ? 'on-field' : 'on-bench'}`}>
       <div className="md-pr-num">{ps.player.number ? `#${ps.player.number}` : '—'}</div>
       <div className="md-pr-info">
-        <span className="md-pr-name">{ps.player.name}</span>
+        <div className="md-pr-name-row">
+          <span className="md-pr-name">{ps.player.name}</span>
+          {goalCount > 0 && (
+            <span className="md-goal-badge">
+              {'⚽'.repeat(Math.min(goalCount, 4))}{goalCount > 4 ? ` ×${goalCount}` : ''}
+            </span>
+          )}
+        </div>
         {ps.player.position && <span className="md-pr-pos">{POSITION_LABELS[ps.player.position]}</span>}
-        {goalCount > 0 && (
-          <span className="md-goal-badge">
-            {'⚽'.repeat(Math.min(goalCount, 4))}{goalCount > 4 ? ` ×${goalCount}` : ''}
-          </span>
-        )}
       </div>
       <div className="md-pr-times">
         <div className="md-pr-timer">
@@ -962,13 +1003,14 @@ function ScoreModal({ match: _match, periods, onSave, onClose }: {
 
 // ── PeriodLineupSelector ─────────────────────────────────────────────────────
 
-function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignments, onPreAssign, onToggleAttendance }: {
+function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignments, onPreAssign, onToggleAttendance, teamCategory }: {
   matchId: string;
   allPlayers: Player[];
   attendances: Attendance[];
   fieldAssignments: Record<number, Record<string, string>>;
   onPreAssign: (period: number, posKey: string, playerId: string | null) => void;
   onToggleAttendance: (playerId: string, selected: boolean) => Promise<void>;
+  teamCategory?: string;
 }) {
   const [activePeriod, setActivePeriod] = useState(1);
   const [lineups, setLineups] = useState<Record<number, Set<string>>>(() => {
@@ -1111,6 +1153,7 @@ function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignmen
             attendances={attendances}
             allPlayers={allPlayers}
             tick={0}
+            category={teamCategory ?? 'U13'}
             onRefresh={async () => {}}
             preAssignment={fieldAssignments[activePeriod] || {}}
             onPreAssign={(posKey, playerId) => {

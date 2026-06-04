@@ -5,13 +5,13 @@
   --red-bright:  #E82020;
   --red-muted:   rgba(204,26,26,0.12);
 
-  --bg:          #1E1E24;       /* was #0D0D0D — noticeably lighter */
-  --bg-card:     #2A2A32;       /* was #1A1A1A */
-  --bg-elevated: #32323C;       /* was #2A2A2A */
+  --bg:          #282832;       /* was #0D0D0D — noticeably lighter */
+  --bg-card:     #32323E;       /* was #1A1A1A */
+  --bg-elevated: #3C3C48;       /* was #2A2A2A */
   --bg-hover:    rgba(255,255,255,0.05);
 
-  --border:      rgba(255,255,255,0.09);
-  --border-soft: rgba(255,255,255,0.05);
+  --border:      rgba(255,255,255,0.12);
+  --border-soft: rgba(255,255,255,0.08);
 
   --white:    #FFFFFF;
   --text:     #F0F0F5;

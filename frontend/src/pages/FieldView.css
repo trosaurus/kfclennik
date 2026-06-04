@@ -60,7 +60,7 @@
 .fv-bench-player.dragging { opacity: 0.4; }
 
 .fv-bench-num  { font-family: var(--font-display); font-size: 15px; color: var(--red); width: 26px; text-align: right; flex-shrink: 0; }
-.fv-bench-name { flex: 1; font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fv-bench-name { flex: 1; font-size: 12px; font-weight: 500; }
 .fv-bench-time { font-family: var(--font-heading); font-size: 10px; color: var(--text-mid); flex-shrink: 0; }
 .fv-bench-drag-hint { color: var(--text-dim); font-size: 13px; flex-shrink: 0; }
 

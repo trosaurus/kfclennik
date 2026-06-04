@@ -3,6 +3,7 @@ const GQL_URL = '/api/graphql';
 async function gql(query: string, variables?: Record<string, unknown>) {
   const res = await fetch(GQL_URL, {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, variables }),
   });
@@ -17,12 +18,21 @@ async function gql(query: string, variables?: Record<string, unknown>) {
 
 // ── Interfaces ────────────────────────────────────────────────────────────────
 
+export interface Team {
+  id: string;
+  name: string;
+  category: string;
+  club: string;
+  active: string;
+}
+
 export interface Player {
   id: string;
   name: string;
   number: number | null;
   position: string | null;
   active: string;
+  team?: { id: string };
 }
 
 export interface Match {
@@ -76,18 +86,89 @@ export interface Goal {
   scoredAt: string;
 }
 
+// ── Teams ─────────────────────────────────────────────────────────────────────
+
+export async function getTeams(): Promise<Team[]> {
+  const data = await gql(`query {
+    teams(take: 100, orderBy: { name: asc }) { id name category club active }
+  }`);
+  return data.teams;
+}
+
+export async function createTeam(input: { name: string; category: string; club?: string; trainerId?: string }): Promise<Team> {
+  const teamData: Record<string, unknown> = { name: input.name, category: input.category, club: input.club ?? '', active: 'true' };
+  if (input.trainerId) teamData.trainer = { connect: { id: input.trainerId } };
+  const data = await gql(
+    `mutation CreateTeam($data: TeamCreateInput!) { createTeam(data: $data) { id name category club active } }`,
+    { data: teamData }
+  );
+  return data.createTeam;
+}
+
+export async function updateTeam(id: string, input: Record<string, unknown>): Promise<Team> {
+  const data = await gql(
+    `mutation UpdateTeam($id: ID!, $data: TeamUpdateInput!) { updateTeam(where: { id: $id }, data: $data) { id name category club active } }`,
+    { id, data: input }
+  );
+  return data.updateTeam;
+}
+
+export async function deleteTeam(id: string): Promise<void> {
+  await gql(`mutation { deleteTeam(where: { id: "${id}" }) { id } }`);
+}
+
+// ── Trainers ───────────────────────────────────────────────────────────────────
+
+export interface TrainerRecord {
+  id: string; name: string; email: string; role: string;
+  team: { id: string; name: string; category: string } | null;
+}
+
+export async function getTrainers(): Promise<TrainerRecord[]> {
+  const data = await gql(`query {
+    trainers(take: 100, orderBy: { name: asc }) {
+      id name email role team { id name category }
+    }
+  }`);
+  return data.trainers;
+}
+
+export async function createTrainer(input: { name: string; email: string; password: string; role?: string; teamId?: string }): Promise<TrainerRecord> {
+  const trainerData: Record<string, unknown> = { name: input.name, email: input.email, password: input.password, role: input.role ?? 'trainer' };
+  if (input.teamId) trainerData.team = { connect: { id: input.teamId } };
+  const data = await gql(
+    `mutation CreateTrainer($data: TrainerCreateInput!) { createTrainer(data: $data) { id name email role team { id name category } } }`,
+    { data: trainerData }
+  );
+  return data.createTrainer;
+}
+
+export async function updateTrainer(id: string, input: Record<string, unknown>): Promise<TrainerRecord> {
+  const data = await gql(
+    `mutation UpdateTrainer($id: ID!, $data: TrainerUpdateInput!) { updateTrainer(where: { id: $id }, data: $data) { id name email role team { id name category } } }`,
+    { id, data: input }
+  );
+  return data.updateTrainer;
+}
+
+export async function deleteTrainer(id: string): Promise<void> {
+  await gql(`mutation { deleteTrainer(where: { id: "${id}" }) { id } }`);
+}
+
 // ── Players ───────────────────────────────────────────────────────────────────
 
-export async function getPlayers(): Promise<Player[]> {
+export async function getPlayers(teamId?: string): Promise<Player[]> {
+  const where = teamId ? `, where: { team: { id: { equals: "${teamId}" } } }` : '';
   const data = await gql(`query {
-    players(take: 1000, orderBy: { name: asc }) { id name number position active }
+    players(take: 1000, orderBy: { name: asc }${where}) { id name number position active }
   }`);
   return data.players;
 }
 
-export async function createPlayer(input: { name: string; number?: number; position?: string; active?: string }) {
-  const { active = 'true', ...rest } = input;
+export async function createPlayer(input: { name: string; number?: number; position?: string; active?: string; teamId?: string }) {
+  const { active = 'true', teamId, ...rest } = input;
   const clean: Record<string, unknown> = { ...rest, active };
+  if (teamId) clean.team = { connect: { id: teamId } };
   Object.keys(clean).forEach(k => { if (clean[k] === undefined || clean[k] === '') delete clean[k]; });
   const data = await gql(
     `mutation CreatePlayer($data: PlayerCreateInput!) {
@@ -118,9 +199,10 @@ export async function deletePlayer(id: string) {
 
 // ── Matches ───────────────────────────────────────────────────────────────────
 
-export async function getMatches(): Promise<Match[]> {
+export async function getMatches(teamId?: string): Promise<Match[]> {
+  const where = teamId ? `, where: { team: { id: { equals: "${teamId}" } } }` : '';
   const data = await gql(`query {
-    matches(take: 1000, orderBy: { date: asc }) {
+    matches(take: 1000, orderBy: { date: asc }${where}) {
       id opponent date location status currentPeriod periodStatus
       scoreHome scoreAway matchStartTime
     }
@@ -128,12 +210,15 @@ export async function getMatches(): Promise<Match[]> {
   return data.matches;
 }
 
-export async function createMatch(input: { opponent: string; date: string; location: string }) {
+export async function createMatch(input: { opponent: string; date: string; location: string; teamId?: string }) {
+  const { teamId, ...rest } = input;
+  const matchData: Record<string, unknown> = { ...rest, status: 'planned', currentPeriod: 0, periodStatus: 'idle', scoreHome: 0, scoreAway: 0 };
+  if (teamId) matchData.team = { connect: { id: teamId } };
   const data = await gql(
     `mutation CreateMatch($data: MatchCreateInput!) {
        createMatch(data: $data) { id opponent date location status currentPeriod periodStatus scoreHome scoreAway matchStartTime }
      }`,
-    { data: { ...input, status: 'planned', currentPeriod: 0, periodStatus: 'idle', scoreHome: 0, scoreAway: 0 } }
+    { data: matchData }
   );
   return data.createMatch;
 }
@@ -383,22 +468,8 @@ export async function removeGoal(
 
 
 // ── Field positions ───────────────────────────────────────────────────────────
-
-// The 7v7 field layout (shirt numbers matching the image)
-// Position slot → { label, role, x%, y% } on a 370×440 field image
-export const FIELD_POSITIONS: Record<string, { label: string; role: string; x: number; y: number }> = {
-  'K':  { label: 'K',  role: 'keeper',     x: 50,   y: 88 },
-  '3':  { label: '3',  role: 'defender',   x: 50,   y: 72 },
-  '2':  { label: '2',  role: 'defender',   x: 82,   y: 62 },
-  '5':  { label: '5',  role: 'defender',   x: 14,   y: 62 },
-  '6':  { label: '6',  role: 'midfielder', x: 50,   y: 48 },
-  '7':  { label: '7',  role: 'midfielder', x: 82,   y: 36 },
-  '11': { label: '11', role: 'midfielder', x: 14,   y: 36 },
-  '9':  { label: '9',  role: 'forward',    x: 50,   y: 22 },
-};
-
-export const FIELD_POSITION_KEYS = ['K','3','2','5','6','7','11','9'] as const;
-export type FieldPositionKey = typeof FIELD_POSITION_KEYS[number];
+// Note: position definitions have moved to teamConfig.ts
+// buildFieldState now accepts dynamic posKeys from the active format
 
 export function updateSessionFieldPosition(sessionId: string, fieldPosition: string | null): Promise<PlayTimeSession> {
   return gql(
@@ -409,20 +480,22 @@ export function updateSessionFieldPosition(sessionId: string, fieldPosition: str
   ).then(d => d.updatePlayTimeSession);
 }
 
-// Get the field lineup for a period: positionKey → { session, player }
+// buildFieldState is now handled inline in FieldView using format-specific positions
+// Keeping this as a compatibility shim (no longer uses static FIELD_POSITION_KEYS)
 export function buildFieldState(
   sessions: PlayTimeSession[],
   attendances: Array<{ id: string; player: { id: string; name: string; number: number | null } }>,
-  period: number
+  period: number,
+  posKeys: string[] = []
 ): Record<string, { session: PlayTimeSession; player: { id: string; name: string; number: number | null } } | null> {
   const state: Record<string, { session: PlayTimeSession; player: { id: string; name: string; number: number | null } } | null> = {};
-  for (const key of FIELD_POSITION_KEYS) state[key] = null;
-
-  // Active sessions in this period with a fieldPosition
+  for (const key of posKeys) state[key] = null;
   const active = sessions.filter(s => s.period === period && s.active === 'true' && s.fieldPosition);
   for (const s of active) {
     const att = attendances.find(a => a.id === s.attendance.id);
-    if (att && s.fieldPosition) state[s.fieldPosition] = { session: s, player: att.player };
+    if (att && s.fieldPosition && posKeys.includes(s.fieldPosition)) {
+      state[s.fieldPosition] = { session: s, player: att.player };
+    }
   }
   return state;
 }
@@ -474,9 +547,12 @@ export interface SeasonPlayerStats {
   }>;
 }
 
-export async function getSeasonStats(): Promise<SeasonPlayerStats[]> {
+export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats[]> {
+  const where = teamId
+    ? `where: { status: { equals: "finished" }, team: { id: { equals: "${teamId}" } } }`
+    : `where: { status: { equals: "finished" } }`;
   const matchData = await gql(`query {
-    matches(where: { status: { equals: "finished" } }, take: 1000, orderBy: { date: asc }) {
+    matches(${where}, take: 1000, orderBy: { date: asc }) {
       id opponent date scoreHome scoreAway
     }
   }`);

@@ -1,24 +1,39 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import {
   PlayTimeSession, Attendance, Player,
-  FIELD_POSITIONS, FIELD_POSITION_KEYS, FieldPositionKey,
-  buildFieldState, getPositionSeconds, updateSessionFieldPosition,
+  getPositionSeconds, updateSessionFieldPosition,
   startPlayTimeSession, stopPlayTimeSession,
   formatDuration,
 } from '../lib/api';
+import {
+  FieldPos, getPositionsForCategory, getFormatForCategory,
+  TeamFormat,
+} from '../lib/teamConfig';
 import './FieldView.css';
+
+// ── SVG field dimensions ──────────────────────────────────────────────────────
+const W = 370;
+const H = 480;
+
+interface FieldState {
+  [posKey: string]: {
+    session: PlayTimeSession;
+    player: { id: string; name: string; number: number | null };
+  } | null;
+}
 
 interface Props {
   matchId: string;
   period: number;
-  periodStatus: string;          // 'playing' | 'paused' | 'idle' | 'finished'
+  periodStatus: string;
   sessions: PlayTimeSession[];
   attendances: Attendance[];
   allPlayers: Player[];
-  tick: number;                  // increment to force live timer re-render
+  tick: number;
+  category: string;           // e.g. 'U10', 'U13' — determines format + positions
   onRefresh: () => Promise<void>;
-  // Pre-match assignment mode
-  preAssignment?: Record<string, string>;  // posKey → playerId
+  onSessionStop?: (sessionId: string) => void;   // optimistic UI update callback
+  preAssignment?: Record<string, string>;
   onPreAssign?: (posKey: string, playerId: string | null) => void;
 }
 
@@ -26,27 +41,34 @@ type DragState = { playerId: string; playerName: string; fromPos: string | null 
 
 export default function FieldView({
   matchId, period, periodStatus, sessions, attendances, allPlayers,
-  tick, onRefresh, preAssignment, onPreAssign,
+  tick, category, onRefresh, onSessionStop, preAssignment, onPreAssign,
 }: Props) {
   const [dragState, setDragState] = useState<DragState>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [busyPos, setBusyPos] = useState<string | null>(null);
-  const [showPlayerPicker, setShowPlayerPicker] = useState<string | null>(null); // posKey
+  const [showPlayerPicker, setShowPlayerPicker] = useState<string | null>(null);
 
   const isLive     = periodStatus === 'playing';
   const isPaused   = periodStatus === 'paused';
   const isEditable = isLive || isPaused || periodStatus === 'idle';
   const isPreMatch = periodStatus === 'idle' && !!onPreAssign;
 
-  // ── Build field state from live sessions ─────────────────────────────────
-  const fieldState = buildFieldState(
-    sessions,
-    attendances.map(a => ({ id: a.id, player: a.player })),
-    period
-  );
+  // Positions for this team's format
+  const positions: FieldPos[] = getPositionsForCategory(category);
+  const format: TeamFormat    = getFormatForCategory(category);
+  const posKeys = positions.map(p => p.key);
 
-  // In pre-match mode use preAssignment to show player names
-  function getPreSlot(posKey: string): { player: Player } | null {
+  // ── Build live field state ────────────────────────────────────────────────
+  const fieldState: FieldState = {};
+  posKeys.forEach(k => { fieldState[k] = null; });
+  sessions
+    .filter(s => s.period === period && s.active === 'true' && s.fieldPosition && posKeys.includes(s.fieldPosition))
+    .forEach(s => {
+      const att = attendances.find(a => a.id === s.attendance.id);
+      if (att && s.fieldPosition) fieldState[s.fieldPosition] = { session: s, player: att.player };
+    });
+
+  function getPreSlot(posKey: string) {
     if (!preAssignment) return null;
     const pid = preAssignment[posKey];
     if (!pid) return null;
@@ -54,7 +76,7 @@ export default function FieldView({
     return p ? { player: p } : null;
   }
 
-  // ── Players not yet on field (for bench / drag source) ────────────────────
+  // ── Bench = players not on field ─────────────────────────────────────────
   const onFieldIds = new Set<string>();
   if (isPreMatch && preAssignment) {
     Object.values(preAssignment).forEach(id => onFieldIds.add(id));
@@ -63,45 +85,48 @@ export default function FieldView({
   }
   const bench = allPlayers.filter(p => !onFieldIds.has(p.id));
 
-  // ── Assign player to position (live) ─────────────────────────────────────
+  // ── Assign player to position live ───────────────────────────────────────
+  // Rule: a player's timer only runs when he is ON a field position.
+  // Moving to bench = stop timer. Moving onto field = start new timer.
   async function assignLive(posKey: string, playerId: string) {
     if (!isEditable || busyPos) return;
     setBusyPos(posKey);
     try {
-      // Stop existing session at this position
+      // 1. Stop the player currently AT this position (they go to bench)
       const existing = fieldState[posKey];
       if (existing) {
+        onSessionStop?.(existing.session.id);  // optimistic: timer stops immediately in UI
         await stopPlayTimeSession(existing.session.id, existing.session.startTime);
       }
+
       if (!playerId) { await onRefresh(); return; }
 
-      // Find or get attendance
       const att = attendances.find(a => a.player.id === playerId);
       if (!att) return;
 
-      // Stop any active session this player has in this period (different position)
-      const activeSession = sessions.find(s =>
-        s.attendance.id === att.id && s.period === period && s.active === 'true'
+      // 2. Stop any active session the incoming player has (from another position or resuming)
+      //    We always start a fresh session per position slot — no position-update shortcut.
+      const existingActive = sessions.find(
+        s => s.attendance.id === att.id && s.period === period && s.active === 'true'
       );
-      if (activeSession) {
-        // Update position on existing session instead of creating new one
-        await updateSessionFieldPosition(activeSession.id, posKey);
-      } else if (isLive) {
-        await startPlayTimeSession(att.id, period, posKey);
-      } else {
-        // Paused: just start session with position (will be active but match is paused — that's fine for tracking)
-        await startPlayTimeSession(att.id, period, posKey);
+      if (existingActive) {
+        onSessionStop?.(existingActive.id);  // optimistic stop
+        await stopPlayTimeSession(existingActive.id, existingActive.startTime);
       }
+
+      // 3. Start a new session at the new position
+      await startPlayTimeSession(att.id, period, posKey);
       await onRefresh();
     } finally { setBusyPos(null); }
   }
 
-  // ── Remove player from position ───────────────────────────────────────────
+  // Remove player from position → goes to bench → timer stops
   async function removeFromPosition(posKey: string) {
     if (!isEditable || busyPos) return;
     const slot = fieldState[posKey];
     if (!slot) return;
     setBusyPos(posKey);
+    onSessionStop?.(slot.session.id);  // optimistic: timer stops immediately
     try {
       await stopPlayTimeSession(slot.session.id, slot.session.startTime);
       await onRefresh();
@@ -112,41 +137,41 @@ export default function FieldView({
   function onDragStartBench(player: Player) {
     setDragState({ playerId: player.id, playerName: player.name, fromPos: null });
   }
-
   function onDragStartField(posKey: string) {
     const slot = isPreMatch ? getPreSlot(posKey) : fieldState[posKey];
     if (!slot) return;
-    const player = isPreMatch ? (slot as { player: Player }).player : (slot as ReturnType<typeof buildFieldState>[string])!.player;
-    setDragState({ playerId: player.id, playerName: player.name, fromPos: posKey });
+    setDragState({ playerId: slot.player.id, playerName: slot.player.name, fromPos: posKey });
   }
-
   async function onDropOnPosition(posKey: string) {
     setDropTarget(null);
     if (!dragState) return;
     const { playerId, fromPos } = dragState;
     setDragState(null);
-
     if (isPreMatch && onPreAssign) {
-      if (fromPos) onPreAssign(fromPos, null);  // remove from old
+      if (fromPos) onPreAssign(fromPos, null);
       onPreAssign(posKey, playerId);
     } else {
+      // If player was dragged FROM another position, clear that slot first
+      // (assignLive will stop the incoming player's existing session anyway,
+      //  but the fromPos slot still shows the player until refresh — clear it visually)
+      if (fromPos && fromPos !== posKey) {
+        // The fromPos slot will become empty; assignLive stops the active session
+        // of the incoming player (which was at fromPos) before starting at posKey.
+        // Nothing extra needed — assignLive handles it.
+      }
       await assignLive(posKey, playerId);
     }
   }
-
   function onDropOnBench() {
     setDropTarget(null);
     if (!dragState?.fromPos) { setDragState(null); return; }
     const { fromPos } = dragState;
     setDragState(null);
-    if (isPreMatch && onPreAssign) {
-      onPreAssign(fromPos, null);
-    } else {
-      removeFromPosition(fromPos);
-    }
+    if (isPreMatch && onPreAssign) onPreAssign(fromPos, null);
+    else removeFromPosition(fromPos);
   }
 
-  // ── Live timer for a position ─────────────────────────────────────────────
+  // ── Live timers ───────────────────────────────────────────────────────────
   function posLiveSeconds(posKey: string): number {
     void tick;
     const slot = fieldState[posKey];
@@ -154,11 +179,192 @@ export default function FieldView({
     return getPositionSeconds(sessions, slot.session.attendance.id, posKey, true);
   }
 
-  // ── Total position time for a player across all periods ───────────────────
-  function playerPosTotal(playerId: string, posKey: string): number {
-    const att = attendances.find(a => a.player.id === playerId);
-    if (!att) return 0;
-    return getPositionSeconds(sessions, att.id, posKey, false);
+  // ── SVG field lines by format ─────────────────────────────────────────────
+  // All formats: our goal at bottom, opponent at top
+  function renderFieldLines() {
+    const sw = 2;       // stroke width
+    const sw2 = 1.5;
+    const wh = 'rgba(255,255,255,0.85)';
+    const wl = 'rgba(255,255,255,0.65)';
+    const wf = 'rgba(255,255,255,0.45)';
+
+    // Common: outer boundary + goals
+    const common = <>
+      {/* outer */}
+      <rect x="14" y="14" width={W-28} height={H-28} fill="none" stroke={wh} strokeWidth={sw} />
+      {/* opponent goal (top) */}
+      <rect x={W/2-38} y="4" width="76" height="14" fill="none" stroke={wh} strokeWidth={sw} />
+      {/* our goal (bottom) */}
+      <rect x={W/2-38} y={H-18} width="76" height="14" fill="none" stroke={wh} strokeWidth={sw} />
+    </>;
+
+    if (format === '2v2' || format === '3v3') {
+      return <>{common}
+        {/* center line */}
+        <line x1="14" y1={H/2} x2={W-14} y2={H/2} stroke={wl} strokeWidth={sw2} />
+        {/* small penalty areas */}
+        <rect x={W/2-55} y="14" width="110" height="54" fill="none" stroke={wl} strokeWidth={sw2} />
+        <rect x={W/2-55} y={H-68} width="110" height="54" fill="none" stroke={wl} strokeWidth={sw2} />
+      </>;
+    }
+
+    if (format === '5v5') {
+      return <>{common}
+        {/* center line */}
+        <line x1="14" y1={H/2} x2={W-14} y2={H/2} stroke={wl} strokeWidth={sw2} />
+        {/* center circle */}
+        <circle cx={W/2} cy={H/2} r="40" fill="none" stroke={wl} strokeWidth={sw2} />
+        <circle cx={W/2} cy={H/2} r="3" fill={wl} />
+        {/* top penalty area */}
+        <rect x={W/2-80} y="14" width="160" height="80" fill="none" stroke={wl} strokeWidth={sw2} />
+        <rect x={W/2-45} y="14" width="90" height="35" fill="none" stroke={wf} strokeWidth="1" />
+        <circle cx={W/2} cy="62" r="3" fill={wf} />
+        {/* bottom penalty area */}
+        <rect x={W/2-80} y={H-94} width="160" height="80" fill="none" stroke={wl} strokeWidth={sw2} />
+        <rect x={W/2-45} y={H-49} width="90" height="35" fill="none" stroke={wf} strokeWidth="1" />
+        <circle cx={W/2} cy={H-62} r="3" fill={wf} />
+      </>;
+    }
+
+    if (format === '8v8') {
+      return <>{common}
+        {/* center line */}
+        <line x1="14" y1={H/2} x2={W-14} y2={H/2} stroke={wl} strokeWidth={sw2} />
+        {/* center circle */}
+        <circle cx={W/2} cy={H/2} r="46" fill="none" stroke={wl} strokeWidth={sw2} />
+        <circle cx={W/2} cy={H/2} r="3" fill={wl} />
+        {/* top penalty area */}
+        <rect x={W/2-95} y="14" width="190" height="90" fill="none" stroke={wl} strokeWidth={sw2} />
+        <rect x={W/2-55} y="14" width="110" height="40" fill="none" stroke={wf} strokeWidth="1" />
+        <circle cx={W/2} cy="70" r="3" fill={wf} />
+        {/* bottom penalty area */}
+        <rect x={W/2-95} y={H-104} width="190" height="90" fill="none" stroke={wl} strokeWidth={sw2} />
+        <rect x={W/2-55} y={H-54} width="110" height="40" fill="none" stroke={wf} strokeWidth="1" />
+        <circle cx={W/2} cy={H-70} r="3" fill={wf} />
+      </>;
+    }
+
+    // 11v11 — full-size markings
+    return <>{common}
+      {/* center line */}
+      <line x1="14" y1={H/2} x2={W-14} y2={H/2} stroke={wl} strokeWidth={sw2} />
+      {/* center circle */}
+      <circle cx={W/2} cy={H/2} r="52" fill="none" stroke={wl} strokeWidth={sw2} />
+      <circle cx={W/2} cy={H/2} r="3" fill={wl} />
+      {/* top penalty area */}
+      <rect x={W/2-110} y="14" width="220" height="100" fill="none" stroke={wl} strokeWidth={sw2} />
+      <rect x={W/2-60} y="14" width="120" height="45" fill="none" stroke={wf} strokeWidth="1" />
+      <circle cx={W/2} cy="76" r="3" fill={wf} />
+      {/* top penalty arc */}
+      <path d={`M ${W/2-46} 114 A 52 52 0 0 1 ${W/2+46} 114`} fill="none" stroke={wl} strokeWidth={sw2} />
+      {/* bottom penalty area */}
+      <rect x={W/2-110} y={H-114} width="220" height="100" fill="none" stroke={wl} strokeWidth={sw2} />
+      <rect x={W/2-60} y={H-59} width="120" height="45" fill="none" stroke={wf} strokeWidth="1" />
+      <circle cx={W/2} cy={H-76} r="3" fill={wf} />
+      {/* bottom penalty arc */}
+      <path d={`M ${W/2-46} ${H-114} A 52 52 0 0 0 ${W/2+46} ${H-114}`} fill="none" stroke={wl} strokeWidth={sw2} />
+    </>;
+  }
+
+  // ── Render position slot ──────────────────────────────────────────────────
+  function renderSlot(pos: FieldPos) {
+    const cx = (pos.x / 100) * W;
+    const cy = (pos.y / 100) * H;
+    const posKey = pos.key;
+    const slot = isPreMatch ? getPreSlot(posKey) : fieldState[posKey];
+    const player = slot?.player ?? null;
+    const isOccupied = !!player;
+    const isDragTarget = dropTarget === posKey;
+    const isBusy = busyPos === posKey;
+    const liveSec = isOccupied && isLive ? posLiveSeconds(posKey) : 0;
+
+    // Role → disc colour
+    const roleColor: Record<string, string> = {
+      keeper:     'rgba(20,20,20,0.92)',
+      defender:   'rgba(30,90,200,0.9)',
+      midfielder: 'rgba(180,20,20,0.92)',
+      forward:    'rgba(180,20,20,0.92)',
+    };
+    const emptyColor = isDragTarget ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.38)';
+    const discFill = isOccupied
+      ? (isBusy ? 'rgba(100,100,100,0.8)' : roleColor[pos.role])
+      : emptyColor;
+
+    const radius = isOccupied ? 26 : 20;
+
+    return (
+      <g key={posKey}
+        style={{ cursor: isEditable ? 'pointer' : 'default' }}
+        onDragOver={e => { e.preventDefault(); setDropTarget(posKey); }}
+        onDragLeave={() => setDropTarget(null)}
+        onDrop={e => { e.preventDefault(); onDropOnPosition(posKey); }}
+        onDragStart={isOccupied && isEditable ? () => onDragStartField(posKey) : undefined}
+        onClick={() => {
+          if (!isEditable) return;
+          if (isOccupied) {
+            if (isPreMatch && onPreAssign) onPreAssign(posKey, null);
+            else if (!isLive && !isPaused) {/* nothing */}
+          } else {
+            setShowPlayerPicker(posKey);
+          }
+        }}
+      >
+        {/* Drop highlight ring */}
+        {isDragTarget && <circle cx={cx} cy={cy} r={radius + 8} fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" />}
+
+        {/* Shirt shape — oval + collar */}
+        {isOccupied ? (
+          <ShirtSVG cx={cx} cy={cy} fill={discFill} role={pos.role} />
+        ) : (
+          // Empty slot: dashed circle
+          <circle cx={cx} cy={cy} r={radius}
+            fill="rgba(0,0,0,0.25)"
+            stroke="rgba(255,255,255,0.45)"
+            strokeWidth="1.5"
+            strokeDasharray="4 3"
+          />
+        )}
+
+        {/* Position key label on empty slot */}
+        {!isOccupied && (
+          <text x={cx} y={cy + 5} textAnchor="middle"
+            fill="rgba(255,255,255,0.75)" fontSize="14" fontFamily="'Bebas Neue',sans-serif" letterSpacing="0.5">
+            {posKey}
+          </text>
+        )}
+
+        {/* Player number */}
+        {isOccupied && player && (
+          <>
+            <text x={cx} y={cy - 6} textAnchor="middle"
+              fill="white" fontSize="15" fontFamily="'Bebas Neue',sans-serif"
+              style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+              {player.number !== null ? player.number : posKey}
+            </text>
+            {/* Last name, max 8 chars */}
+            <text x={cx} y={cy + 9} textAnchor="middle"
+              fill="rgba(255,255,255,0.95)" fontSize="8" fontFamily="'Barlow Condensed',sans-serif" fontWeight="700">
+              {player.name.length > 10 ? player.name.split(' ').slice(-1)[0].substring(0, 9).toUpperCase() : player.name.toUpperCase()}
+            </text>
+            {/* Live timer */}
+            {liveSec > 0 && (
+              <text x={cx} y={cy + 21} textAnchor="middle"
+                fill="rgba(255,220,0,0.95)" fontSize="8" fontFamily="'Bebas Neue',sans-serif">
+                {formatDuration(liveSec)}
+              </text>
+            )}
+          </>
+        )}
+
+        {/* "klik" hint on empty editable slot */}
+        {!isOccupied && isEditable && (
+          <text x={cx} y={cy + 35} textAnchor="middle"
+            fill="rgba(255,255,255,0.35)" fontSize="8" fontFamily="'Barlow Condensed',sans-serif">
+            klik / sleep
+          </text>
+        )}
+      </g>
+    );
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -166,204 +372,88 @@ export default function FieldView({
     <div className="fv-wrap">
       <div className="fv-layout">
 
-        {/* ── SVG FIELD ── */}
+        {/* SVG field */}
         <div className="fv-field-container"
           onDragOver={e => e.preventDefault()}
-          onDrop={e => { e.preventDefault(); }}
+          onDrop={e => e.preventDefault()}
         >
-          <svg
-            viewBox="0 0 370 440"
-            xmlns="http://www.w3.org/2000/svg"
-            className="fv-field-svg"
-          >
-            {/* Field background */}
-            <rect x="0" y="0" width="370" height="440" fill="#2d7a2d" rx="4" />
+          <svg viewBox={`0 0 ${W} ${H}`} xmlns="http://www.w3.org/2000/svg" className="fv-field-svg">
+
+            {/* Grass background */}
+            <rect x="0" y="0" width={W} height={H} fill="#3a8a3a" rx="4" />
 
             {/* Alternating grass stripes */}
-            {[0,1,2,3,4,5].map(i => (
-              <rect key={i} x={i*62} y="0" width="62" height="440"
-                fill={i%2===0 ? "rgba(0,0,0,0.06)" : "transparent"} />
+            {[0,1,2,3,4,5,6].map(i => (
+              <rect key={i} x={i*(W/6)} y="0" width={W/6} height={H}
+                fill={i%2===0 ? "rgba(0,0,0,0.07)" : "transparent"} />
             ))}
 
-            {/* Field lines */}
-            {/* Outer boundary */}
-            <rect x="12" y="12" width="346" height="416" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2" />
-            {/* Center line */}
-            <line x1="12" y1="220" x2="358" y2="220" stroke="rgba(255,255,255,0.8)" strokeWidth="1.5" />
-            {/* Center circle */}
-            <circle cx="185" cy="220" r="42" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" />
-            <circle cx="185" cy="220" r="3" fill="rgba(255,255,255,0.8)" />
-            {/* Top penalty area */}
-            <rect x="72" y="12" width="226" height="72" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" />
-            {/* Top goal area */}
-            <rect x="120" y="12" width="130" height="30" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="1" />
-            {/* Top goal */}
-            <rect x="147" y="5" width="76" height="12" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" />
-            {/* Bottom penalty area */}
-            <rect x="72" y="356" width="226" height="72" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" />
-            {/* Bottom goal area */}
-            <rect x="120" y="398" width="130" height="30" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="1" />
-            {/* Bottom goal */}
-            <rect x="147" y="423" width="76" height="12" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" />
-            {/* Penalty spots */}
-            <circle cx="185" cy="52" r="3" fill="rgba(255,255,255,0.7)" />
-            <circle cx="185" cy="388" r="3" fill="rgba(255,255,255,0.7)" />
+            {/* Field lines per format */}
+            {renderFieldLines()}
 
-            {/* ── Position slots ── */}
-            {FIELD_POSITION_KEYS.map(posKey => {
-              const pos = FIELD_POSITIONS[posKey];
-              const cx = (pos.x / 100) * 370;
-              const cy = (pos.y / 100) * 440;
-              const slot = isPreMatch ? getPreSlot(posKey) : fieldState[posKey];
-              const player = slot ? (isPreMatch ? (slot as { player: Player }).player : (slot as any).player) : null;
-              const isOccupied = !!player;
-              const isDragTarget = dropTarget === posKey;
-              const isBusy = busyPos === posKey;
-              const liveSec = isOccupied && isLive ? posLiveSeconds(posKey) : 0;
-
-              return (
-                <g key={posKey}
-                  style={{ cursor: isEditable ? 'pointer' : 'default' }}
-                  onDragOver={e => { e.preventDefault(); setDropTarget(posKey); }}
-                  onDragLeave={() => setDropTarget(null)}
-                  onDrop={e => { e.preventDefault(); onDropOnPosition(posKey); }}
-                  onDragStart={isOccupied && isEditable ? () => onDragStartField(posKey) : undefined}
-                  onClick={() => {
-                    if (!isEditable) return;
-                    if (isOccupied && !isLive && !isPaused) {
-                      if (isPreMatch && onPreAssign) onPreAssign(posKey, null);
-                    } else if (!isOccupied) {
-                      setShowPlayerPicker(posKey);
-                    }
-                  }}
-                >
-                  {/* Drop zone highlight */}
-                  {isDragTarget && (
-                    <circle cx={cx} cy={cy} r="30" fill="rgba(255,255,255,0.15)" />
-                  )}
-
-                  {/* Position disc */}
-                  <circle
-                    cx={cx} cy={cy} r={isOccupied ? 24 : 18}
-                    fill={isOccupied
-                      ? (isBusy ? 'rgba(100,100,100,0.8)' : (isDragTarget ? 'rgba(255,255,255,0.3)' : 'rgba(180,20,20,0.92)'))
-                      : (isDragTarget ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.45)')}
-                    stroke={isOccupied ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.5)'}
-                    strokeWidth={isOccupied ? 2 : 1.5}
-                    
-                    onDragStart={() => onDragStartField(posKey)}
-                  />
-
-                  {/* Position label (shirt number) */}
-                  {!isOccupied && (
-                    <text x={cx} y={cy + 5} textAnchor="middle"
-                      fill="rgba(255,255,255,0.7)" fontSize="13" fontFamily="'Bebas Neue',sans-serif" letterSpacing="0.5">
-                      {posKey}
-                    </text>
-                  )}
-
-                  {/* Player shirt number */}
-                  {isOccupied && player && (
-                    <>
-                      <text x={cx} y={cy - 5} textAnchor="middle"
-                        fill="white" fontSize="14" fontFamily="'Bebas Neue',sans-serif" fontWeight="bold">
-                        {player.number ?? posKey}
-                      </text>
-                      {/* Player name (clipped) */}
-                      <text x={cx} y={cy + 8} textAnchor="middle"
-                        fill="rgba(255,255,255,0.92)" fontSize="8.5" fontFamily="'Barlow Condensed',sans-serif" fontWeight="700"
-                        style={{ letterSpacing: '0.2px' }}>
-                        {player.name.split(' ').slice(-1)[0].substring(0, 9)}
-                      </text>
-                      {/* Live timer */}
-                      {liveSec > 0 && (
-                        <text x={cx} y={cy + 20} textAnchor="middle"
-                          fill="rgba(255,220,0,0.9)" fontSize="8" fontFamily="'Bebas Neue',sans-serif">
-                          {formatDuration(liveSec)}
-                        </text>
-                      )}
-                    </>
-                  )}
-
-                  {/* Empty slot + icon */}
-                  {!isOccupied && isEditable && (
-                    <text x={cx} y={cy + 32} textAnchor="middle"
-                      fill="rgba(255,255,255,0.4)" fontSize="9" fontFamily="'Barlow Condensed',sans-serif" fontWeight="600">
-                      klik/sleep
-                    </text>
-                  )}
-                </g>
-              );
-            })}
+            {/* Position slots */}
+            {positions.map(pos => renderSlot(pos))}
           </svg>
         </div>
 
-        {/* ── BENCH / PLAYER LIST ── */}
+        {/* Bench */}
         <div className="fv-bench"
           onDragOver={e => { e.preventDefault(); setDropTarget('bench'); }}
           onDragLeave={() => setDropTarget(null)}
           onDrop={e => { e.preventDefault(); onDropOnBench(); }}
         >
           <div className="fv-bench-title">
-            {isPreMatch ? 'Spelers — sleep naar veld' : 'Wisselbank'}
+            {isPreMatch ? 'Sleep naar veld' : 'Bank'}
             <span className="fv-bench-count">{bench.length}</span>
           </div>
+          <div className="fv-format-badge">{format.toUpperCase()}</div>
 
           {bench.length === 0 ? (
-            <div className="fv-bench-empty">Alle spelers staan op het veld</div>
-          ) : (
-            bench.map(p => {
-              const isDragging = dragState?.playerId === p.id;
-              return (
-                <div
-                  key={p.id}
-                  className={`fv-bench-player ${isDragging ? 'dragging' : ''}`}
-                  draggable={isEditable}
-                  onDragStart={() => onDragStartBench(p)}
-                  onDragEnd={() => setDragState(null)}
-                  onClick={() => {
-                    if (!isEditable || showPlayerPicker) return;
-                    // Auto-assign to first empty position
-                    const emptyPos = FIELD_POSITION_KEYS.find(k => {
-                      if (isPreMatch) return !preAssignment?.[k];
-                      return !fieldState[k];
-                    });
-                    if (emptyPos) {
-                      if (isPreMatch && onPreAssign) onPreAssign(emptyPos, p.id);
-                      else assignLive(emptyPos, p.id);
-                    }
-                  }}
-                >
-                  <span className="fv-bench-num">{p.number ? `#${p.number}` : '—'}</span>
-                  <span className="fv-bench-name">{p.name}</span>
-                  {!isPreMatch && (() => {
-                    const att = attendances.find(a => a.player.id === p.id);
-                    const totalSec = att
-                      ? sessions.filter(s => s.attendance.id === att.id)
-                          .reduce((acc, s) => acc + (s.durationSeconds || 0), 0)
-                      : 0;
-                    return totalSec > 0
-                      ? <span className="fv-bench-time">{formatDuration(totalSec)}</span>
-                      : null;
-                  })()}
-                  <span className="fv-bench-drag-hint">⠿</span>
-                </div>
-              );
-            })
-          )}
+            <div className="fv-bench-empty">✓ Iedereen op het veld</div>
+          ) : bench.map(p => {
+            const isDragging = dragState?.playerId === p.id;
+            const att = attendances.find(a => a.player.id === p.id);
+            const totalSec = att
+              ? sessions.filter(s => s.attendance.id === att.id).reduce((acc, s) => acc + (s.durationSeconds || 0), 0)
+              : 0;
+            return (
+              <div key={p.id}
+                className={`fv-bench-player ${isDragging ? 'dragging' : ''}`}
+                draggable={isEditable}
+                onDragStart={() => onDragStartBench(p)}
+                onDragEnd={() => setDragState(null)}
+                onClick={() => {
+                  if (!isEditable || showPlayerPicker) return;
+                  const emptyPos = positions.find(pos => {
+                    if (isPreMatch) return !preAssignment?.[pos.key];
+                    return !fieldState[pos.key];
+                  });
+                  if (emptyPos) {
+                    if (isPreMatch && onPreAssign) onPreAssign(emptyPos.key, p.id);
+                    else assignLive(emptyPos.key, p.id);
+                  }
+                }}
+              >
+                <span className="fv-bench-num">{p.number ? `#${p.number}` : '—'}</span>
+                <span className="fv-bench-name">{p.name}</span>
+                {!isPreMatch && totalSec > 0 && <span className="fv-bench-time">{formatDuration(totalSec)}</span>}
+                <span className="fv-bench-drag-hint">⠿</span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      {/* Position time stats moved outside — rendered by parent */}
-
-      {/* ── Player picker modal ── */}
+      {/* Player picker modal */}
       {showPlayerPicker && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowPlayerPicker(null)}>
           <div className="modal">
-            <div className="modal-title">Positie {showPlayerPicker}</div>
-            <p style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-heading)', fontSize: 13, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12 }}>
-              {FIELD_POSITIONS[showPlayerPicker]?.role} — kies speler
-            </p>
+            <div className="modal-title">
+              Positie {showPlayerPicker}
+              <span style={{ color: 'var(--red)', marginLeft: 8, fontSize: 16 }}>
+                ({positions.find(p => p.key === showPlayerPicker)?.role})
+              </span>
+            </div>
             <div className="sub-player-list">
               {bench.map(p => (
                 <button key={p.id} className="sub-player-btn"
@@ -378,7 +468,9 @@ export default function FieldView({
                 </button>
               ))}
               {bench.length === 0 && (
-                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>Geen spelers beschikbaar</div>
+                <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-dim)', fontSize: 13 }}>
+                  Geen spelers beschikbaar
+                </div>
               )}
             </div>
             <div className="modal-actions">
@@ -391,32 +483,56 @@ export default function FieldView({
   );
 }
 
-// ── PositionTimeStats (exported so parent can place it anywhere) ───────────────
+// ── Shirt SVG shape ───────────────────────────────────────────────────────────
+function ShirtSVG({ cx, cy, fill, role }: { cx: number; cy: number; fill: string; role: string }) {
+  // Simple shirt: body + sleeves + collar, centered on cx,cy
+  const isKeeper = role === 'keeper';
+  // Keeper gets dark shirt, others get the role colour
+  const bodyFill = fill;
+  const stripeFill = isKeeper ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.2)';
 
-export function PositionTimeStats({ sessions, attendances, allPlayers, tick }: {
+  return (
+    <g transform={`translate(${cx},${cy})`}>
+      {/* Body */}
+      <path
+        d="M -16 -14 L -22 -20 L -26 -10 L -20 -8 L -20 16 L 20 16 L 20 -8 L 26 -10 L 22 -20 L 16 -14 C 14 -18 -14 -18 -16 -14 Z"
+        fill={bodyFill}
+        stroke="rgba(255,255,255,0.7)"
+        strokeWidth="1.2"
+      />
+      {/* Vertical stripe for visual style */}
+      <rect x="-4" y="-14" width="8" height="30" fill={stripeFill} />
+      {/* Collar */}
+      <ellipse cx="0" cy="-14" rx="5" ry="3" fill="rgba(0,0,0,0.3)" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" />
+    </g>
+  );
+}
+
+// ── PositionTimeStats (exported for parent use) ───────────────────────────────
+export function PositionTimeStats({ sessions, attendances, allPlayers, tick, category }: {
   sessions: PlayTimeSession[];
   attendances: Attendance[];
   allPlayers: Player[];
   tick: number;
+  category: string;
 }) {
   void tick;
+  const positions = getPositionsForCategory(category);
+  const posKeys = positions.map(p => p.key);
 
-  // Build: player × position → total seconds
-  const rows = allPlayers
-    .map(player => {
-      const att = attendances.find(a => a.player.id === player.id);
-      if (!att) return null;
-      const posTimes: Record<string, number> = {};
-      let hasAny = false;
-      for (const posKey of FIELD_POSITION_KEYS) {
-        const sec = getPositionSeconds(sessions, att.id, posKey, true);
-        posTimes[posKey] = sec;
-        if (sec > 0) hasAny = true;
-      }
-      if (!hasAny) return null;
-      return { player, posTimes };
-    })
-    .filter(Boolean) as Array<{ player: Player; posTimes: Record<string, number> }>;
+  const rows = allPlayers.map(player => {
+    const att = attendances.find(a => a.player.id === player.id);
+    if (!att) return null;
+    const posTimes: Record<string, number> = {};
+    let hasAny = false;
+    for (const k of posKeys) {
+      const sec = getPositionSeconds(sessions, att.id, k, true);
+      posTimes[k] = sec;
+      if (sec > 0) hasAny = true;
+    }
+    if (!hasAny) return null;
+    return { player, posTimes };
+  }).filter(Boolean) as Array<{ player: Player; posTimes: Record<string, number> }>;
 
   if (rows.length === 0) return null;
 
@@ -428,7 +544,7 @@ export function PositionTimeStats({ sessions, attendances, allPlayers, tick }: {
           <thead>
             <tr>
               <th>Speler</th>
-              {FIELD_POSITION_KEYS.map(k => <th key={k} style={{ textAlign: 'center' }}>{k}</th>)}
+              {posKeys.map(k => <th key={k} style={{ textAlign: 'center' }}>{k}</th>)}
               <th style={{ textAlign: 'right' }}>Totaal</th>
             </tr>
           </thead>
@@ -443,7 +559,7 @@ export function PositionTimeStats({ sessions, attendances, allPlayers, tick }: {
                     </span>
                     <span style={{ fontWeight: 500 }}>{player.name}</span>
                   </td>
-                  {FIELD_POSITION_KEYS.map(k => (
+                  {posKeys.map(k => (
                     <td key={k} style={{ textAlign: 'center' }}>
                       {posTimes[k] > 0
                         ? <span className="fv-pos-time-cell">{formatDuration(posTimes[k])}</span>

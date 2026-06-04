@@ -60,3 +60,25 @@ App start op **http://localhost:5173**
 - **Frontend**: Vite 5, React 18, TypeScript, React Router 6
 - **Poorten**: Backend 3000, Frontend 5173
 - **Proxy**: Frontend proxyt `/api/graphql` → `localhost:3000/graphql`
+
+## Multi-trainer & login
+
+### Eerste keer opstarten
+```bash
+cd backend && npm install --legacy-peer-deps && npm run dev
+```
+Keystone vraagt bij de eerste start om een **eerste admin account** aan te maken op http://localhost:3000/admin. Dit is je admin-login.
+
+### Daarna via Admin UI of via de app (⚙️ Admin pagina)
+1. Maak ploegen aan (bv. KFC Lennik U10A — categorie U10)
+2. Maak trainers aan en koppel ze aan een ploeg
+3. Elke trainer logt in en ziet enkel zijn eigen ploeg
+
+### Categorieën & veldformaten
+| Categorie | Formaat | Kwartduur |
+|-----------|---------|-----------|
+| U6        | 2v2     | 10 min    |
+| U7        | 3v3     | 10 min    |
+| U8/U9     | 5v5     | 15 min    |
+| U10/U11/U12 | 8v8   | 20 min    |
+| U13/U15/U17 | 11v11 | 25 min    |
