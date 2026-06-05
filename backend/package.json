@@ -1,0 +1,19 @@
+{
+  "name": "kfc-lennik-backend",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "keystone dev",
+    "build": "keystone build",
+    "start": "keystone start"
+  },
+  "dependencies": {
+    "@keystone-6/auth": "^8.1.0",
+    "@keystone-6/core": "^6.0.0",
+    "date-fns": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
