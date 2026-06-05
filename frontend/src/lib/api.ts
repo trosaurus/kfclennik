@@ -1,4 +1,4 @@
-const GQL_URL = '/api/graphql';
+const GQL_URL = (import.meta.env.VITE_API_URL ?? '') + '/api/graphql';
 
 async function gql(query: string, variables?: Record<string, unknown>) {
   const res = await fetch(GQL_URL, {
