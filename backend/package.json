@@ -5,15 +5,15 @@
   "scripts": {
     "dev": "keystone dev",
     "build": "keystone build",
-    "start": "keystone start"
+    "start": "npx keystone prisma db push --accept-data-loss && keystone start"
   },
   "dependencies": {
-    "@keystone-6/auth": "^8.1.0",
-    "@keystone-6/core": "^6.0.0",
-    "date-fns": "^4.4.0"
+    "@keystone-6/auth": "^7.0.0",
+    "@keystone-6/core": "^5.0.0",
+    "@prisma/client": "^5.0.0",
+    "prisma": "^5.0.0"
   },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
