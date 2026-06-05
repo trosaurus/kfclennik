@@ -15,32 +15,30 @@ const { withAuth } = createAuth({
 });
 
 const session = statelessSessions({
-  maxAge: 60 * 60 * 24 * 30, // 30 days
+  maxAge: 60 * 60 * 24 * 30,
   secret: process.env.SESSION_SECRET ?? 'kfc-lennik-super-secret-key-change-in-prod',
 });
 
 export default withAuth(
   config({
     db: {
-      provider: 'sqlite',
-      url: 'file:./kfc-lennik.db',
+      provider: 'postgresql',
+      url: process.env.DATABASE_URL ?? 'postgresql://localhost/kfc_lennik',
+      useMigrations: true,
     },
     lists,
     session,
     server: {
       cors: {
-        origin: ['http://localhost:5173'],
+        origin: process.env.FRONTEND_URL
+          ? [process.env.FRONTEND_URL, 'http://localhost:5173']
+          : ['http://localhost:5173'],
         credentials: true,
       },
-      port: 3000,
+      port: parseInt(process.env.PORT ?? '3000'),
     },
     graphql: {
-      playground: true,
+      playground: process.env.NODE_ENV !== 'production',
     },
   })
 );
-db: {
-  provider: 'postgresql',
-  url: process.env.DATABASE_URL || 'postgresql://localhost/kfc_lennik',
-  useMigrations: true,  // ← voeg dit toe
-},
