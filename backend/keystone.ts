@@ -39,3 +39,8 @@ export default withAuth(
     },
   })
 );
+db: {
+  provider: 'postgresql',
+  url: process.env.DATABASE_URL || 'postgresql://localhost/kfc_lennik',
+  useMigrations: true,  // ← voeg dit toe
+},
