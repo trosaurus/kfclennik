@@ -64,7 +64,6 @@ const POSITIONS: Record<TeamFormat, FieldPos[]> = {
   ],
 
   // ── 5v5: based on image 2 ────────────────────────────────────────────────────
-  // K(1) bottom center, 3 center-mid, 9 center-attack, 7 right-wing, 11 left-wing
   '5v5': [
     { key: 'K',  label: 'K',  role: 'keeper',   x: 50,  y: 87 },
     { key: '3',  label: '3',  role: 'defender', x: 50,  y: 60 },
@@ -73,36 +72,28 @@ const POSITIONS: Record<TeamFormat, FieldPos[]> = {
     { key: '9',  label: '9',  role: 'forward',  x: 50,  y: 22 },
   ],
 
-  // ── 8v8: keeper + 3 def + 3 mid + 2 fwd ─────────────────────────────────────
-  // Based on 5v5 shape extended: add full defensive line + 3 midfielders
+  // ── 8v8: keeper + 3 def + 3 mid + 1 fwd ─────────────────────────────────────
   '8v8': [
     { key: 'K',  label: 'K',  role: 'keeper',    x: 50,  y: 88 },
     { key: '5',  label: '5',  role: 'defender',  x: 16,  y: 74 },
     { key: '3',  label: '3',  role: 'defender',  x: 50,  y: 72 },
     { key: '2',  label: '2',  role: 'defender',  x: 84,  y: 74 },
-    { key: '6',  label: '6',  role: 'midfielder',x: 18,  y: 53 },
-    { key: '8',  label: '8',  role: 'midfielder',x: 50,  y: 51 },
-    { key: '10', label: '10', role: 'midfielder',x: 82,  y: 53 },
-    { key: '11', label: '11', role: 'forward',   x: 25,  y: 28 },
-    { key: '9',  label: '9',  role: 'forward',   x: 75,  y: 28 },
+    { key: '6',  label: '6',  role: 'midfielder', x: 18,  y: 53 },
+    { key: '8',  label: '8',  role: 'midfielder', x: 50,  y: 51 },
+    { key: '10', label: '10', role: 'midfielder', x: 82,  y: 53 },
+    { key: '9',  label: '9',  role: 'forward',   x: 50,  y: 25 },
   ],
 
   // ── 11v11: based on image 1 (4-3-3) ─────────────────────────────────────────
-  // Bottom to top from image:
-  // Row 1 (keeper):  K(1) center-bottom
-  // Row 2 (def):     4 center-left, 3 center-right, 5 far-left, 2 far-right
-  // Row 3 (mid):     6 center-left, 8 center-right
-  // Row 4 (att-mid): 10 center
-  // Row 5 (fwd):     11 far-left, 9 center, 7 far-right
   '11v11': [
     { key: 'K',  label: 'K',  role: 'keeper',    x: 50,  y: 88 },
     { key: '5',  label: '5',  role: 'defender',  x: 16,  y: 76 },
     { key: '4',  label: '4',  role: 'defender',  x: 38,  y: 74 },
     { key: '3',  label: '3',  role: 'defender',  x: 62,  y: 74 },
     { key: '2',  label: '2',  role: 'defender',  x: 84,  y: 76 },
-    { key: '6',  label: '6',  role: 'midfielder',x: 40,  y: 58 },
-    { key: '8',  label: '8',  role: 'midfielder',x: 62,  y: 56 },
-    { key: '10', label: '10', role: 'midfielder',x: 50,  y: 43 },
+    { key: '6',  label: '6',  role: 'midfielder', x: 40,  y: 58 },
+    { key: '8',  label: '8',  role: 'midfielder', x: 62,  y: 56 },
+    { key: '10', label: '10', role: 'midfielder', x: 50,  y: 43 },
     { key: '11', label: '11', role: 'forward',   x: 22,  y: 22 },
     { key: '9',  label: '9',  role: 'forward',   x: 50,  y: 13 },
     { key: '7',  label: '7',  role: 'forward',   x: 78,  y: 22 },
