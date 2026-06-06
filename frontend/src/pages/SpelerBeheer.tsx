@@ -3,6 +3,7 @@ import { useRef } from 'react';
 import { useTeam } from '../lib/TeamContext';
 import {
   getPlayers, createPlayer, updatePlayer, deletePlayer,
+  getTeams, Team,
   exportPlayersCSV, importPlayersCSV,
   Player, POSITIONS, POSITION_LABELS, POSITION_FULL,
 } from '../lib/api';
@@ -11,12 +12,13 @@ import './SpelerBeheer.css';
 type SortKey = 'name' | 'number' | 'position';
 
 export default function SpelerBeheer() {
-  const { teamId } = useTeam();
+  const { teamId, isAdmin } = useTeam();
   const [players, setPlayers] = useState<Player[]>([]);
+  const [teams, setTeams]   = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editPlayer, setEditPlayer] = useState<Player | null>(null);
-  const [form, setForm] = useState({ name: '', number: '', position: '', active: 'true' });
+  const [form, setForm] = useState({ name: '', number: '', position: '', active: 'true', teamId: '' });
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('');
   const [posFilter, setPosFilter] = useState('');
@@ -31,18 +33,25 @@ export default function SpelerBeheer() {
 
   async function load() {
     setLoading(true);
-    try { setPlayers(await getPlayers(teamId ?? undefined)); } finally { setLoading(false); }
+    try {
+      const [p, t] = await Promise.all([
+        getPlayers(teamId ?? undefined),
+        isAdmin ? getTeams() : Promise.resolve([]),
+      ]);
+      setPlayers(p);
+      setTeams(t);
+    } finally { setLoading(false); }
   }
 
   function openCreate() {
     setEditPlayer(null);
-    setForm({ name: '', number: '', position: '', active: 'true' });
+    setForm({ name: '', number: '', position: '', active: 'true', teamId: teamId ?? '' });
     setShowModal(true);
   }
 
   function openEdit(p: Player) {
     setEditPlayer(p);
-    setForm({ name: p.name, number: p.number?.toString() ?? '', position: p.position ?? '', active: p.active });
+    setForm({ name: p.name, number: p.number?.toString() ?? '', position: p.position ?? '', active: p.active, teamId: '' });
     setShowModal(true);
   }
 
@@ -59,7 +68,9 @@ export default function SpelerBeheer() {
         await updatePlayer(editPlayer.id, input);
       } else {
         input.active = 'true';
-        if (teamId) input.teamId = teamId;
+        // Admins can pick any team; trainers use their own team from context
+        const assignTeamId = isAdmin ? (form.teamId || undefined) : (teamId || undefined);
+        if (assignTeamId) input.teamId = assignTeamId;
         await createPlayer(input as { name: string; number?: number; position?: string; teamId?: string });
       }
       setShowModal(false);
@@ -287,6 +298,23 @@ export default function SpelerBeheer() {
                   <option value="true">Actief</option>
                   <option value="false">Inactief</option>
                 </select>
+              </div>
+            )}
+            {/* Admins can assign to any team; trainers auto-assign to their own team */}
+            {isAdmin && !editPlayer && teams.length > 0 && (
+              <div className="form-group">
+                <label className="input-label">Ploeg</label>
+                <select className="input-field" value={form.teamId} onChange={e => setForm({ ...form, teamId: e.target.value })}>
+                  <option value="">— Geen ploeg —</option>
+                  {teams.map(t => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.category})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {!isAdmin && !editPlayer && teamId && (
+              <div className="adm-auto-team-hint">
+                ↳ Wordt toegevoegd aan jouw ploeg
               </div>
             )}
             <div className="modal-actions">

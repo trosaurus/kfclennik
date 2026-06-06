@@ -278,7 +278,6 @@ export default function FieldView({
     const isBusy = busyPos === posKey;
     const liveSec = isOccupied && isLive ? posLiveSeconds(posKey) : 0;
 
-    // Role → disc colour
     const roleColor: Record<string, string> = {
       keeper:     'rgba(20,20,20,0.92)',
       defender:   'rgba(30,90,200,0.9)',
@@ -289,7 +288,6 @@ export default function FieldView({
     const discFill = isOccupied
       ? (isBusy ? 'rgba(100,100,100,0.8)' : roleColor[pos.role])
       : emptyColor;
-
     const radius = isOccupied ? 26 : 20;
 
     return (
@@ -316,7 +314,6 @@ export default function FieldView({
         {isOccupied ? (
           <ShirtSVG cx={cx} cy={cy} fill={discFill} role={pos.role} />
         ) : (
-          // Empty slot: dashed circle
           <circle cx={cx} cy={cy} r={radius}
             fill="rgba(0,0,0,0.25)"
             stroke="rgba(255,255,255,0.45)"
@@ -341,12 +338,10 @@ export default function FieldView({
               style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
               {player.number !== null ? player.number : posKey}
             </text>
-            {/* Last name, max 8 chars */}
             <text x={cx} y={cy + 9} textAnchor="middle"
               fill="rgba(255,255,255,0.95)" fontSize="8" fontFamily="'Barlow Condensed',sans-serif" fontWeight="700">
               {player.name.length > 10 ? player.name.split(' ').slice(-1)[0].substring(0, 9).toUpperCase() : player.name.toUpperCase()}
             </text>
-            {/* Live timer */}
             {liveSec > 0 && (
               <text x={cx} y={cy + 21} textAnchor="middle"
                 fill="rgba(255,220,0,0.95)" fontSize="8" fontFamily="'Bebas Neue',sans-serif">
@@ -485,24 +480,18 @@ export default function FieldView({
 
 // ── Shirt SVG shape ───────────────────────────────────────────────────────────
 function ShirtSVG({ cx, cy, fill, role }: { cx: number; cy: number; fill: string; role: string }) {
-  // Simple shirt: body + sleeves + collar, centered on cx,cy
   const isKeeper = role === 'keeper';
-  // Keeper gets dark shirt, others get the role colour
   const bodyFill = fill;
   const stripeFill = isKeeper ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.2)';
-
   return (
     <g transform={`translate(${cx},${cy})`}>
-      {/* Body */}
       <path
         d="M -16 -14 L -22 -20 L -26 -10 L -20 -8 L -20 16 L 20 16 L 20 -8 L 26 -10 L 22 -20 L 16 -14 C 14 -18 -14 -18 -16 -14 Z"
         fill={bodyFill}
         stroke="rgba(255,255,255,0.7)"
         strokeWidth="1.2"
       />
-      {/* Vertical stripe for visual style */}
       <rect x="-4" y="-14" width="8" height="30" fill={stripeFill} />
-      {/* Collar */}
       <ellipse cx="0" cy="-14" rx="5" ry="3" fill="rgba(0,0,0,0.3)" stroke="rgba(255,255,255,0.5)" strokeWidth="0.8" />
     </g>
   );

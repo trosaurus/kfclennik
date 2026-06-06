@@ -323,12 +323,12 @@
 /* ── Active match: field (left, larger) + player list (right) ── */
 .md-active-layout {
   display: grid;
-  grid-template-columns: 1fr 320px;   /* field fills available space, list fixed */
+  grid-template-columns: 1fr 320px;
   gap: 16px;
   align-items: start;
   margin-bottom: 4px;
 }
-.md-active-left  { min-width: 0; }   /* allow field to shrink on small screens */
+.md-active-left  { min-width: 0; }
 .md-active-right { display: flex; flex-direction: column; gap: 0; min-width: 0; }
 
 /* On tablet: narrow list */
