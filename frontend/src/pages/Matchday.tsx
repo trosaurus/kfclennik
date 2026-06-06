@@ -14,6 +14,7 @@ import {
 import './Matchday.css';
 import FieldView, { PositionTimeStats } from './FieldView';
 import { useTeam } from '../lib/TeamContext';
+import { generateLineupPDF } from '../lib/generateLineupPDF';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,7 +29,7 @@ interface PlayerState {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Matchday() {
-  const { teamId, category } = useTeam();
+  const { teamId, category, trainer } = useTeam();
   const [allMatches, setAllMatches]     = useState<Match[]>([]);
   const [match, setMatch]               = useState<Match | null>(null);
   const [allPlayers, setAllPlayers]     = useState<Player[]>([]);
@@ -289,6 +290,56 @@ export default function Matchday() {
       .sort((a, b) => (a.player.number ?? 99) - (b.player.number ?? 99));
   }
 
+  // ── PDF generation ───────────────────────────────────────────────────────
+
+  function handleGeneratePDF() {
+    if (!match) return;
+    const cat = category ?? 'U13';
+
+    // Build quarter data from fieldAssignments + sessions + periods
+    const quarterData = [1, 2, 3, 4].map(periodNum => {
+      // Get field assignment for this quarter
+      const assignment: Record<string, import('../lib/api').Player | null> = {};
+      const fieldAssign = fieldAssignments[periodNum] || getFieldAssignment(match.id, periodNum);
+
+      Object.entries(fieldAssign).forEach(([posKey, playerId]) => {
+        const player = allPlayers.find(p => p.id === playerId) ?? null;
+        assignment[posKey] = player;
+      });
+
+      // If no pre-assignment, try to get from sessions data
+      if (Object.keys(assignment).length === 0) {
+        const periodSessions = sessions.filter(s => s.period === periodNum && s.fieldPosition);
+        for (const sess of periodSessions) {
+          if (sess.fieldPosition && !assignment[sess.fieldPosition]) {
+            const att = attendances.find(a => a.id === sess.attendance.id);
+            if (att) assignment[sess.fieldPosition] = att.player;
+          }
+        }
+      }
+
+      // Score for this quarter
+      const period = periods.find(p => p.periodNumber === periodNum);
+      return {
+        periodNumber: periodNum,
+        assignment,
+        periodSeconds: {},
+        scoreHome: period?.scoreHome ?? 0,
+        scoreAway: period?.scoreAway ?? 0,
+      };
+    });
+
+    generateLineupPDF({
+      match,
+      category: cat,
+      teamName: trainer?.team?.name ?? 'KFC Lennik',
+      quarters: quarterData,
+      allPlayers,
+      sessions,
+      attendances,
+    });
+  }
+
   // ── Optimistic session stop — immediately update local state ─────────────
   function optimisticStopSession(sessionId: string, startTime: string) {
     const elapsed = Math.max(0, Math.floor((Date.now() - new Date(startTime).getTime()) / 1000));
@@ -488,6 +539,7 @@ export default function Matchday() {
                 ■ Eindig match
               </button>
             )}
+            <button className="btn btn-outline btn-sm" onClick={handleGeneratePDF} title="Opstelling PDF downloaden">📄 PDF</button>
             <button className="btn btn-outline btn-sm" onClick={() => setMatchPicker(true)}>📋</button>
           </div>
         </div>

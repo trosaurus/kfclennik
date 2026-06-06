@@ -1,10 +1,15 @@
-.adm-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+/* ── Admin header ── */
+.adm-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.adm-toolbar { margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+.adm-error { color: var(--red); font-size: 13px; margin-bottom: 8px; padding: 8px 12px; background: rgba(204,26,26,0.1); border-radius: var(--radius); }
+
+/* ── Tabs ── */
 .adm-tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border-soft); }
 .adm-tab {
   padding: 10px 18px; background: none; border: none; border-bottom: 2px solid transparent;
   margin-bottom: -1px; font-family: var(--font-heading); font-size: 13px; font-weight: 700;
   letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); cursor: pointer;
-  transition: all .12s; display: flex; align-items: center; gap: 7px;
+  transition: all .12s; display: flex; align-items: center; gap: 7px; min-height: 44px;
 }
 .adm-tab:hover { color: var(--white); }
 .adm-tab.active { color: var(--white); border-bottom-color: var(--red); }
@@ -14,22 +19,144 @@
 }
 .adm-tab.active .adm-tab-count { background: var(--red); color: white; }
 
-.adm-toolbar { margin-bottom: 16px; }
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* ── TEAM CARDS ──────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════ */
 
-.adm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.adm-team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+@media (max-width: 640px) { .adm-team-grid { grid-template-columns: 1fr; } }
 
-.adm-team-card { padding: 16px; }
-.adm-team-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.adm-category-badge { background: var(--red); color: white; font-family: var(--font-display); font-size: 18px; padding: 2px 10px; border-radius: 3px; }
-.adm-format-tag { font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 1px; background: var(--bg-elevated); color: var(--text-mid); padding: 2px 7px; border-radius: 2px; }
-.adm-team-actions { margin-left: auto; display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
-.adm-team-card:hover .adm-team-actions { opacity: 1; }
-.adm-team-name { font-family: var(--font-display); font-size: 22px; letter-spacing: 1px; margin-bottom: 2px; }
-.adm-team-club { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
-.adm-team-trainer { font-size: 13px; color: var(--text-mid); display: flex; align-items: center; gap: 5px; }
-.adm-trainer-icon { font-size: 12px; }
+.adm-team-card { display: flex; flex-direction: column; overflow: hidden; }
 
+.adm-tc-header {
+  display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+  background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border-soft);
+}
+.adm-tc-cat {
+  background: var(--red); color: white; font-family: var(--font-display);
+  font-size: 18px; padding: 2px 10px; border-radius: 3px;
+}
+.adm-tc-format {
+  font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 1px;
+  background: var(--bg-elevated); color: var(--text-mid); padding: 2px 7px; border-radius: 2px;
+}
+.adm-tc-actions { margin-left: auto; display: flex; gap: 4px; }
+
+.adm-tc-body { padding: 14px 16px 8px; }
+.adm-tc-name { font-family: var(--font-display); font-size: 22px; letter-spacing: 1px; margin-bottom: 2px; }
+.adm-tc-club { font-size: 12px; color: var(--text-dim); }
+
+/* ── Trainers section in team card ── */
+.adm-tc-trainers {
+  padding: 10px 16px 14px;
+  border-top: 1px solid var(--border-soft);
+  margin-top: 4px;
+}
+.adm-tc-trainers-label {
+  font-family: var(--font-heading); font-size: 10px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim);
+  margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+}
+.adm-tc-trainers-count {
+  background: var(--bg-elevated); color: var(--text-mid);
+  font-family: var(--font-display); font-size: 12px;
+  padding: 0 5px; border-radius: 2px;
+}
+.adm-tc-no-trainer { font-size: 12px; color: var(--text-dim); padding: 6px 0; }
+
+.adm-tc-trainer-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 0; border-bottom: 1px solid var(--border-soft);
+}
+.adm-tc-trainer-row:last-of-type { border-bottom: none; }
+.adm-tc-trainer-icon { font-size: 14px; flex-shrink: 0; }
+.adm-tc-trainer-name { font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.adm-tc-trainer-email { font-size: 11px; color: var(--text-dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-tc-unlink {
+  width: 20px; height: 20px; border-radius: 50%; background: none;
+  border: 1px solid var(--border); color: var(--text-dim); font-size: 10px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all .12s; flex-shrink: 0;
+}
+.adm-tc-unlink:hover { background: rgba(204,26,26,.2); border-color: var(--red); color: white; }
+
+.adm-tc-add-trainer { margin-top: 8px; }
+.adm-tc-add-select { font-size: 13px; padding: 7px 10px; }
+
+/* ── Unassigned trainers warning ── */
+.adm-unassigned-banner {
+  margin-top: 20px; padding: 12px 16px;
+  background: rgba(245,197,24,0.08); border: 1px solid rgba(245,197,24,0.2);
+  border-radius: var(--radius); font-size: 13px; color: var(--text-mid);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.adm-unassigned-icon { font-size: 16px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* ── TRAINER CARDS ───────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+.adm-trainer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+@media (max-width: 640px) { .adm-trainer-grid { grid-template-columns: 1fr; } }
+
+.adm-trainer-card { display: flex; flex-direction: column; padding: 0; }
+.adm-trainer-card.self { border-color: rgba(204,26,26,0.4); }
+
+.adm-trc-top {
+  display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.adm-trc-avatar {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: var(--red); color: white;
+  font-family: var(--font-display); font-size: 20px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; box-shadow: 0 2px 8px rgba(204,26,26,0.3);
+}
+.adm-trc-info { flex: 1; min-width: 0; }
+.adm-trc-name {
+  font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px;
+}
+.adm-trc-self-badge {
+  font-family: var(--font-heading); font-size: 9px; font-weight: 700;
+  letter-spacing: 1.5px; background: rgba(204,26,26,0.2); color: var(--red);
+  padding: 1px 6px; border-radius: 2px;
+}
+.adm-trc-email {
+  font-size: 12px; color: var(--text-dim); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; margin-top: 1px;
+}
+
+/* ── Team assignment section in trainer card ── */
+.adm-trc-team-section { padding: 12px 16px; }
+.adm-trc-team-label {
+  font-family: var(--font-heading); font-size: 10px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.adm-trc-team-select { font-size: 13px; padding: 8px 10px; }
+
+.adm-trc-team-info {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px;
+}
+.adm-trc-team-cat {
+  background: var(--red); color: white; font-family: var(--font-display);
+  font-size: 14px; padding: 1px 8px; border-radius: 3px;
+}
+.adm-trc-team-name {
+  font-family: var(--font-heading); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.5px; color: var(--text-mid);
+}
+
+/* ── Actions ── */
+.adm-trc-actions {
+  display: flex; gap: 8px; padding: 10px 16px;
+  border-top: 1px solid var(--border-soft);
+}
+
+/* ── Shared form helpers ── */
 .form-group { margin-bottom: 16px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+@media (max-width: 480px) { .modal-actions { flex-direction: column-reverse; } .modal-actions .btn { width: 100%; justify-content: center; } }
