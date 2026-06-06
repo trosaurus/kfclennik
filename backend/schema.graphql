@@ -17,7 +17,6 @@ type PasswordState {
 input TrainerWhereUniqueInput {
   id: ID
   email: String
-  team: TeamWhereUniqueInput
 }
 
 input TrainerWhereInput {
@@ -53,7 +52,13 @@ input StringFilter {
   contains: String
   startsWith: String
   endsWith: String
+  mode: QueryMode
   not: NestedStringFilter
+}
+
+enum QueryMode {
+  default
+  insensitive
 }
 
 input NestedStringFilter {
@@ -81,6 +86,7 @@ input StringNullableFilter {
   contains: String
   startsWith: String
   endsWith: String
+  mode: QueryMode
   not: StringNullableFilter
 }
 
@@ -143,7 +149,6 @@ type Team {
 
 input TeamWhereUniqueInput {
   id: ID
-  trainer: TrainerWhereUniqueInput
 }
 
 input TeamWhereInput {
@@ -855,29 +860,29 @@ input CreateInitialTrainerInput {
 }
 
 type Query {
-  trainer(where: TrainerWhereUniqueInput!): Trainer
   trainers(where: TrainerWhereInput! = {}, orderBy: [TrainerOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TrainerWhereUniqueInput): [Trainer!]
+  trainer(where: TrainerWhereUniqueInput!): Trainer
   trainersCount(where: TrainerWhereInput! = {}): Int
-  team(where: TeamWhereUniqueInput!): Team
   teams(where: TeamWhereInput! = {}, orderBy: [TeamOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TeamWhereUniqueInput): [Team!]
+  team(where: TeamWhereUniqueInput!): Team
   teamsCount(where: TeamWhereInput! = {}): Int
-  player(where: PlayerWhereUniqueInput!): Player
   players(where: PlayerWhereInput! = {}, orderBy: [PlayerOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PlayerWhereUniqueInput): [Player!]
+  player(where: PlayerWhereUniqueInput!): Player
   playersCount(where: PlayerWhereInput! = {}): Int
-  match(where: MatchWhereUniqueInput!): Match
   matches(where: MatchWhereInput! = {}, orderBy: [MatchOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: MatchWhereUniqueInput): [Match!]
+  match(where: MatchWhereUniqueInput!): Match
   matchesCount(where: MatchWhereInput! = {}): Int
-  period(where: PeriodWhereUniqueInput!): Period
   periods(where: PeriodWhereInput! = {}, orderBy: [PeriodOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PeriodWhereUniqueInput): [Period!]
+  period(where: PeriodWhereUniqueInput!): Period
   periodsCount(where: PeriodWhereInput! = {}): Int
-  goal(where: GoalWhereUniqueInput!): Goal
   goals(where: GoalWhereInput! = {}, orderBy: [GoalOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: GoalWhereUniqueInput): [Goal!]
+  goal(where: GoalWhereUniqueInput!): Goal
   goalsCount(where: GoalWhereInput! = {}): Int
-  attendance(where: AttendanceWhereUniqueInput!): Attendance
   attendances(where: AttendanceWhereInput! = {}, orderBy: [AttendanceOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AttendanceWhereUniqueInput): [Attendance!]
+  attendance(where: AttendanceWhereUniqueInput!): Attendance
   attendancesCount(where: AttendanceWhereInput! = {}): Int
-  playTimeSession(where: PlayTimeSessionWhereUniqueInput!): PlayTimeSession
   playTimeSessions(where: PlayTimeSessionWhereInput! = {}, orderBy: [PlayTimeSessionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PlayTimeSessionWhereUniqueInput): [PlayTimeSession!]
+  playTimeSession(where: PlayTimeSessionWhereUniqueInput!): PlayTimeSession
   playTimeSessionsCount(where: PlayTimeSessionWhereInput! = {}): Int
   keystone: KeystoneMeta!
   authenticatedItem: AuthenticatedItem
@@ -896,25 +901,23 @@ type KeystoneAdminMeta {
 
 type KeystoneAdminUIListMeta {
   key: String!
+  itemQueryName: String!
+  listQueryName: String!
+  hideCreate: Boolean!
+  hideDelete: Boolean!
   path: String!
   label: String!
   singular: String!
   plural: String!
   description: String
+  initialColumns: [String!]!
   pageSize: Int!
   labelField: String!
   fields: [KeystoneAdminUIFieldMeta!]!
   groups: [KeystoneAdminUIFieldGroupMeta!]!
-  graphql: KeystoneAdminUIGraphQL!
-  initialColumns: [String!]!
-  initialSearchFields: [String!]!
   initialSort: KeystoneAdminUISort
-  isSingleton: Boolean!
-  hideCreate: Boolean!
-  hideDelete: Boolean!
   isHidden: Boolean!
-  itemQueryName: String!
-  listQueryName: String!
+  isSingleton: Boolean!
 }
 
 type KeystoneAdminUIFieldMeta {
@@ -973,42 +976,10 @@ enum KeystoneAdminUIFieldMetaItemViewFieldPosition {
   sidebar
 }
 
-enum QueryMode {
-  default
-  insensitive
-}
-
 type KeystoneAdminUIFieldGroupMeta {
   label: String!
   description: String
   fields: [KeystoneAdminUIFieldMeta!]!
-}
-
-type KeystoneAdminUIGraphQL {
-  names: KeystoneAdminUIGraphQLNames!
-}
-
-type KeystoneAdminUIGraphQLNames {
-  outputTypeName: String!
-  whereInputName: String!
-  whereUniqueInputName: String!
-  createInputName: String!
-  createMutationName: String!
-  createManyMutationName: String!
-  relateToOneForCreateInputName: String!
-  relateToManyForCreateInputName: String!
-  itemQueryName: String!
-  listOrderName: String!
-  listQueryCountName: String!
-  listQueryName: String!
-  updateInputName: String!
-  updateMutationName: String!
-  updateManyInputName: String!
-  updateManyMutationName: String!
-  relateToOneForUpdateInputName: String!
-  relateToManyForUpdateInputName: String!
-  deleteMutationName: String!
-  deleteManyMutationName: String!
 }
 
 type KeystoneAdminUISort {
