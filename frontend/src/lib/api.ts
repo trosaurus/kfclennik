@@ -1,4 +1,4 @@
-const GQL_URL = (import.meta.env.VITE_API_URL ?? '') + '/api/graphql';
+const GQL_URL = '/api/graphql';
 
 async function gql(query: string, variables?: Record<string, unknown>) {
   const res = await fetch(GQL_URL, {
@@ -156,6 +156,42 @@ export async function deleteTrainer(id: string): Promise<void> {
 }
 
 // ── Players ───────────────────────────────────────────────────────────────────
+
+export interface PlayerWithTeam {
+  id: string;
+  name: string;
+  number: number | null;
+  position: string | null;
+  active: string;
+  team: { id: string; name: string; category: string } | null;
+}
+
+export async function getAllPlayersWithTeam(): Promise<PlayerWithTeam[]> {
+  const data = await gql(`query {
+    players(take: 2000, orderBy: { name: asc }) { id name number position active team { id name category } }
+  }`);
+  return data.players;
+}
+
+export async function assignPlayerToTeam(playerId: string, teamId: string | null): Promise<void> {
+  if (teamId) {
+    await gql(
+      `mutation AssignPlayer($id: ID!, $data: PlayerUpdateInput!) { updatePlayer(where: { id: $id }, data: $data) { id } }`,
+      { id: playerId, data: { team: { connect: { id: teamId } } } }
+    );
+  } else {
+    await gql(
+      `mutation UnassignPlayer($id: ID!, $data: PlayerUpdateInput!) { updatePlayer(where: { id: $id }, data: $data) { id } }`,
+      { id: playerId, data: { team: { disconnect: true } } }
+    );
+  }
+}
+
+export async function bulkAssignPlayersToTeam(playerIds: string[], teamId: string): Promise<void> {
+  for (const pid of playerIds) {
+    await assignPlayerToTeam(pid, teamId);
+  }
+}
 
 export async function getPlayers(teamId?: string): Promise<Player[]> {
   const where = teamId ? `, where: { team: { id: { equals: "${teamId}" } } }` : '';

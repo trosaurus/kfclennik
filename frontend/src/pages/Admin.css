@@ -1,12 +1,12 @@
-/* ── Admin header ── */
+/* ── Admin layout ── */
 .adm-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
-.adm-toolbar { margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+.adm-toolbar { margin-bottom: 16px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .adm-error { color: var(--red); font-size: 13px; margin-bottom: 8px; padding: 8px 12px; background: rgba(204,26,26,0.1); border-radius: var(--radius); }
 
 /* ── Tabs ── */
-.adm-tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border-soft); }
+.adm-tabs { display: flex; gap: 4px; margin-bottom: 20px; border-bottom: 1px solid var(--border-soft); flex-wrap: wrap; }
 .adm-tab {
-  padding: 10px 18px; background: none; border: none; border-bottom: 2px solid transparent;
+  padding: 10px 16px; background: none; border: none; border-bottom: 2px solid transparent;
   margin-bottom: -1px; font-family: var(--font-heading); font-size: 13px; font-weight: 700;
   letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); cursor: pointer;
   transition: all .12s; display: flex; align-items: center; gap: 7px; min-height: 44px;
@@ -19,142 +19,145 @@
 }
 .adm-tab.active .adm-tab-count { background: var(--red); color: white; }
 
-/* ═══════════════════════════════════════════════════════════════════════════ */
-/* ── TEAM CARDS ──────────────────────────────────────────────────────────── */
-/* ═══════════════════════════════════════════════════════════════════════════ */
-
+/* ═══════════ TEAMS ═══════════ */
 .adm-team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
 @media (max-width: 640px) { .adm-team-grid { grid-template-columns: 1fr; } }
-
-.adm-team-card { display: flex; flex-direction: column; overflow: hidden; }
-
-.adm-tc-header {
-  display: flex; align-items: center; gap: 8px; padding: 12px 16px;
-  background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border-soft);
-}
-.adm-tc-cat {
-  background: var(--red); color: white; font-family: var(--font-display);
-  font-size: 18px; padding: 2px 10px; border-radius: 3px;
-}
-.adm-tc-format {
-  font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 1px;
-  background: var(--bg-elevated); color: var(--text-mid); padding: 2px 7px; border-radius: 2px;
-}
-.adm-tc-actions { margin-left: auto; display: flex; gap: 4px; }
-
+.adm-team-card { display: flex; flex-direction: column; }
+.adm-tc-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border-soft); }
+.adm-tc-cat { background: var(--red); color: white; font-family: var(--font-display); font-size: 18px; padding: 2px 10px; border-radius: 3px; }
+.adm-tc-format { font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 1px; background: var(--bg-elevated); color: var(--text-mid); padding: 2px 7px; border-radius: 2px; }
+.adm-tc-player-count { font-family: var(--font-heading); font-size: 11px; color: var(--text-dim); letter-spacing: 0.5px; margin-left: auto; }
+.adm-tc-actions { display: flex; gap: 4px; }
 .adm-tc-body { padding: 14px 16px 8px; }
 .adm-tc-name { font-family: var(--font-display); font-size: 22px; letter-spacing: 1px; margin-bottom: 2px; }
 .adm-tc-club { font-size: 12px; color: var(--text-dim); }
+.adm-tc-trainers { padding: 10px 16px 14px; border-top: 1px solid var(--border-soft); margin-top: 4px; }
+.adm-tc-trainers-label { font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.adm-tc-trainers-count { background: var(--bg-elevated); color: var(--text-mid); font-family: var(--font-display); font-size: 12px; padding: 0 5px; border-radius: 2px; }
+.adm-tc-no-trainer { font-size: 12px; color: var(--text-dim); padding: 4px 0; }
+.adm-tc-trainer-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+.adm-tc-trainer-icon { font-size: 14px; }
+.adm-tc-trainer-name { font-size: 13px; font-weight: 600; flex: 1; }
+.adm-tc-unlink { width: 20px; height: 20px; border-radius: 50%; background: none; border: 1px solid var(--border); color: var(--text-dim); font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .12s; }
+.adm-tc-unlink:hover { background: rgba(204,26,26,.2); border-color: var(--red); color: white; }
+.adm-tc-add-select { font-size: 12px; padding: 6px 8px; margin-top: 6px; }
 
-/* ── Trainers section in team card ── */
-.adm-tc-trainers {
-  padding: 10px 16px 14px;
-  border-top: 1px solid var(--border-soft);
-  margin-top: 4px;
-}
-.adm-tc-trainers-label {
-  font-family: var(--font-heading); font-size: 10px; font-weight: 700;
-  letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim);
-  margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
-}
-.adm-tc-trainers-count {
-  background: var(--bg-elevated); color: var(--text-mid);
-  font-family: var(--font-display); font-size: 12px;
-  padding: 0 5px; border-radius: 2px;
-}
-.adm-tc-no-trainer { font-size: 12px; color: var(--text-dim); padding: 6px 0; }
+/* ═══════════ TRAINERS ═══════════ */
+.adm-trainer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+@media (max-width: 640px) { .adm-trainer-grid { grid-template-columns: 1fr; } }
+.adm-trainer-card { display: flex; flex-direction: column; }
+.adm-trainer-card.self { border-color: rgba(204,26,26,0.4); }
+.adm-trc-top { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border-soft); }
+.adm-trc-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--red); color: white; font-family: var(--font-display); font-size: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.adm-trc-info { flex: 1; min-width: 0; }
+.adm-trc-name { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.adm-trc-self-badge { font-family: var(--font-heading); font-size: 9px; font-weight: 700; letter-spacing: 1.5px; background: rgba(204,26,26,0.2); color: var(--red); padding: 1px 6px; border-radius: 2px; }
+.adm-trc-email { font-size: 12px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+.adm-trc-team-section { padding: 12px 16px; }
+.adm-trc-team-label { font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 6px; }
+.adm-trc-team-select { font-size: 13px; }
+.adm-trc-team-info { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.adm-trc-team-cat { background: var(--red); color: white; font-family: var(--font-display); font-size: 14px; padding: 1px 8px; border-radius: 3px; }
+.adm-trc-team-name { font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-mid); }
+.adm-trc-actions { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border-soft); }
 
-.adm-tc-trainer-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 0; border-bottom: 1px solid var(--border-soft);
+/* ═══════════ SPELERS TAB ═══════════ */
+.adm-players-toolbar { gap: 8px; }
+.adm-player-search { flex: 1; min-width: 160px; max-width: 300px; }
+
+/* Bulk actions bar */
+.adm-bulk-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 10px 16px; margin-bottom: 14px;
+  background: rgba(204,26,26,0.08); border: 1px solid rgba(204,26,26,0.2);
+  border-radius: var(--radius); animation: fade-in 0.2s ease;
 }
-.adm-tc-trainer-row:last-of-type { border-bottom: none; }
-.adm-tc-trainer-icon { font-size: 14px; flex-shrink: 0; }
-.adm-tc-trainer-name { font-size: 13px; font-weight: 600; flex-shrink: 0; }
-.adm-tc-trainer-email { font-size: 11px; color: var(--text-dim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.adm-tc-unlink {
-  width: 20px; height: 20px; border-radius: 50%; background: none;
-  border: 1px solid var(--border); color: var(--text-dim); font-size: 10px;
+@keyframes fade-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; } }
+.adm-bulk-count { font-family: var(--font-heading); font-size: 13px; font-weight: 700; color: var(--red); white-space: nowrap; }
+.adm-bulk-select { width: 200px; font-size: 13px; }
+
+/* Player board — horizontal scroll of team columns */
+.adm-player-board {
+  display: flex; gap: 12px;
+  overflow-x: auto; padding-bottom: 12px;
+  scroll-snap-type: x mandatory;
+  min-height: 300px;
+}
+@media (max-width: 768px) {
+  .adm-player-board { flex-direction: column; }
+}
+
+.adm-pb-column {
+  min-width: 260px; max-width: 340px;
+  flex-shrink: 0;
+  display: flex; flex-direction: column;
+  scroll-snap-align: start;
+}
+@media (max-width: 768px) {
+  .adm-pb-column { min-width: unset; max-width: unset; width: 100%; }
+}
+.adm-pb-unassigned { border-left: 3px solid rgba(245,197,24,0.5); }
+
+.adm-pb-col-header {
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 12px; background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--border-soft);
+}
+.adm-pb-col-cat { background: var(--red); color: white; font-family: var(--font-display); font-size: 14px; padding: 1px 7px; border-radius: 3px; flex-shrink: 0; }
+.adm-pb-col-name { font-family: var(--font-heading); font-size: 12px; font-weight: 700; letter-spacing: 0.5px; color: var(--text-mid); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-pb-col-count { font-family: var(--font-display); font-size: 14px; color: var(--text-dim); }
+.adm-pb-select-all { background: none; border: none; color: var(--text-dim); font-size: 14px; cursor: pointer; padding: 2px 4px; transition: color .12s; }
+.adm-pb-select-all:hover { color: var(--white); }
+
+.adm-pb-col-body { padding: 6px 0; max-height: 400px; overflow-y: auto; flex: 1; }
+@media (max-width: 768px) { .adm-pb-col-body { max-height: none; } }
+.adm-pb-empty { padding: 20px 12px; text-align: center; color: var(--text-dim); font-size: 12px; }
+
+/* Single player row in board */
+.adm-pb-player {
+  display: flex; align-items: center; gap: 6px;
+  padding: 7px 10px; transition: background .12s;
+  border-bottom: 1px solid var(--border-soft);
+}
+.adm-pb-player:last-child { border-bottom: none; }
+.adm-pb-player:hover { background: var(--bg-hover); }
+.adm-pb-player.selected { background: rgba(204,26,26,0.08); }
+.adm-pb-player.assigning { opacity: 0.5; }
+
+.adm-pb-check {
+  width: 20px; height: 20px; border-radius: 3px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  color: transparent; font-size: 12px; font-weight: 700;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
   transition: all .12s; flex-shrink: 0;
 }
-.adm-tc-unlink:hover { background: rgba(204,26,26,.2); border-color: var(--red); color: white; }
+.adm-pb-check:hover { border-color: var(--red); }
+.adm-pb-check.on { background: var(--red); border-color: var(--red); color: white; }
 
-.adm-tc-add-trainer { margin-top: 8px; }
-.adm-tc-add-select { font-size: 13px; padding: 7px 10px; }
+.adm-pb-num { font-family: var(--font-display); font-size: 14px; color: var(--red); width: 28px; text-align: right; flex-shrink: 0; }
+.adm-pb-info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; }
+.adm-pb-name { font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-pb-pos { font-family: var(--font-heading); font-size: 10px; font-weight: 700; color: var(--text-dim); letter-spacing: 0.5px; flex-shrink: 0; }
 
-/* ── Unassigned trainers warning ── */
-.adm-unassigned-banner {
-  margin-top: 20px; padding: 12px 16px;
-  background: rgba(245,197,24,0.08); border: 1px solid rgba(245,197,24,0.2);
-  border-radius: var(--radius); font-size: 13px; color: var(--text-mid);
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+.adm-pb-assign { flex-shrink: 0; }
+.adm-pb-assign-btn {
+  width: 26px; height: 26px; border-radius: var(--radius);
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  color: var(--text-dim); font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all .12s;
 }
-.adm-unassigned-icon { font-size: 16px; }
+.adm-pb-assign-btn:hover { border-color: var(--red); color: var(--red); }
+.adm-pb-assign-select { width: 120px; font-size: 11px; padding: 4px 6px; }
 
-/* ═══════════════════════════════════════════════════════════════════════════ */
-/* ── TRAINER CARDS ───────────────────────────────────────────────────────── */
-/* ═══════════════════════════════════════════════════════════════════════════ */
+.adm-pb-delete {
+  background: none; border: none; font-size: 12px; color: var(--text-dim);
+  cursor: pointer; padding: 2px 4px; transition: color .12s; opacity: 0;
+  flex-shrink: 0;
+}
+.adm-pb-player:hover .adm-pb-delete { opacity: 1; }
+.adm-pb-delete:hover { color: var(--red); }
 
-.adm-trainer-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
-@media (max-width: 640px) { .adm-trainer-grid { grid-template-columns: 1fr; } }
-
-.adm-trainer-card { display: flex; flex-direction: column; padding: 0; }
-.adm-trainer-card.self { border-color: rgba(204,26,26,0.4); }
-
-.adm-trc-top {
-  display: flex; align-items: center; gap: 12px; padding: 14px 16px;
-  border-bottom: 1px solid var(--border-soft);
-}
-.adm-trc-avatar {
-  width: 42px; height: 42px; border-radius: 50%;
-  background: var(--red); color: white;
-  font-family: var(--font-display); font-size: 20px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; box-shadow: 0 2px 8px rgba(204,26,26,0.3);
-}
-.adm-trc-info { flex: 1; min-width: 0; }
-.adm-trc-name {
-  font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 6px;
-}
-.adm-trc-self-badge {
-  font-family: var(--font-heading); font-size: 9px; font-weight: 700;
-  letter-spacing: 1.5px; background: rgba(204,26,26,0.2); color: var(--red);
-  padding: 1px 6px; border-radius: 2px;
-}
-.adm-trc-email {
-  font-size: 12px; color: var(--text-dim); overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; margin-top: 1px;
-}
-
-/* ── Team assignment section in trainer card ── */
-.adm-trc-team-section { padding: 12px 16px; }
-.adm-trc-team-label {
-  font-family: var(--font-heading); font-size: 10px; font-weight: 700;
-  letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim);
-  margin-bottom: 6px;
-}
-.adm-trc-team-select { font-size: 13px; padding: 8px 10px; }
-
-.adm-trc-team-info {
-  display: flex; align-items: center; gap: 8px; margin-top: 8px;
-}
-.adm-trc-team-cat {
-  background: var(--red); color: white; font-family: var(--font-display);
-  font-size: 14px; padding: 1px 8px; border-radius: 3px;
-}
-.adm-trc-team-name {
-  font-family: var(--font-heading); font-size: 12px; font-weight: 700;
-  letter-spacing: 0.5px; color: var(--text-mid);
-}
-
-/* ── Actions ── */
-.adm-trc-actions {
-  display: flex; gap: 8px; padding: 10px 16px;
-  border-top: 1px solid var(--border-soft);
-}
-
-/* ── Shared form helpers ── */
+/* ── Shared form ── */
 .form-group { margin-bottom: 16px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
