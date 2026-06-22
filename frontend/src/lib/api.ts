@@ -97,7 +97,7 @@ export async function getTeams(): Promise<Team[]> {
 
 export async function createTeam(input: { name: string; category: string; club?: string; trainerId?: string }): Promise<Team> {
   const teamData: Record<string, unknown> = { name: input.name, category: input.category, club: input.club ?? '', active: 'true' };
-  if (input.trainerId) teamData.trainer = { connect: { id: input.trainerId } };
+  if (input.trainerId) teamData.trainers = { connect: { id: input.trainerId } };
   const data = await gql(
     `mutation CreateTeam($data: TeamCreateInput!) { createTeam(data: $data) { id name category club active } }`,
     { data: teamData }
@@ -562,6 +562,31 @@ export function getFieldAssignment(matchId: string, period: number): Record<stri
 
 export function setFieldAssignment(matchId: string, period: number, assignment: Record<string, string>): void {
   try { localStorage.setItem(`field:${matchId}:${period}`, JSON.stringify(assignment)); } catch { /**/ }
+}
+
+
+// ── Playtime per player (for auto-selection) ──────────────────────────────────
+
+/** Returns a map of playerId → total seconds played across ALL finished matches for a team. */
+export async function getTeamPlaytimeMap(teamId: string): Promise<Record<string, number>> {
+  // Fetch all completed sessions for this team's matches
+  const data = await gql(`query {
+    playTimeSessions(
+      take: 5000,
+      where: {
+        attendance: { match: { team: { id: { equals: "${teamId}" } }, status: { equals: "finished" } } }
+      }
+    ) {
+      durationSeconds
+      attendance { player { id } }
+    }
+  }`);
+  const map: Record<string, number> = {};
+  for (const s of data.playTimeSessions as Array<{ durationSeconds: number; attendance: { player: { id: string } } }>) {
+    const pid = s.attendance.player.id;
+    map[pid] = (map[pid] || 0) + (s.durationSeconds || 0);
+  }
+  return map;
 }
 
 // ── Season overview ───────────────────────────────────────────────────────────

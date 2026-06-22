@@ -140,7 +140,8 @@ type Team {
   category: String
   club: String
   active: String
-  trainer: Trainer
+  trainers(where: TrainerWhereInput! = {}, orderBy: [TrainerOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TrainerWhereUniqueInput): [Trainer!]
+  trainersCount(where: TrainerWhereInput! = {}): Int
   players(where: PlayerWhereInput! = {}, orderBy: [PlayerOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PlayerWhereUniqueInput): [Player!]
   playersCount(where: PlayerWhereInput! = {}): Int
   matches(where: MatchWhereInput! = {}, orderBy: [MatchOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: MatchWhereUniqueInput): [Match!]
@@ -160,9 +161,15 @@ input TeamWhereInput {
   category: StringFilter
   club: StringFilter
   active: StringNullableFilter
-  trainer: TrainerWhereInput
+  trainers: TrainerManyRelationFilter
   players: PlayerManyRelationFilter
   matches: MatchManyRelationFilter
+}
+
+input TrainerManyRelationFilter {
+  every: TrainerWhereInput
+  some: TrainerWhereInput
+  none: TrainerWhereInput
 }
 
 input PlayerManyRelationFilter {
@@ -190,15 +197,16 @@ input TeamUpdateInput {
   category: String
   club: String
   active: String
-  trainer: TrainerRelateToOneForUpdateInput
+  trainers: TrainerRelateToManyForUpdateInput
   players: PlayerRelateToManyForUpdateInput
   matches: MatchRelateToManyForUpdateInput
 }
 
-input TrainerRelateToOneForUpdateInput {
-  create: TrainerCreateInput
-  connect: TrainerWhereUniqueInput
-  disconnect: Boolean
+input TrainerRelateToManyForUpdateInput {
+  disconnect: [TrainerWhereUniqueInput!]
+  set: [TrainerWhereUniqueInput!]
+  create: [TrainerCreateInput!]
+  connect: [TrainerWhereUniqueInput!]
 }
 
 input PlayerRelateToManyForUpdateInput {
@@ -225,14 +233,14 @@ input TeamCreateInput {
   category: String
   club: String
   active: String
-  trainer: TrainerRelateToOneForCreateInput
+  trainers: TrainerRelateToManyForCreateInput
   players: PlayerRelateToManyForCreateInput
   matches: MatchRelateToManyForCreateInput
 }
 
-input TrainerRelateToOneForCreateInput {
-  create: TrainerCreateInput
-  connect: TrainerWhereUniqueInput
+input TrainerRelateToManyForCreateInput {
+  create: [TrainerCreateInput!]
+  connect: [TrainerWhereUniqueInput!]
 }
 
 input PlayerRelateToManyForCreateInput {

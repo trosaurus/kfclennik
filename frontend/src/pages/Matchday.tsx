@@ -7,12 +7,14 @@ import {
   getGoalsForMatch, addGoal, removeGoal,
   getPeriodLineup, setPeriodLineup,
   getFieldAssignment, setFieldAssignment,
+  getTeamPlaytimeMap,
   updateSessionFieldPosition,
   Match, Player, Attendance, PlayTimeSession, Period, Goal,
   formatDuration, POSITION_LABELS, TOTAL_PERIODS, PERIOD_DURATION_SEC,
 } from '../lib/api';
 import './Matchday.css';
 import FieldView, { PositionTimeStats } from './FieldView';
+import { getPositionsForCategory } from '../lib/teamConfig';
 import { useTeam } from '../lib/TeamContext';
 import { generateLineupPDF } from '../lib/generateLineupPDF';
 
@@ -568,6 +570,7 @@ export default function Matchday() {
           fieldAssignments={fieldAssignments}
           onPreAssign={handlePreAssign}
           teamCategory={category ?? 'U13'}
+          teamId={teamId}
           onToggleAttendance={async (playerId, sel) => {
             await setAttendance(m!.id, playerId, true, sel);
             await refresh();
@@ -1055,7 +1058,7 @@ function ScoreModal({ match: _match, periods, onSave, onClose }: {
 
 // ── PeriodLineupSelector ─────────────────────────────────────────────────────
 
-function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignments, onPreAssign, onToggleAttendance, teamCategory }: {
+function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignments, onPreAssign, onToggleAttendance, teamCategory, teamId }: {
   matchId: string;
   allPlayers: Player[];
   attendances: Attendance[];
@@ -1063,6 +1066,7 @@ function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignmen
   onPreAssign: (period: number, posKey: string, playerId: string | null) => void;
   onToggleAttendance: (playerId: string, selected: boolean) => Promise<void>;
   teamCategory?: string;
+  teamId: string | null;
 }) {
   const [activePeriod, setActivePeriod] = useState(1);
   const [lineups, setLineups] = useState<Record<number, Set<string>>>(() => {
@@ -1078,6 +1082,7 @@ function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignmen
     return init;
   });
   const [saving, setSaving] = useState(false);
+  const [autoAssigning, setAutoAssigning] = useState(false);
   const [lineupView, setLineupView] = useState<'list' | 'field'>('field');
   const [filter, setFilter] = useState('');
   const [search, setSearch] = useState('');
@@ -1117,6 +1122,75 @@ function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignmen
       setPeriodLineup(matchId, activePeriod, []);
       return next;
     });
+  }
+
+  async function autoAssignLeastPlayed() {
+    if (!teamId) return;
+    setAutoAssigning(true);
+    try {
+      // 1. Fetch season playtime map (playerId → total seconds)
+      const playtimeMap = await getTeamPlaytimeMap(teamId);
+
+      // 2. Sort players by least playtime (ascending), keeper always first candidate for K slot
+      const sorted = [...allPlayers].sort((a: Player, b: Player) =>
+        (playtimeMap[a.id] ?? 0) - (playtimeMap[b.id] ?? 0)
+      );
+
+      // 3. Get field positions for this team's format
+      const positions = getPositionsForCategory(teamCategory ?? 'U13');
+
+      // 4. Assign players to positions by role match
+      const newAssignment: Record<string, string> = {};
+      const usedPlayerIds = new Set<string>();
+
+      // Priority: first fill by role match, then fill remaining with any player
+      const roleOrder: Array<'keeper' | 'defender' | 'midfielder' | 'forward'> =
+        ['keeper', 'defender', 'midfielder', 'forward'];
+
+      for (const role of roleOrder) {
+        const positionsForRole = positions.filter(p => p.role === role);
+        const playersForRole = sorted.filter(
+          p => p.position === role && !usedPlayerIds.has(p.id)
+        );
+        // Assign best matching players
+        for (let i = 0; i < positionsForRole.length; i++) {
+          const player = playersForRole[i];
+          if (player) {
+            newAssignment[positionsForRole[i].key] = player.id;
+            usedPlayerIds.add(player.id);
+          }
+        }
+      }
+
+      // 5. Fill any still-empty positions with least-played remaining players
+      const remaining = sorted.filter(p => !usedPlayerIds.has(p.id));
+      let ri = 0;
+      for (const pos of positions) {
+        if (!newAssignment[pos.key] && remaining[ri]) {
+          newAssignment[pos.key] = remaining[ri].id;
+          usedPlayerIds.add(remaining[ri].id);
+          ri++;
+        }
+      }
+
+      // 6. Apply assignment for ALL 4 periods
+      for (let period = 1; period <= 4; period++) {
+        Object.entries(newAssignment).forEach(([posKey, playerId]) => {
+          onPreAssign(period, posKey, playerId);
+        });
+      }
+
+      // 7. Update lineups state so tab counters are correct
+      const assignedIds = Object.values(newAssignment);
+      setLineups(prev => {
+        const next = { ...prev };
+        for (let p = 1; p <= 4; p++) {
+          next[p] = new Set(assignedIds);
+          setPeriodLineup(matchId, p, assignedIds);
+        }
+        return next;
+      });
+    } finally { setAutoAssigning(false); }
   }
 
   async function applyLineup() {
@@ -1169,9 +1243,19 @@ function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignmen
           <div className="md-lineup-title">Opstelling per kwart</div>
           <div className="md-lineup-sub">Stel per kwart in welke spelers op het veld staan bij de aftrap</div>
         </div>
-        <button className="btn btn-primary" disabled={saving} onClick={applyLineup}>
-          {saving ? 'Opslaan...' : '✓ Bevestig opstelling'}
-        </button>
+        <div className="md-lineup-header-btns">
+          <button
+            className="btn btn-outline btn-sm md-auto-btn"
+            disabled={autoAssigning || saving}
+            onClick={autoAssignLeastPlayed}
+            title="Vult automatisch het veld met spelers die deze week het minst gespeeld hebben"
+          >
+            {autoAssigning ? '⏳ Laden...' : '⚡ Auto (minste speeltijd)'}
+          </button>
+          <button className="btn btn-primary" disabled={saving} onClick={applyLineup}>
+            {saving ? 'Opslaan...' : '✓ Bevestig'}
+          </button>
+        </div>
       </div>
 
       {/* Period tabs + view toggle */}

@@ -340,3 +340,12 @@
 @media (max-width: 800px) {
   .md-active-layout { grid-template-columns: 1fr; }
 }
+
+/* ── Auto-assign button in lineup header ── */
+.md-lineup-header-btns {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end;
+}
+.md-auto-btn {
+  font-family: var(--font-heading); font-size: 11px; letter-spacing: 0.5px;
+  white-space: nowrap;
+}
