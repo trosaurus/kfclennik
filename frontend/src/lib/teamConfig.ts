@@ -35,6 +35,14 @@ export const FORMAT_PERIODS: Record<TeamFormat, number> = {
   '2v2': 4, '3v3': 4, '5v5': 4, '8v8': 4, '11v11': 4,
 };
 
+// Per-category override: U10/U11 spelen kwartieren van 15 min, U12/U13 van 20 min.
+export const CATEGORY_PERIOD_DURATION: Partial<Record<string, number>> = {
+  U10: 15 * 60,
+  U11: 15 * 60,
+  U12: 20 * 60,
+  U13: 20 * 60,
+};
+
 // ── Field positions per format ──────────────────────────────────────────────────
 // x/y as percent of the 370×480 SVG viewBox
 // y=100 = bottom (our goal), y=0 = top (opponent goal)
@@ -122,6 +130,8 @@ export function getFormatForCategory(category: string): TeamFormat {
 }
 
 export function getPeriodDuration(category: string): number {
+  const override = CATEGORY_PERIOD_DURATION[category];
+  if (override) return override;
   const format = CATEGORY_FORMAT[category] ?? '11v11';
   return FORMAT_PERIOD_DURATION[format];
 }

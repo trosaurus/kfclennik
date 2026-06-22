@@ -10,11 +10,11 @@ import {
   getTeamPlaytimeMap,
   updateSessionFieldPosition,
   Match, Player, Attendance, PlayTimeSession, Period, Goal,
-  formatDuration, POSITION_LABELS, TOTAL_PERIODS, PERIOD_DURATION_SEC,
+  formatDuration, POSITION_LABELS, TOTAL_PERIODS,
 } from '../lib/api';
 import './Matchday.css';
 import FieldView, { PositionTimeStats } from './FieldView';
-import { getPositionsForCategory } from '../lib/teamConfig';
+import { getPositionsForCategory, getPeriodDuration } from '../lib/teamConfig';
 import { useTeam } from '../lib/TeamContext';
 import { generateLineupPDF } from '../lib/generateLineupPDF';
 
@@ -448,7 +448,7 @@ export default function Matchday() {
   }
 
   function periodRemainingSeconds(): number {
-    return Math.max(0, PERIOD_DURATION_SEC - periodElapsedSeconds());
+    return Math.max(0, getPeriodDuration(category ?? 'U13') - periodElapsedSeconds());
   }
 
   function fmtTime(sec: number): string {

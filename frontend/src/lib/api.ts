@@ -415,7 +415,6 @@ export function formatDuration(totalSeconds: number): string {
 }
 
 export const TOTAL_PERIODS = 4;
-export const PERIOD_DURATION_SEC = 15 * 60; // 15 minutes
 
 export const POSITIONS = [
   { value: 'keeper',     label: 'Doelman' },

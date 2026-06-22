@@ -80,5 +80,7 @@ Keystone vraagt bij de eerste start om een **eerste admin account** aan te maken
 | U6        | 2v2     | 10 min    |
 | U7        | 3v3     | 10 min    |
 | U8/U9     | 5v5     | 15 min    |
-| U10/U11/U12 | 8v8   | 20 min    |
-| U13/U15/U17 | 11v11 | 25 min    |
+| U10/U11   | 8v8     | 15 min    |
+| U12       | 8v8     | 20 min    |
+| U13       | 11v11   | 20 min    |
+| U15/U17   | 11v11   | 25 min    |
