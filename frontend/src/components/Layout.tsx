@@ -1,11 +1,13 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { logout } from '../lib/auth';
 import { useTeam } from '../lib/TeamContext';
+import { useTheme } from '../lib/ThemeContext';
 import logo from '../assets/Logo-KFC-Lennik.png';
 import './Layout.css';
 
 export default function Layout() {
   const { trainer, setTrainer, isAdmin, category } = useTeam();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
 
   const NAV_ITEMS = [
@@ -46,6 +48,10 @@ export default function Layout() {
           </nav>
 
           <div className="header-user">
+            <button className="btn btn-ghost btn-icon" onClick={toggleTheme}
+              title={theme === 'dark' ? 'Lichte modus' : 'Donkere modus'}>
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
             <span className="header-trainer-name">{trainer?.name}</span>
             <button className="btn btn-ghost btn-sm" onClick={handleLogout} title="Afmelden">↩ Afmelden</button>
           </div>

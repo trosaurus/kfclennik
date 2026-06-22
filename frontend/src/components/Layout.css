@@ -101,7 +101,7 @@
   position: relative;
   white-space: nowrap;
 }
-.nav-link:hover  { color: var(--white); background: rgba(255,255,255,0.07); }
+.nav-link:hover  { color: var(--white); background: var(--bg-hover); }
 .nav-link.active { color: var(--white); background: rgba(204,26,26,0.18); }
 .nav-link.active::after {
   content: '';

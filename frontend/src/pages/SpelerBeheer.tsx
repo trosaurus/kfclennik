@@ -355,8 +355,8 @@ export default function SpelerBeheer() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setConfirmDelete(null)}>
           <div className="modal">
             <div className="modal-title">Speler verwijderen?</div>
-            <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: 24, lineHeight: 1.6 }}>
-              Ben je zeker dat je <strong style={{ color: 'white' }}>{confirmDelete.name}</strong> wil verwijderen?
+            <p style={{ color: 'var(--text-mid)', marginBottom: 24, lineHeight: 1.6 }}>
+              Ben je zeker dat je <strong style={{ color: 'var(--white)' }}>{confirmDelete.name}</strong> wil verwijderen?
               Dit verwijdert ook alle gerelateerde aanwezigheids- en speeltijdgegevens.
             </p>
             <div className="modal-actions">

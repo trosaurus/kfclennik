@@ -375,7 +375,7 @@ export default function MatchDetailPage() {
                               <span className="tag tag-black">{POSITION_LABELS[att.player.position] || att.player.position}</span>
                             )}
                           </td>
-                          <td style={{ color: 'rgba(255,255,255,0.5)', fontFamily: 'var(--font-heading)' }}>
+                          <td style={{ color: 'var(--text-mid)', fontFamily: 'var(--font-heading)' }}>
                             {attSessions.length}x
                           </td>
                           <td>
@@ -410,8 +410,8 @@ export default function MatchDetailPage() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSubModal(null)}>
           <div className="modal">
             <div className="modal-title">Wissel</div>
-            <div style={{ marginBottom: 20, color: 'rgba(255,255,255,0.6)', fontFamily: 'var(--font-heading)', fontSize: 14, letterSpacing: 1, textTransform: 'uppercase' }}>
-              Vervang <strong style={{ color: 'white' }}>{subModal.playerName}</strong>
+            <div style={{ marginBottom: 20, color: 'var(--text-mid)', fontFamily: 'var(--font-heading)', fontSize: 14, letterSpacing: 1, textTransform: 'uppercase' }}>
+              Vervang <strong style={{ color: 'var(--white)' }}>{subModal.playerName}</strong>
             </div>
             <div style={{ marginBottom: 8 }} className="input-label">Kies invaller:</div>
             <div className="sub-player-list">
@@ -430,7 +430,7 @@ export default function MatchDetailPage() {
                 );
               })}
               {getBenchPlayers().length === 0 && (
-                <div style={{ padding: '20px', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-heading)', fontSize: 13, letterSpacing: 1 }}>
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-dim)', fontFamily: 'var(--font-heading)', fontSize: 13, letterSpacing: 1 }}>
                   Geen wisselspelers beschikbaar
                 </div>
               )}

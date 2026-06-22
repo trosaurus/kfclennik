@@ -328,8 +328,8 @@ export default function WedstrijdBeheer() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setConfirmDelete(null)}>
           <div className="modal">
             <div className="modal-title">Wedstrijd verwijderen?</div>
-            <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: 24, lineHeight: 1.6 }}>
-              Verwijder <strong style={{ color: 'white' }}>vs. {confirmDelete.opponent}</strong>?
+            <p style={{ color: 'var(--text-mid)', marginBottom: 24, lineHeight: 1.6 }}>
+              Verwijder <strong style={{ color: 'var(--white)' }}>vs. {confirmDelete.opponent}</strong>?
               Alle speeltijdgegevens gaan verloren.
             </p>
             <div className="modal-actions">
@@ -498,7 +498,7 @@ export default function WedstrijdBeheer() {
                     <input type="number" min={0} className="input-field" style={{ width: 60, textAlign: 'center' }}
                       value={editMatchForm.scoreHome}
                       onChange={e => setEditMatchForm({ ...editMatchForm, scoreHome: e.target.value })} />
-                    <span style={{ color: 'rgba(255,255,255,0.4)', fontFamily: 'var(--font-display)', fontSize: 20 }}>–</span>
+                    <span style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-display)', fontSize: 20 }}>–</span>
                     <input type="number" min={0} className="input-field" style={{ width: 60, textAlign: 'center' }}
                       value={editMatchForm.scoreAway}
                       onChange={e => setEditMatchForm({ ...editMatchForm, scoreAway: e.target.value })} />
@@ -521,8 +521,8 @@ export default function WedstrijdBeheer() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setConfirmDelete(null)}>
           <div className="modal">
             <div className="modal-title">Wedstrijd verwijderen?</div>
-            <p style={{ color: 'rgba(255,255,255,0.6)', marginBottom: 24, lineHeight: 1.6 }}>
-              Verwijder <strong style={{ color: 'white' }}>vs. {confirmDelete.opponent}</strong>?
+            <p style={{ color: 'var(--text-mid)', marginBottom: 24, lineHeight: 1.6 }}>
+              Verwijder <strong style={{ color: 'var(--white)' }}>vs. {confirmDelete.opponent}</strong>?
               Alle speeltijdgegevens gaan verloren.
             </p>
             <div className="modal-actions">

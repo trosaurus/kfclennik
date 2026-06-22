@@ -23,7 +23,7 @@
 .adm-team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
 @media (max-width: 640px) { .adm-team-grid { grid-template-columns: 1fr; } }
 .adm-team-card { display: flex; flex-direction: column; }
-.adm-tc-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border-soft); }
+.adm-tc-header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: var(--bg-hover); border-bottom: 1px solid var(--border-soft); }
 .adm-tc-cat { background: var(--red); color: white; font-family: var(--font-display); font-size: 18px; padding: 2px 10px; border-radius: 3px; }
 .adm-tc-format { font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 1px; background: var(--bg-elevated); color: var(--text-mid); padding: 2px 7px; border-radius: 2px; }
 .adm-tc-player-count { font-family: var(--font-heading); font-size: 11px; color: var(--text-dim); letter-spacing: 0.5px; margin-left: auto; }
@@ -100,7 +100,7 @@
 
 .adm-pb-col-header {
   display: flex; align-items: center; gap: 6px;
-  padding: 10px 12px; background: rgba(255,255,255,0.03);
+  padding: 10px 12px; background: var(--bg-hover);
   border-bottom: 1px solid var(--border-soft);
 }
 .adm-pb-col-cat { background: var(--red); color: white; font-family: var(--font-display); font-size: 14px; padding: 1px 7px; border-radius: 3px; flex-shrink: 0; }

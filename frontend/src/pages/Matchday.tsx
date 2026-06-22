@@ -690,7 +690,7 @@ export default function Matchday() {
           <div className="modal">
             <div className="modal-title">Wissel</div>
             <p style={{ color: 'var(--text-dim)', marginBottom: 20, fontFamily: 'var(--font-heading)', fontSize: 13, letterSpacing: 1, textTransform: 'uppercase' }}>
-              Vervang <strong style={{ color: 'white' }}>{subModal.player.name}</strong>
+              Vervang <strong style={{ color: 'var(--white)' }}>{subModal.player.name}</strong>
               {isPaused && <span style={{ color: 'var(--yellow)', display: 'block', marginTop: 6, fontSize: 11 }}>⚠ Pauze — invaller start bij volgende kwart</span>}
             </p>
             <div className="input-label" style={{ marginBottom: 8 }}>Kies invaller:</div>
