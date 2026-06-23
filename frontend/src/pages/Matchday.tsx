@@ -296,7 +296,7 @@ export default function Matchday() {
 
   function handleGeneratePDF() {
     if (!match) return;
-    const cat = category ?? 'U13';
+    const cat = matchCategory;
 
     // Build quarter data from fieldAssignments + sessions + periods
     const quarterData = [1, 2, 3, 4].map(periodNum => {
@@ -448,7 +448,7 @@ export default function Matchday() {
   }
 
   function periodRemainingSeconds(): number {
-    return Math.max(0, getPeriodDuration(category ?? 'U13') - periodElapsedSeconds());
+    return Math.max(0, getPeriodDuration(matchCategory) - periodElapsedSeconds());
   }
 
   function fmtTime(sec: number): string {
@@ -463,6 +463,9 @@ export default function Matchday() {
   const onField = playerStates.filter(ps => ps.onField);
   const onBench = playerStates.filter(ps => !ps.onField);
   const m = match;
+  // Format must follow the match's OWN team (relevant for admins viewing matches
+  // across teams) — not the logged-in trainer's team, which may differ or be absent.
+  const matchCategory = match?.team?.category ?? category ?? 'U13';
 
   if (!loading && !m) return (
     <div className="page md-empty">
@@ -569,7 +572,7 @@ export default function Matchday() {
           attendances={attendances}
           fieldAssignments={fieldAssignments}
           onPreAssign={handlePreAssign}
-          teamCategory={category ?? 'U13'}
+          teamCategory={matchCategory}
           teamId={teamId}
           onToggleAttendance={async (playerId, sel) => {
             await setAttendance(m!.id, playerId, true, sel);
@@ -592,7 +595,7 @@ export default function Matchday() {
               attendances={attendances}
               allPlayers={playerStates.map(ps => ps.player)}
               tick={tick}
-              category={category ?? 'U13'}
+              category={matchCategory}
               onRefresh={refresh}
               onSessionStop={(sessionId) => {
                 const sess = sessions.find(s => s.id === sessionId);
@@ -664,7 +667,7 @@ export default function Matchday() {
           attendances={attendances}
           allPlayers={playerStates.map(ps => ps.player)}
           tick={tick}
-          category={category ?? 'U13'}
+          category={matchCategory}
         />
       )}
 
@@ -680,7 +683,7 @@ export default function Matchday() {
           attendances={attendances}
           allPlayers={playerStates.map(ps => ps.player)}
           tick={0}
-          category={category ?? 'U13'}
+          category={matchCategory}
         />
       )}
 

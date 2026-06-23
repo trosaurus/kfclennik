@@ -46,6 +46,7 @@ export interface Match {
   scoreHome: number;
   scoreAway: number;
   matchStartTime: string | null;
+  team: { id: string; category: string } | null;
 }
 
 export interface Period {
@@ -241,6 +242,7 @@ export async function getMatches(teamId?: string): Promise<Match[]> {
     matches(take: 1000, orderBy: { date: asc }${where}) {
       id opponent date location status currentPeriod periodStatus
       scoreHome scoreAway matchStartTime
+      team { id category }
     }
   }`);
   return data.matches;
