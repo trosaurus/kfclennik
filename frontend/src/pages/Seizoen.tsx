@@ -14,7 +14,7 @@ export default function Seizoen() {
 
   async function load() {
     setLoading(true);
-    try { setStats(await getSeasonStats()); } finally { setLoading(false); }
+    try { setStats(await getSeasonStats(teamId ?? undefined)); } finally { setLoading(false); }
   }
 
   // All unique matches across all players (ordered by date)

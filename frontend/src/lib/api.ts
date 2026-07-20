@@ -622,8 +622,9 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
 
   if (matches.length === 0) return [];
 
+  const playersWhere = teamId ? `, where: { team: { id: { equals: "${teamId}" } } }` : '';
   const players = await gql(`query {
-    players(take: 1000, orderBy: { name: asc }) { id name number position active }
+    players(take: 1000, orderBy: { name: asc }${playersWhere}) { id name number position active }
   }`);
 
   const allSessions: Array<PlayTimeSession & { matchId: string }> = [];
