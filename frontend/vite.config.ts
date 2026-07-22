@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: {
         '/api/graphql': {
-          target: 'http://kfc-api.cvo.brussels',
+          target: 'http://localhost:3000',
           changeOrigin: true,
         },
       },

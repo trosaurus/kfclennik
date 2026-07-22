@@ -31,6 +31,13 @@
 .md-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .md-btn-start { font-size: 15px; }
 
+/* ── Team warning ── */
+.md-team-warning {
+  background: rgba(245,197,24,0.1); border: 1px solid rgba(245,197,24,0.3);
+  border-radius: var(--radius); color: var(--yellow);
+  font-size: 13px; padding: 10px 14px; margin-bottom: 18px; line-height: 1.5;
+}
+
 @media (max-width: 600px) {
   .md-banner { padding: 14px 14px; }
   .md-banner-vs { font-size: 26px; }
@@ -106,16 +113,15 @@
 .md-player-row.on-field { border-left: 4px solid var(--red); }
 .md-player-row.on-bench { border-left: 4px solid var(--border); opacity: 0.65; }
 .md-pr-num  { font-family: var(--font-display); font-size: 20px; color: var(--red); width: 38px; text-align: right; flex-shrink: 0; }
-.md-pr-info { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.md-pr-name-row { display: flex; align-items: center; gap: 6px; }
-.md-pr-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.md-pr-info { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .md-pr-pos  { font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: 1px; color: var(--text-dim); text-transform: uppercase; flex-shrink: 0; }
 
-.md-pr-times { display: flex; flex-direction: column; align-items: flex-end; min-width: 65px; flex-shrink: 0; }
-.md-pr-timer { display: flex; align-items: center; gap: 4px; }
-.md-timer { font-family: var(--font-display); font-size: 22px; letter-spacing: 1px; color: var(--text-dim); }
+.md-pr-times { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; }
+.md-pr-timer { display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }
+.md-pr-timer-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.md-timer { font-family: var(--font-display); font-size: 22px; letter-spacing: 1px; color: var(--text-dim); flex-shrink: 0; }
 .md-timer.running { color: var(--white); }
-.md-timer-dot { font-size: 10px; color: var(--green); animation: md-pulse 1.2s ease-in-out infinite; }
+.md-timer-dot { font-size: 10px; color: var(--green); animation: md-pulse 1.2s ease-in-out infinite; flex-shrink: 0; }
 .md-pr-period-time { font-family: var(--font-heading); font-size: 10px; letter-spacing: 0.5px; color: var(--text-dim); margin-top: 1px; }
 
 .md-pr-btns { display: flex; gap: 6px; flex-shrink: 0; }
@@ -124,7 +130,7 @@
   .md-player-row { padding: 11px 12px; gap: 8px; }
   .md-pr-num { font-size: 18px; width: 30px; }
   .md-timer { font-size: 18px; }
-  .md-pr-times { min-width: 60px; }
+  .md-pr-timer-name { font-size: 13px; }
 }
 
 /* ── Finished / Summary ── */

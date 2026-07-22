@@ -98,3 +98,18 @@
   letter-spacing: -1px;
   flex-shrink: 0;
 }
+
+/* ── Evaluation badge & breakdown ── */
+.sz-eval-badge {
+  font-family: var(--font-heading); font-size: 12px; font-weight: 700;
+  color: var(--text-mid); background: var(--bg-elevated);
+  padding: 3px 8px; border-radius: 3px; flex-shrink: 0; letter-spacing: 0.5px;
+}
+.sz-eval-breakdown { border-top: 1px solid var(--border-soft); padding: 12px 16px; background: rgba(0,0,0,0.15); }
+.sz-eval-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border-soft); flex-wrap: wrap; }
+.sz-eval-row:last-child { border-bottom: none; }
+.sz-eval-theme-title { font-size: 13px; font-weight: 500; flex: 1; min-width: 100px; }
+.sz-eval-score-pill {
+  font-family: var(--font-display); font-size: 16px; color: var(--red);
+  letter-spacing: 1px; flex-shrink: 0;
+}

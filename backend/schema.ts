@@ -85,6 +85,7 @@ export const lists: Lists = {
       team:        relationship({ ref: 'Team.players',     many: false }),
       attendances: relationship({ ref: 'Attendance.player', many: true }),
       goals:       relationship({ ref: 'Goal.player',       many: true }),
+      evaluations: relationship({ ref: 'Evaluation.player', many: true }),
     },
     ui: { labelField: 'name' },
   }),
@@ -127,6 +128,8 @@ export const lists: Lists = {
       attendances: relationship({ ref: 'Attendance.match', many: true }),
       periods:     relationship({ ref: 'Period.match',     many: true }),
       goals:       relationship({ ref: 'Goal.match',       many: true }),
+      weekTheme:   relationship({ ref: 'WeekTheme.matches', many: false }),
+      evaluations: relationship({ ref: 'Evaluation.match',  many: true }),
     },
     ui: { labelField: 'opponent' },
   }),
@@ -200,5 +203,45 @@ export const lists: Lists = {
         ],
       }),
     },
+  }),
+
+  // ── WeekTheme ───────────────────────────────────────────────────────────────
+  WeekTheme: list({
+    access: allowAll,
+    fields: {
+      title: text({ validation: { isRequired: true } }),
+      category: select({
+        validation: { isRequired: true },
+        options: [
+          { label: 'Bal+ (aanvallend)',  value: 'B+' },
+          { label: 'Bal- (verdedigend)', value: 'B-' },
+        ],
+      }),
+      description: text({ ui: { displayMode: 'textarea' } }),
+      active: select({
+        defaultValue: 'true',
+        options: [
+          { label: 'Actief',   value: 'true' },
+          { label: 'Inactief', value: 'false' },
+        ],
+      }),
+      createdAt:   timestamp({ defaultValue: { kind: 'now' } }),
+      matches:     relationship({ ref: 'Match.weekTheme',      many: true }),
+      evaluations: relationship({ ref: 'Evaluation.theme',     many: true }),
+    },
+    ui: { labelField: 'title' },
+  }),
+
+  // ── Evaluation ──────────────────────────────────────────────────────────────
+  Evaluation: list({
+    access: allowAll,
+    fields: {
+      player:    relationship({ ref: 'Player.evaluations',    many: false }),
+      match:     relationship({ ref: 'Match.evaluations',     many: false }),
+      theme:     relationship({ ref: 'WeekTheme.evaluations', many: false }),
+      score:     integer({ validation: { isRequired: true, min: 1, max: 5 } }),
+      createdAt: timestamp({ defaultValue: { kind: 'now' } }),
+    },
+    ui: { labelField: 'score' },
   }),
 };

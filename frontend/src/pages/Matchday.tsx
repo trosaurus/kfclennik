@@ -170,6 +170,18 @@ export default function Matchday() {
       const playerToPos: Record<string, string> = {};
       Object.entries(assignment).forEach(([pos, pid]) => { playerToPos[pid] = pos; });
 
+      // Fallback: if this period has no explicit pre-assigned positions (common —
+      // the pre-match planner is only shown before kickoff), reuse each player's
+      // position from the previous period so they don't silently vanish from the
+      // field diagram when a new quarter starts.
+      if (periodNumber > 1) {
+        const prevPositionedSessions = sessions.filter(s => s.period === periodNumber - 1 && s.fieldPosition);
+        for (const s of prevPositionedSessions) {
+          const att = attendances.find(a => a.id === s.attendance.id);
+          if (att && !playerToPos[att.player.id]) playerToPos[att.player.id] = s.fieldPosition!;
+        }
+      }
+
       for (const att of onFieldAtts) {
         const posKey = playerToPos[att.player.id];
         // Only start a session if the player has a field position assigned
@@ -389,6 +401,22 @@ export default function Matchday() {
     await refreshMatch();
   }
 
+  // Find a free field-position slot for the current period, preferring the
+  // player's own position role. Without this, sessions started outside of
+  // FieldView's drag-and-drop have no fieldPosition and never appear on the
+  // field diagram, even though they count as "on field" everywhere else.
+  function pickFreePosition(period: number, preferredPlayer?: Player): string | undefined {
+    const cat = match?.team?.category ?? category ?? 'U13';
+    const positions = getPositionsForCategory(cat);
+    const occupied = new Set(
+      sessions.filter(s => s.period === period && s.active === 'true' && s.fieldPosition).map(s => s.fieldPosition)
+    );
+    const free = positions.filter(p => !occupied.has(p.key));
+    if (free.length === 0) return undefined;
+    const roleMatch = preferredPlayer?.position ? free.find(p => p.role === preferredPlayer.position) : undefined;
+    return (roleMatch ?? free[0]).key;
+  }
+
   async function togglePlayerTime(ps: PlayerState) {
     if (match?.periodStatus !== 'playing') return;
     setBusyPlayer(ps.player.id);
@@ -398,7 +426,8 @@ export default function Matchday() {
         optimisticStopSession(ps.activeSession.id, ps.activeSession.startTime);
         await stopPlayTimeSession(ps.activeSession.id, ps.activeSession.startTime);
       } else {
-        await startPlayTimeSession(ps.attendance.id, match.currentPeriod);
+        const posKey = pickFreePosition(match.currentPeriod, ps.player);
+        await startPlayTimeSession(ps.attendance.id, match.currentPeriod, posKey);
       }
       await refresh();
     } finally { setBusyPlayer(null); }
@@ -410,6 +439,8 @@ export default function Matchday() {
     if (!match || !outState.activeSession) return;
     setBusyPlayer(outState.player.id);
     try {
+      // Incoming sub takes over the outgoing player's exact field position.
+      const posKey = outState.activeSession.fieldPosition ?? undefined;
       optimisticStopSession(outState.activeSession.id, outState.activeSession.startTime);
       await stopPlayTimeSession(outState.activeSession.id, outState.activeSession.startTime);
       let inAtt = attendances.find(a => a.player.id === inPlayer.id);
@@ -421,7 +452,7 @@ export default function Matchday() {
       }
       // In paused state: don't start session yet — will be started when next period begins
       if (match.periodStatus === 'playing') {
-        await startPlayTimeSession(inAtt.id, match.currentPeriod);
+        await startPlayTimeSession(inAtt.id, match.currentPeriod, posKey ?? pickFreePosition(match.currentPeriod, inPlayer));
       }
       setSubModal(null);
       await refresh();
@@ -549,6 +580,13 @@ export default function Matchday() {
           </div>
         </div>
       </div>
+
+      {/* ── Waarschuwing: geen ploeg gekoppeld ── */}
+      {!m!.team && (
+        <div className="md-team-warning">
+          ⚠ Deze wedstrijd heeft geen ploeg gekoppeld — het veldformaat valt terug op {matchCategory}. Koppel de juiste ploeg via Wedstrijden → bewerken voor het correcte aantal veldposities.
+        </div>
+      )}
 
       {/* ── PERIOD TRACKER ── */}
       {!isPlanned && (
@@ -830,18 +868,16 @@ function PlayerRow({ ps, isPlaying, busy, onToggle, onSub, periodSec, playerGoal
     <div className={`md-player-row ${ps.onField ? 'on-field' : 'on-bench'}`}>
       <div className="md-pr-num">{ps.player.number ? `#${ps.player.number}` : '—'}</div>
       <div className="md-pr-info">
-        <div className="md-pr-name-row">
-          <span className="md-pr-name">{ps.player.name}</span>
-          {goalCount > 0 && (
-            <span className="md-goal-badge">
-              {'⚽'.repeat(Math.min(goalCount, 4))}{goalCount > 4 ? ` ×${goalCount}` : ''}
-            </span>
-          )}
-        </div>
         {ps.player.position && <span className="md-pr-pos">{POSITION_LABELS[ps.player.position]}</span>}
+        {goalCount > 0 && (
+          <span className="md-goal-badge">
+            {'⚽'.repeat(Math.min(goalCount, 4))}{goalCount > 4 ? ` ×${goalCount}` : ''}
+          </span>
+        )}
       </div>
       <div className="md-pr-times">
         <div className="md-pr-timer">
+          <span className="md-pr-timer-name" title={ps.player.name}>{ps.player.name}</span>
           <span className={`md-timer ${ps.onField ? 'running' : ''}`}>{formatDuration(ps.totalSeconds)}</span>
           {ps.onField && <span className="md-timer-dot">●</span>}
         </div>

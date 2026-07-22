@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTeam } from '../lib/TeamContext';
-import { getSeasonStats, SeasonPlayerStats, formatDuration, POSITION_LABELS } from '../lib/api';
+import { getSeasonStats, SeasonPlayerStats, formatDuration, POSITION_LABELS, THEME_CATEGORY_LABELS } from '../lib/api';
 import './Seizoen.css';
 
 export default function Seizoen() {
@@ -101,6 +101,11 @@ export default function Seizoen() {
                   {s.totalGoals > 0 && (
                     <span className="sz-goal-badge">{'⚽'.repeat(Math.min(s.totalGoals,5))}{s.totalGoals > 5 ? ` ×${s.totalGoals}` : ''}</span>
                   )}
+                  {s.evaluations.length > 0 && (
+                    <span className="sz-eval-badge" title="Gemiddelde quotering">
+                      🎯 {(s.evaluations.reduce((a, e) => a + e.score, 0) / s.evaluations.length).toFixed(1)}
+                    </span>
+                  )}
                   <span className="sz-chevron">{isOpen ? '▲' : '▼'}</span>
                 </button>
 
@@ -131,6 +136,24 @@ export default function Seizoen() {
                         </div>
                         {mb.goals > 0 && <span className="sz-match-goals">{'⚽'.repeat(Math.min(mb.goals,4))}{mb.goals > 4 ? ` ×${mb.goals}` : ''}</span>}
                         <span className="sz-match-total">{formatDuration(mb.totalSeconds)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Expanded: evaluaties per weekthema */}
+                {isOpen && s.evaluations.length > 0 && (
+                  <div className="sz-eval-breakdown">
+                    <div className="sz-breakdown-title">Quoteringen per weekthema</div>
+                    {s.evaluations.map((e, idx) => (
+                      <div key={`${e.matchId}-${idx}`} className="sz-eval-row">
+                        <span className="sz-match-date">{fmtDate(e.date)}</span>
+                        <span className={`tag ${e.themeCategory === 'B+' ? 'tag-green' : 'tag-black'}`} style={{ fontSize: 10 }}>
+                          {THEME_CATEGORY_LABELS[e.themeCategory] ?? e.themeCategory}
+                        </span>
+                        <span className="sz-eval-theme-title">{e.themeTitle}</span>
+                        <span className="sz-match-opp">vs. {e.opponent}</span>
+                        <span className="sz-eval-score-pill">{e.score}/5</span>
                       </div>
                     ))}
                   </div>

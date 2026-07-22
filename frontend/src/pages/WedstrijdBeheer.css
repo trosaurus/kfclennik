@@ -20,6 +20,8 @@
 tr:hover .wb-actions { opacity: 1; }
 @media (max-width: 768px) { .wb-actions { opacity: 1; } }
 
+.wb-team-hint { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+
 .form-group  { margin-bottom: 16px; }
 .form-row    { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
@@ -131,6 +133,44 @@ tr:hover .wb-actions { opacity: 1; }
 .sb-toggle  { padding: 7px 12px; font-family: var(--font-heading); font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; background: none; color: var(--text-dim); border: none; cursor: pointer; transition: all .12s; white-space: nowrap; min-height: 38px; }
 .sb-toggle:hover  { color: var(--white); background: var(--bg-hover); }
 .sb-toggle.active { background: var(--red); color: #fff; }
+
+/* ── Detail tabs ── */
+.wb-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border-soft); flex-wrap: wrap; }
+.wb-tab {
+  padding: 10px 16px; background: none; border: none; border-bottom: 2px solid transparent;
+  margin-bottom: -1px; font-family: var(--font-heading); font-size: 13px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); cursor: pointer;
+  transition: all .12s; min-height: 44px;
+}
+.wb-tab:hover { color: var(--white); }
+.wb-tab.active { color: var(--white); border-bottom-color: var(--red); }
+
+/* ── Evaluatie tab ── */
+.wb-eval-panel { padding: 0; overflow: hidden; }
+.wb-eval-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 16px; background: var(--bg-hover); border-bottom: 1px solid var(--border-soft);
+}
+.wb-eval-title { font-family: var(--font-heading); font-size: 12px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-mid); }
+.wb-eval-hint { font-size: 12px; color: var(--text-dim); margin-top: 4px; max-width: 420px; }
+.wb-eval-theme-select { min-width: 260px; }
+.wb-eval-list { padding: 4px 0; }
+.wb-eval-row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  border-bottom: 1px solid var(--border-soft); flex-wrap: wrap;
+}
+.wb-eval-row:last-child { border-bottom: none; }
+.wb-eval-num { font-family: var(--font-display); font-size: 16px; color: var(--red); width: 32px; text-align: right; flex-shrink: 0; }
+.wb-eval-name { font-size: 14px; font-weight: 500; flex: 1; min-width: 100px; }
+.wb-eval-scores { display: flex; gap: 6px; }
+.wb-eval-score-btn {
+  width: 34px; height: 34px; border-radius: var(--radius);
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  color: var(--text-mid); font-family: var(--font-heading); font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: all .12s; min-height: auto;
+}
+.wb-eval-score-btn:hover { border-color: var(--red); color: var(--white); }
+.wb-eval-score-btn.active { background: var(--red); border-color: var(--red); color: white; }
 
 /* ── Mobile wedstrijd cards ── */
 .wb-desktop-only { display: table; }

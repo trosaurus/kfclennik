@@ -44,6 +44,7 @@ model Player {
   teamId      String?      @map("team")
   attendances Attendance[] @relation("Attendance_player")
   goals       Goal[]       @relation("Goal_player")
+  evaluations Evaluation[] @relation("Evaluation_player")
 
   @@index([teamId])
 }
@@ -64,8 +65,12 @@ model Match {
   attendances    Attendance[] @relation("Attendance_match")
   periods        Period[]     @relation("Period_match")
   goals          Goal[]       @relation("Goal_match")
+  weekTheme      WeekTheme?   @relation("Match_weekTheme", fields: [weekThemeId], references: [id])
+  weekThemeId    String?      @map("weekTheme")
+  evaluations    Evaluation[] @relation("Evaluation_match")
 
   @@index([teamId])
+  @@index([weekThemeId])
 }
 
 model Period {
@@ -121,4 +126,31 @@ model PlayTimeSession {
   active          String?     @default("false")
 
   @@index([attendanceId])
+}
+
+model WeekTheme {
+  id          String       @id @default(cuid())
+  title       String       @default("")
+  category    String
+  description String       @default("")
+  active      String?      @default("true")
+  createdAt   DateTime?    @default(now())
+  matches     Match[]      @relation("Match_weekTheme")
+  evaluations Evaluation[] @relation("Evaluation_theme")
+}
+
+model Evaluation {
+  id        String     @id @default(cuid())
+  player    Player?    @relation("Evaluation_player", fields: [playerId], references: [id])
+  playerId  String?    @map("player")
+  match     Match?     @relation("Evaluation_match", fields: [matchId], references: [id])
+  matchId   String?    @map("match")
+  theme     WeekTheme? @relation("Evaluation_theme", fields: [themeId], references: [id])
+  themeId   String?    @map("theme")
+  score     Int
+  createdAt DateTime?  @default(now())
+
+  @@index([playerId])
+  @@index([matchId])
+  @@index([themeId])
 }

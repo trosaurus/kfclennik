@@ -157,6 +157,15 @@
 .adm-pb-player:hover .adm-pb-delete { opacity: 1; }
 .adm-pb-delete:hover { color: var(--red); }
 
+/* ═══════════ WEEKTHEMA'S ═══════════ */
+.adm-theme-list { display: flex; flex-direction: column; gap: 8px; }
+.adm-theme-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; flex-wrap: wrap; }
+.adm-theme-info { flex: 1; min-width: 160px; }
+.adm-theme-title { font-size: 14px; font-weight: 600; }
+.adm-theme-desc { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.adm-theme-active-toggle { border: none; cursor: pointer; }
+.adm-theme-actions { display: flex; gap: 4px; }
+
 /* ── Shared form ── */
 .form-group { margin-bottom: 16px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

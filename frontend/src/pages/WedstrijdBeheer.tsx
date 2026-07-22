@@ -4,9 +4,12 @@ import { useTeam } from '../lib/TeamContext';
 import {
   getMatches, createMatch, updateMatch, deleteMatch,
   getPlayers, getAttendancesForMatch, setAttendance,
+  getPlayTimeSessionsForMatch, PlayTimeSession,
+  getWeekThemes, getEvaluationsForMatch, setEvaluation,
+  getTeams, Team,
   exportMatchesCSV, importMatchesCSV,
-  Match, Player, Attendance,
-  POSITION_LABELS, POSITION_FULL,
+  Match, Player, Attendance, WeekTheme, Evaluation,
+  POSITION_LABELS, POSITION_FULL, THEME_CATEGORY_LABELS,
 } from '../lib/api';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
@@ -19,45 +22,63 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
 };
 
 type View = 'list' | 'detail';
+type DetailTab = 'selectie' | 'evaluatie';
 
 export default function WedstrijdBeheer() {
   const { teamId } = useTeam();
   const [matches, setMatches] = useState<Match[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
 
   // List view state
   const [statusFilter, setStatusFilter] = useState<'all' | 'planned' | 'active' | 'finished'>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createForm, setCreateForm] = useState({ opponent: '', date: '', location: 'home' });
+  const [createForm, setCreateForm] = useState({ opponent: '', date: '', location: 'home', teamId: '' });
   const [saving, setSaving] = useState(false);
 
   // Detail view state
   const [view, setView] = useState<View>('list');
+  const [detailTab, setDetailTab] = useState<DetailTab>('selectie');
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [attLoading, setAttLoading] = useState(false);
   const [playerSearch, setPlayerSearch] = useState('');
-  const [editMatchForm, setEditMatchForm] = useState({ opponent: '', date: '', location: 'home', status: 'planned', scoreHome: '0', scoreAway: '0' });
+  const [editMatchForm, setEditMatchForm] = useState({ opponent: '', date: '', location: 'home', status: 'planned', scoreHome: '0', scoreAway: '0', teamId: '' });
   const [editingMatch, setEditingMatch] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Match | null>(null);
   const [importResult, setImportResult] = useState<{ rows: Match[]; errors: string[] } | null>(null);
   const [importing, setImporting]       = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Evaluatie tab state
+  const [sessions, setSessions] = useState<PlayTimeSession[]>([]);
+  const [weekThemes, setWeekThemes] = useState<WeekTheme[]>([]);
+  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
+  const [evalLoading, setEvalLoading] = useState(false);
+  const [savingEvalPlayerId, setSavingEvalPlayerId] = useState<string | null>(null);
+
   useEffect(() => { loadAll(); }, []);
 
   async function loadAll() {
     setLoading(true);
     try {
-      const [m, p] = await Promise.all([getMatches(teamId ?? undefined), getPlayers(teamId ?? undefined)]);
+      const [m, p, th, tms] = await Promise.all([getMatches(teamId ?? undefined), getPlayers(teamId ?? undefined), getWeekThemes(true), getTeams()]);
       setMatches(m);
       setPlayers(p.filter(pl => pl.active === 'true'));
+      setWeekThemes(th);
+      setTeams(tms);
     } finally { setLoading(false); }
+  }
+
+  function openCreateModal() {
+    setCreateForm({ opponent: '', date: '', location: 'home', teamId: teamId ?? '' });
+    setShowCreateModal(true);
   }
 
   async function openDetail(m: Match) {
     setSelectedMatch(m);
+    setDetailTab('selectie');
     setEditMatchForm({
       opponent: m.opponent,
       date: m.date ? new Date(m.date).toISOString().slice(0, 16) : '',
@@ -65,10 +86,17 @@ export default function WedstrijdBeheer() {
       status: m.status,
       scoreHome: String(m.scoreHome),
       scoreAway: String(m.scoreAway),
+      teamId: m.team?.id ?? '',
     });
     setView('detail');
     setAttLoading(true);
     try { setAttendances(await getAttendancesForMatch(m.id)); } finally { setAttLoading(false); }
+    setEvalLoading(true);
+    try {
+      const [sess, evals] = await Promise.all([getPlayTimeSessionsForMatch(m.id), getEvaluationsForMatch(m.id)]);
+      setSessions(sess);
+      setEvaluations(evals);
+    } finally { setEvalLoading(false); }
   }
 
   async function refreshAttendances() {
@@ -76,13 +104,35 @@ export default function WedstrijdBeheer() {
     setAttendances(await getAttendancesForMatch(selectedMatch.id));
   }
 
+  async function refreshEvaluations() {
+    if (!selectedMatch) return;
+    setEvaluations(await getEvaluationsForMatch(selectedMatch.id));
+  }
+
+  async function handleSetMatchTheme(themeId: string) {
+    if (!selectedMatch) return;
+    await updateMatch(selectedMatch.id, themeId ? { weekTheme: { connect: { id: themeId } } } : { weekTheme: { disconnect: true } });
+    const fresh = await getMatches(teamId ?? undefined);
+    setMatches(fresh);
+    setSelectedMatch(fresh.find(m => m.id === selectedMatch.id) ?? selectedMatch);
+  }
+
+  async function handleSetScore(playerId: string, score: number) {
+    if (!selectedMatch?.weekTheme) return;
+    setSavingEvalPlayerId(playerId);
+    try {
+      await setEvaluation(selectedMatch.id, playerId, selectedMatch.weekTheme.id, score);
+      await refreshEvaluations();
+    } finally { setSavingEvalPlayerId(null); }
+  }
+
   async function handleCreate() {
     if (!createForm.opponent.trim() || !createForm.date) return;
     setSaving(true);
     try {
-      await createMatch({ opponent: createForm.opponent.trim(), date: new Date(createForm.date).toISOString(), location: createForm.location, teamId: teamId ?? undefined });
+      await createMatch({ opponent: createForm.opponent.trim(), date: new Date(createForm.date).toISOString(), location: createForm.location, teamId: createForm.teamId || undefined });
       setShowCreateModal(false);
-      setCreateForm({ opponent: '', date: '', location: 'home' });
+      setCreateForm({ opponent: '', date: '', location: 'home', teamId: '' });
       await loadAll();
     } finally { setSaving(false); }
   }
@@ -98,6 +148,7 @@ export default function WedstrijdBeheer() {
         status: editMatchForm.status,
         scoreHome: parseInt(editMatchForm.scoreHome) || 0,
         scoreAway: parseInt(editMatchForm.scoreAway) || 0,
+        team: editMatchForm.teamId ? { connect: { id: editMatchForm.teamId } } : { disconnect: true },
       });
       const fresh = await getMatches();
       setMatches(fresh);
@@ -142,6 +193,20 @@ export default function WedstrijdBeheer() {
   const selectedCount = attendances.filter(a => a.selected === 'true').length;
   const filteredPlayers = players.filter(p => p.name.toLowerCase().includes(playerSearch.toLowerCase()));
 
+  // Spelers die "speelden": geselecteerd voor de wedstrijd, of hebben speeltijd geregistreerd
+  function getEvalAttendances(): Attendance[] {
+    const playedIds = new Set(
+      sessions.filter(s => (s.durationSeconds || 0) > 0).map(s => s.attendance.id)
+    );
+    return attendances
+      .filter(a => a.selected === 'true' || playedIds.has(a.id))
+      .sort((a, b) => (a.player.number ?? 99) - (b.player.number ?? 99));
+  }
+
+  function getEvalScore(playerId: string): number | null {
+    return evaluations.find(e => e.player.id === playerId)?.score ?? null;
+  }
+
   // Group players by position for the selection panel
   const posOrder = ['keeper', 'defender', 'midfielder', 'forward'];
   const byPos: Record<string, Player[]> = {};
@@ -180,7 +245,7 @@ export default function WedstrijdBeheer() {
             {importing ? 'Laden...' : '⬆ CSV'}
           </button>
           <input ref={fileInputRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImportCSV} />
-          <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>+ Nieuwe wedstrijd</button>
+          <button className="btn btn-primary" onClick={openCreateModal}>+ Nieuwe wedstrijd</button>
         </div>
       </div>
 
@@ -312,6 +377,15 @@ export default function WedstrijdBeheer() {
                 </select>
               </div>
             </div>
+            <div className="form-group">
+              <label className="input-label">Ploeg</label>
+              <select className="input-field" value={createForm.teamId}
+                onChange={e => setCreateForm({ ...createForm, teamId: e.target.value })}>
+                <option value="">— Geen ploeg —</option>
+                {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.category})</option>)}
+              </select>
+              <p className="wb-team-hint">Bepaalt het veldformaat (aantal spelers) tijdens de wedstrijd.</p>
+            </div>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setShowCreateModal(false)}>Annuleer</button>
               <button className="btn btn-primary" onClick={handleCreate}
@@ -375,7 +449,18 @@ export default function WedstrijdBeheer() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="wb-tabs">
+        <button className={`wb-tab ${detailTab === 'selectie' ? 'active' : ''}`} onClick={() => setDetailTab('selectie')}>
+          ⚽ Selectie
+        </button>
+        <button className={`wb-tab ${detailTab === 'evaluatie' ? 'active' : ''}`} onClick={() => setDetailTab('evaluatie')}>
+          🎯 Evaluatie{evaluations.length > 0 ? ` (${evaluations.length})` : ''}
+        </button>
+      </div>
+
       {/* Two-column layout: selection panel + selected list */}
+      {detailTab === 'selectie' && (
       <div className="wb-detail-body">
 
         {/* ── LEFT: all players ── */}
@@ -455,6 +540,76 @@ export default function WedstrijdBeheer() {
           )}
         </div>
       </div>
+      )}
+
+      {/* Evaluatie tab */}
+      {detailTab === 'evaluatie' && (
+        <div className="wb-eval-panel card">
+          <div className="wb-eval-header">
+            <div>
+              <div className="wb-eval-title">Weekthema</div>
+              <div className="wb-eval-hint">Kies het thema waarop spelers voor deze wedstrijd gequoteerd worden.</div>
+            </div>
+            <select
+              className="input-field wb-eval-theme-select"
+              value={m.weekTheme?.id ?? ''}
+              onChange={e => handleSetMatchTheme(e.target.value)}
+            >
+              <option value="">— Geen thema gekozen —</option>
+              {/* Toon ook een reeds gekoppeld thema dat intussen inactief is gezet */}
+              {m.weekTheme && !weekThemes.some(t => t.id === m.weekTheme!.id) && (
+                <option value={m.weekTheme.id}>
+                  [{THEME_CATEGORY_LABELS[m.weekTheme.category] ?? m.weekTheme.category}] {m.weekTheme.title} (inactief)
+                </option>
+              )}
+              {weekThemes.map(t => (
+                <option key={t.id} value={t.id}>
+                  [{THEME_CATEGORY_LABELS[t.category] ?? t.category}] {t.title}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {evalLoading ? (
+            <div className="loading-spinner" style={{ padding: 32 }}>Laden...</div>
+          ) : !m.weekTheme ? (
+            <div className="empty-state" style={{ padding: '32px 16px' }}>
+              <div className="empty-icon">🎯</div>
+              Kies eerst een weekthema om spelers te kunnen quoteren.
+            </div>
+          ) : getEvalAttendances().length === 0 ? (
+            <div className="empty-state" style={{ padding: '32px 16px' }}>
+              <div className="empty-icon">👥</div>
+              Nog geen spelers geselecteerd of met speeltijd voor deze wedstrijd.
+            </div>
+          ) : (
+            <div className="wb-eval-list">
+              {getEvalAttendances().map(a => {
+                const score = getEvalScore(a.player.id);
+                const saving = savingEvalPlayerId === a.player.id;
+                return (
+                  <div key={a.id} className="wb-eval-row">
+                    <span className="wb-eval-num">{a.player.number ? `#${a.player.number}` : '—'}</span>
+                    <span className="wb-eval-name">{a.player.name}</span>
+                    <div className="wb-eval-scores">
+                      {[1, 2, 3, 4, 5].map(n => (
+                        <button
+                          key={n}
+                          className={`wb-eval-score-btn ${score === n ? 'active' : ''}`}
+                          disabled={saving}
+                          onClick={() => handleSetScore(a.player.id, n)}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Edit match modal */}
       {editingMatch && (
@@ -480,6 +635,15 @@ export default function WedstrijdBeheer() {
                   <option value="away">Uit</option>
                 </select>
               </div>
+            </div>
+            <div className="form-group">
+              <label className="input-label">Ploeg</label>
+              <select className="input-field" value={editMatchForm.teamId}
+                onChange={e => setEditMatchForm({ ...editMatchForm, teamId: e.target.value })}>
+                <option value="">— Geen ploeg —</option>
+                {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.category})</option>)}
+              </select>
+              <p className="wb-team-hint">Bepaalt het veldformaat (aantal spelers) tijdens de wedstrijd.</p>
             </div>
             <div className="form-row">
               <div className="form-group">

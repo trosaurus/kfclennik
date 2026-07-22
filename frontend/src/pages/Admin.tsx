@@ -4,6 +4,7 @@ import {
   getTrainers, createTrainer, updateTrainer, deleteTrainer, TrainerRecord,
   getAllPlayersWithTeam, assignPlayerToTeam, bulkAssignPlayersToTeam, PlayerWithTeam,
   createPlayer, deletePlayer,
+  getWeekThemes, createWeekTheme, updateWeekTheme, deleteWeekTheme, WeekTheme, THEME_CATEGORY_LABELS,
   POSITION_LABELS, POSITION_FULL, POSITIONS,
 } from '../lib/api';
 import { useTeam } from '../lib/TeamContext';
@@ -16,13 +17,14 @@ const FORMAT_MAP: Record<string,string> = {
   U13:'11v11', U15:'11v11', U17:'11v11',
 };
 
-type Tab = 'teams' | 'trainers' | 'players';
+type Tab = 'teams' | 'trainers' | 'players' | 'themes';
 
 export default function Admin() {
   const { trainer: currentTrainer } = useTeam();
   const [teams, setTeams]       = useState<Team[]>([]);
   const [trainers, setTrainers] = useState<TrainerRecord[]>([]);
   const [allPlayers, setAllPlayers] = useState<PlayerWithTeam[]>([]);
+  const [themes, setThemes]     = useState<WeekTheme[]>([]);
   const [loading, setLoading]   = useState(true);
   const [tab, setTab]           = useState<Tab>('teams');
 
@@ -51,14 +53,47 @@ export default function Admin() {
   const [assigningPlayer, setAssigningPlayer] = useState<string | null>(null);
   const [playerConfirmDelete, setPlayerConfirmDelete] = useState<PlayerWithTeam | null>(null);
 
+  // ── Week theme form state ─────────────────────────────────────────────────
+  const [themeModal, setThemeModal]   = useState(false);
+  const [editTheme, setEditTheme]     = useState<WeekTheme | null>(null);
+  const [themeForm, setThemeForm]     = useState({ title: '', category: 'B+', description: '' });
+  const [themeSaving, setThemeSaving] = useState(false);
+  const [themeConfirmDelete, setThemeConfirmDelete] = useState<WeekTheme | null>(null);
+
   useEffect(() => { load(); }, []);
 
   async function load() {
     setLoading(true);
     try {
-      const [t, tr, p] = await Promise.all([getTeams(), getTrainers(), getAllPlayersWithTeam()]);
-      setTeams(t); setTrainers(tr); setAllPlayers(p);
+      const [t, tr, p, th] = await Promise.all([getTeams(), getTrainers(), getAllPlayersWithTeam(), getWeekThemes()]);
+      setTeams(t); setTrainers(tr); setAllPlayers(p); setThemes(th);
     } finally { setLoading(false); }
+  }
+
+  // ── Week theme CRUD ────────────────────────────────────────────────────────
+
+  function openThemeCreate() {
+    setEditTheme(null); setThemeForm({ title: '', category: 'B+', description: '' }); setError(''); setThemeModal(true);
+  }
+  function openThemeEdit(t: WeekTheme) {
+    setEditTheme(t); setThemeForm({ title: t.title, category: t.category, description: t.description ?? '' }); setError(''); setThemeModal(true);
+  }
+  async function handleSaveTheme() {
+    if (!themeForm.title.trim()) return;
+    setThemeSaving(true); setError('');
+    try {
+      if (editTheme) await updateWeekTheme(editTheme.id, { title: themeForm.title.trim(), category: themeForm.category, description: themeForm.description });
+      else await createWeekTheme({ title: themeForm.title.trim(), category: themeForm.category, description: themeForm.description });
+      setThemeModal(false); await load();
+    } catch (e) { setError(e instanceof Error ? e.message : 'Fout'); } finally { setThemeSaving(false); }
+  }
+  async function handleToggleThemeActive(t: WeekTheme) {
+    await updateWeekTheme(t.id, { active: t.active === 'true' ? 'false' : 'true' });
+    await load();
+  }
+  async function handleDeleteTheme(t: WeekTheme) {
+    setThemeConfirmDelete(null);
+    await deleteWeekTheme(t.id); await load();
   }
 
   // ── Team CRUD ──────────────────────────────────────────────────────────────
@@ -204,6 +239,7 @@ export default function Admin() {
           { key: 'teams' as Tab,    icon: '🏆', label: 'Ploegen',   count: teams.length },
           { key: 'trainers' as Tab, icon: '👤', label: 'Trainers',  count: trainers.length },
           { key: 'players' as Tab,  icon: '👥', label: 'Spelers',   count: allPlayers.length },
+          { key: 'themes' as Tab,   icon: '🎯', label: 'Weekthema\'s', count: themes.length },
         ]).map(t => (
           <button key={t.key} className={`adm-tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
             {t.icon} {t.label} <span className="adm-tab-count">{t.count}</span>
@@ -408,6 +444,42 @@ export default function Admin() {
         </div>
       )}
 
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* ── WEEKTHEMA'S TAB ────────────────────────────────────────────────── */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {tab === 'themes' && (
+        <div>
+          <div className="adm-toolbar">
+            <button className="btn btn-primary" onClick={openThemeCreate}>+ Nieuw weekthema</button>
+          </div>
+          {themes.length === 0 ? (
+            <div className="empty-state"><div className="empty-icon">🎯</div>Nog geen weekthema's</div>
+          ) : (
+            <div className="adm-theme-list">
+              {themes.map(t => (
+                <div key={t.id} className="adm-theme-row card">
+                  <span className={`tag ${t.category === 'B+' ? 'tag-green' : 'tag-black'}`}>
+                    {THEME_CATEGORY_LABELS[t.category] ?? t.category}
+                  </span>
+                  <div className="adm-theme-info">
+                    <div className="adm-theme-title">{t.title}</div>
+                    {t.description && <div className="adm-theme-desc">{t.description}</div>}
+                  </div>
+                  <button className={`tag ${t.active === 'true' ? 'tag-green' : 'tag-black'} adm-theme-active-toggle`}
+                    onClick={() => handleToggleThemeActive(t)} title="Klik om te wisselen">
+                    {t.active === 'true' ? 'Actief' : 'Inactief'}
+                  </button>
+                  <div className="adm-theme-actions">
+                    <button className="btn btn-ghost btn-sm" onClick={() => openThemeEdit(t)}>✏️</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setThemeConfirmDelete(t)}>🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ═══════════════ MODALS ═══════════════ */}
 
       {/* Team modal */}
@@ -537,6 +609,59 @@ export default function Admin() {
               <button className="btn btn-outline" onClick={() => setPlayerModal(false)}>Annuleer</button>
               <button className="btn btn-primary" disabled={playerSaving || !playerForm.name}
                 onClick={handleCreatePlayer}>{playerSaving ? 'Aanmaken...' : 'Aanmaken'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Week theme modal */}
+      {themeModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setThemeModal(false)}>
+          <div className="modal">
+            <div className="modal-title">{editTheme ? 'Weekthema bewerken' : 'Nieuw weekthema'}</div>
+            <div className="form-group">
+              <label className="input-label">Titel *</label>
+              <input className="input-field" autoFocus value={themeForm.title}
+                onChange={e => setThemeForm({ ...themeForm, title: e.target.value })}
+                onKeyDown={e => e.key === 'Enter' && handleSaveTheme()} placeholder="bv. Kort passen onder druk" />
+            </div>
+            <div className="form-group">
+              <label className="input-label">Categorie *</label>
+              <select className="input-field" value={themeForm.category}
+                onChange={e => setThemeForm({ ...themeForm, category: e.target.value })}>
+                <option value="B+">Bal+ (aanvallend)</option>
+                <option value="B-">Bal- (verdedigend)</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="input-label">Omschrijving</label>
+              <textarea className="input-field" rows={3} value={themeForm.description}
+                onChange={e => setThemeForm({ ...themeForm, description: e.target.value })}
+                placeholder="Optionele toelichting bij het thema" />
+            </div>
+            {error && <div className="adm-error">⚠ {error}</div>}
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={() => setThemeModal(false)}>Annuleer</button>
+              <button className="btn btn-primary" disabled={themeSaving || !themeForm.title.trim()} onClick={handleSaveTheme}>
+                {themeSaving ? 'Opslaan...' : 'Opslaan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {themeConfirmDelete && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setThemeConfirmDelete(null)}>
+          <div className="modal">
+            <div className="modal-title">Weekthema verwijderen?</div>
+            <p style={{ color: 'var(--text-mid)', marginBottom: 24, lineHeight: 1.6 }}>
+              Verwijder <strong style={{ color: 'var(--white)' }}>{themeConfirmDelete.title}</strong>?
+              Bestaande quoteringen op dit thema blijven bewaard maar tonen geen themanaam meer.
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={() => setThemeConfirmDelete(null)}>Annuleer</button>
+              <button className="btn btn-primary" style={{ background: 'var(--red-dark)' }}
+                onClick={() => handleDeleteTheme(themeConfirmDelete)}>Verwijderen</button>
             </div>
           </div>
         </div>

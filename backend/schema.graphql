@@ -264,6 +264,8 @@ type Player {
   attendancesCount(where: AttendanceWhereInput! = {}): Int
   goals(where: GoalWhereInput! = {}, orderBy: [GoalOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: GoalWhereUniqueInput): [Goal!]
   goalsCount(where: GoalWhereInput! = {}): Int
+  evaluations(where: EvaluationWhereInput! = {}, orderBy: [EvaluationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: EvaluationWhereUniqueInput): [Evaluation!]
+  evaluationsCount(where: EvaluationWhereInput! = {}): Int
 }
 
 input PlayerWhereUniqueInput {
@@ -282,6 +284,7 @@ input PlayerWhereInput {
   team: TeamWhereInput
   attendances: AttendanceManyRelationFilter
   goals: GoalManyRelationFilter
+  evaluations: EvaluationManyRelationFilter
 }
 
 input IntNullableFilter {
@@ -307,6 +310,12 @@ input GoalManyRelationFilter {
   none: GoalWhereInput
 }
 
+input EvaluationManyRelationFilter {
+  every: EvaluationWhereInput
+  some: EvaluationWhereInput
+  none: EvaluationWhereInput
+}
+
 input PlayerOrderByInput {
   id: OrderDirection
   name: OrderDirection
@@ -323,6 +332,7 @@ input PlayerUpdateInput {
   team: TeamRelateToOneForUpdateInput
   attendances: AttendanceRelateToManyForUpdateInput
   goals: GoalRelateToManyForUpdateInput
+  evaluations: EvaluationRelateToManyForUpdateInput
 }
 
 input AttendanceRelateToManyForUpdateInput {
@@ -339,6 +349,13 @@ input GoalRelateToManyForUpdateInput {
   connect: [GoalWhereUniqueInput!]
 }
 
+input EvaluationRelateToManyForUpdateInput {
+  disconnect: [EvaluationWhereUniqueInput!]
+  set: [EvaluationWhereUniqueInput!]
+  create: [EvaluationCreateInput!]
+  connect: [EvaluationWhereUniqueInput!]
+}
+
 input PlayerUpdateArgs {
   where: PlayerWhereUniqueInput!
   data: PlayerUpdateInput!
@@ -352,6 +369,7 @@ input PlayerCreateInput {
   team: TeamRelateToOneForCreateInput
   attendances: AttendanceRelateToManyForCreateInput
   goals: GoalRelateToManyForCreateInput
+  evaluations: EvaluationRelateToManyForCreateInput
 }
 
 input AttendanceRelateToManyForCreateInput {
@@ -362,6 +380,11 @@ input AttendanceRelateToManyForCreateInput {
 input GoalRelateToManyForCreateInput {
   create: [GoalCreateInput!]
   connect: [GoalWhereUniqueInput!]
+}
+
+input EvaluationRelateToManyForCreateInput {
+  create: [EvaluationCreateInput!]
+  connect: [EvaluationWhereUniqueInput!]
 }
 
 type Match {
@@ -382,6 +405,9 @@ type Match {
   periodsCount(where: PeriodWhereInput! = {}): Int
   goals(where: GoalWhereInput! = {}, orderBy: [GoalOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: GoalWhereUniqueInput): [Goal!]
   goalsCount(where: GoalWhereInput! = {}): Int
+  weekTheme: WeekTheme
+  evaluations(where: EvaluationWhereInput! = {}, orderBy: [EvaluationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: EvaluationWhereUniqueInput): [Evaluation!]
+  evaluationsCount(where: EvaluationWhereInput! = {}): Int
 }
 
 scalar DateTime @specifiedBy(url: "https://datatracker.ietf.org/doc/html/rfc3339#section-5.6")
@@ -408,6 +434,8 @@ input MatchWhereInput {
   attendances: AttendanceManyRelationFilter
   periods: PeriodManyRelationFilter
   goals: GoalManyRelationFilter
+  weekTheme: WeekThemeWhereInput
+  evaluations: EvaluationManyRelationFilter
 }
 
 input DateTimeFilter {
@@ -465,6 +493,8 @@ input MatchUpdateInput {
   attendances: AttendanceRelateToManyForUpdateInput
   periods: PeriodRelateToManyForUpdateInput
   goals: GoalRelateToManyForUpdateInput
+  weekTheme: WeekThemeRelateToOneForUpdateInput
+  evaluations: EvaluationRelateToManyForUpdateInput
 }
 
 input PeriodRelateToManyForUpdateInput {
@@ -472,6 +502,12 @@ input PeriodRelateToManyForUpdateInput {
   set: [PeriodWhereUniqueInput!]
   create: [PeriodCreateInput!]
   connect: [PeriodWhereUniqueInput!]
+}
+
+input WeekThemeRelateToOneForUpdateInput {
+  create: WeekThemeCreateInput
+  connect: WeekThemeWhereUniqueInput
+  disconnect: Boolean
 }
 
 input MatchUpdateArgs {
@@ -493,11 +529,18 @@ input MatchCreateInput {
   attendances: AttendanceRelateToManyForCreateInput
   periods: PeriodRelateToManyForCreateInput
   goals: GoalRelateToManyForCreateInput
+  weekTheme: WeekThemeRelateToOneForCreateInput
+  evaluations: EvaluationRelateToManyForCreateInput
 }
 
 input PeriodRelateToManyForCreateInput {
   create: [PeriodCreateInput!]
   connect: [PeriodWhereUniqueInput!]
+}
+
+input WeekThemeRelateToOneForCreateInput {
+  create: WeekThemeCreateInput
+  connect: WeekThemeWhereUniqueInput
 }
 
 type Period {
@@ -791,6 +834,123 @@ input AttendanceRelateToOneForCreateInput {
   connect: AttendanceWhereUniqueInput
 }
 
+type WeekTheme {
+  id: ID!
+  title: String
+  category: String
+  description: String
+  active: String
+  createdAt: DateTime
+  matches(where: MatchWhereInput! = {}, orderBy: [MatchOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: MatchWhereUniqueInput): [Match!]
+  matchesCount(where: MatchWhereInput! = {}): Int
+  evaluations(where: EvaluationWhereInput! = {}, orderBy: [EvaluationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: EvaluationWhereUniqueInput): [Evaluation!]
+  evaluationsCount(where: EvaluationWhereInput! = {}): Int
+}
+
+input WeekThemeWhereUniqueInput {
+  id: ID
+}
+
+input WeekThemeWhereInput {
+  AND: [WeekThemeWhereInput!]
+  OR: [WeekThemeWhereInput!]
+  NOT: [WeekThemeWhereInput!]
+  id: IDFilter
+  title: StringFilter
+  category: StringFilter
+  description: StringFilter
+  active: StringNullableFilter
+  createdAt: DateTimeNullableFilter
+  matches: MatchManyRelationFilter
+  evaluations: EvaluationManyRelationFilter
+}
+
+input WeekThemeOrderByInput {
+  id: OrderDirection
+  title: OrderDirection
+  category: OrderDirection
+  description: OrderDirection
+  active: OrderDirection
+  createdAt: OrderDirection
+}
+
+input WeekThemeUpdateInput {
+  title: String
+  category: String
+  description: String
+  active: String
+  createdAt: DateTime
+  matches: MatchRelateToManyForUpdateInput
+  evaluations: EvaluationRelateToManyForUpdateInput
+}
+
+input WeekThemeUpdateArgs {
+  where: WeekThemeWhereUniqueInput!
+  data: WeekThemeUpdateInput!
+}
+
+input WeekThemeCreateInput {
+  title: String
+  category: String
+  description: String
+  active: String
+  createdAt: DateTime
+  matches: MatchRelateToManyForCreateInput
+  evaluations: EvaluationRelateToManyForCreateInput
+}
+
+type Evaluation {
+  id: ID!
+  player: Player
+  match: Match
+  theme: WeekTheme
+  score: Int
+  createdAt: DateTime
+}
+
+input EvaluationWhereUniqueInput {
+  id: ID
+}
+
+input EvaluationWhereInput {
+  AND: [EvaluationWhereInput!]
+  OR: [EvaluationWhereInput!]
+  NOT: [EvaluationWhereInput!]
+  id: IDFilter
+  player: PlayerWhereInput
+  match: MatchWhereInput
+  theme: WeekThemeWhereInput
+  score: IntFilter
+  createdAt: DateTimeNullableFilter
+}
+
+input EvaluationOrderByInput {
+  id: OrderDirection
+  score: OrderDirection
+  createdAt: OrderDirection
+}
+
+input EvaluationUpdateInput {
+  player: PlayerRelateToOneForUpdateInput
+  match: MatchRelateToOneForUpdateInput
+  theme: WeekThemeRelateToOneForUpdateInput
+  score: Int
+  createdAt: DateTime
+}
+
+input EvaluationUpdateArgs {
+  where: EvaluationWhereUniqueInput!
+  data: EvaluationUpdateInput!
+}
+
+input EvaluationCreateInput {
+  player: PlayerRelateToOneForCreateInput
+  match: MatchRelateToOneForCreateInput
+  theme: WeekThemeRelateToOneForCreateInput
+  score: Int
+  createdAt: DateTime
+}
+
 """
 The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
 """
@@ -845,6 +1005,18 @@ type Mutation {
   updatePlayTimeSessions(data: [PlayTimeSessionUpdateArgs!]!): [PlayTimeSession]
   deletePlayTimeSession(where: PlayTimeSessionWhereUniqueInput!): PlayTimeSession
   deletePlayTimeSessions(where: [PlayTimeSessionWhereUniqueInput!]!): [PlayTimeSession]
+  createWeekTheme(data: WeekThemeCreateInput!): WeekTheme
+  createWeekThemes(data: [WeekThemeCreateInput!]!): [WeekTheme]
+  updateWeekTheme(where: WeekThemeWhereUniqueInput!, data: WeekThemeUpdateInput!): WeekTheme
+  updateWeekThemes(data: [WeekThemeUpdateArgs!]!): [WeekTheme]
+  deleteWeekTheme(where: WeekThemeWhereUniqueInput!): WeekTheme
+  deleteWeekThemes(where: [WeekThemeWhereUniqueInput!]!): [WeekTheme]
+  createEvaluation(data: EvaluationCreateInput!): Evaluation
+  createEvaluations(data: [EvaluationCreateInput!]!): [Evaluation]
+  updateEvaluation(where: EvaluationWhereUniqueInput!, data: EvaluationUpdateInput!): Evaluation
+  updateEvaluations(data: [EvaluationUpdateArgs!]!): [Evaluation]
+  deleteEvaluation(where: EvaluationWhereUniqueInput!): Evaluation
+  deleteEvaluations(where: [EvaluationWhereUniqueInput!]!): [Evaluation]
   endSession: Boolean!
   authenticateTrainerWithPassword(email: String!, password: String!): TrainerAuthenticationWithPasswordResult
   createInitialTrainer(data: CreateInitialTrainerInput!): TrainerAuthenticationWithPasswordSuccess!
@@ -892,6 +1064,12 @@ type Query {
   playTimeSessions(where: PlayTimeSessionWhereInput! = {}, orderBy: [PlayTimeSessionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PlayTimeSessionWhereUniqueInput): [PlayTimeSession!]
   playTimeSession(where: PlayTimeSessionWhereUniqueInput!): PlayTimeSession
   playTimeSessionsCount(where: PlayTimeSessionWhereInput! = {}): Int
+  weekThemes(where: WeekThemeWhereInput! = {}, orderBy: [WeekThemeOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: WeekThemeWhereUniqueInput): [WeekTheme!]
+  weekTheme(where: WeekThemeWhereUniqueInput!): WeekTheme
+  weekThemesCount(where: WeekThemeWhereInput! = {}): Int
+  evaluations(where: EvaluationWhereInput! = {}, orderBy: [EvaluationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: EvaluationWhereUniqueInput): [Evaluation!]
+  evaluation(where: EvaluationWhereUniqueInput!): Evaluation
+  evaluationsCount(where: EvaluationWhereInput! = {}): Int
   keystone: KeystoneMeta!
   authenticatedItem: AuthenticatedItem
 }

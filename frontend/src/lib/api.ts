@@ -47,6 +47,25 @@ export interface Match {
   scoreAway: number;
   matchStartTime: string | null;
   team: { id: string; category: string } | null;
+  weekTheme?: { id: string; title: string; category: string } | null;
+}
+
+export interface WeekTheme {
+  id: string;
+  title: string;
+  category: string;       // 'B+' | 'B-'
+  description: string | null;
+  active: string;
+  createdAt: string;
+}
+
+export interface Evaluation {
+  id: string;
+  player: { id: string; name: string; number: number | null };
+  match: { id: string };
+  theme: { id: string; title: string; category: string };
+  score: number;
+  createdAt: string;
 }
 
 export interface Period {
@@ -243,6 +262,7 @@ export async function getMatches(teamId?: string): Promise<Match[]> {
       id opponent date location status currentPeriod periodStatus
       scoreHome scoreAway matchStartTime
       team { id category }
+      weekTheme { id title category }
     }
   }`);
   return data.matches;
@@ -504,6 +524,91 @@ export async function removeGoal(
 }
 
 
+// ── Week themes ───────────────────────────────────────────────────────────────
+
+export const THEME_CATEGORY_LABELS: Record<string, string> = {
+  'B+': 'Bal+',
+  'B-': 'Bal-',
+};
+
+export async function getWeekThemes(activeOnly = false): Promise<WeekTheme[]> {
+  const where = activeOnly ? `, where: { active: { equals: "true" } }` : '';
+  const data = await gql(`query {
+    weekThemes(take: 500, orderBy: { createdAt: desc }${where}) {
+      id title category description active createdAt
+    }
+  }`);
+  return data.weekThemes;
+}
+
+export async function createWeekTheme(input: { title: string; category: string; description?: string }): Promise<WeekTheme> {
+  const data = await gql(
+    `mutation CreateWeekTheme($data: WeekThemeCreateInput!) {
+       createWeekTheme(data: $data) { id title category description active createdAt }
+     }`,
+    { data: { title: input.title, category: input.category, description: input.description ?? '', active: 'true' } }
+  );
+  return data.createWeekTheme;
+}
+
+export async function updateWeekTheme(id: string, input: Record<string, unknown>): Promise<WeekTheme> {
+  const data = await gql(
+    `mutation UpdateWeekTheme($id: ID!, $data: WeekThemeUpdateInput!) {
+       updateWeekTheme(where: { id: $id }, data: $data) { id title category description active createdAt }
+     }`,
+    { id, data: input }
+  );
+  return data.updateWeekTheme;
+}
+
+export async function deleteWeekTheme(id: string): Promise<void> {
+  await gql(`mutation { deleteWeekTheme(where: { id: "${id}" }) { id } }`);
+}
+
+// ── Evaluations ───────────────────────────────────────────────────────────────
+
+export async function getEvaluationsForMatch(matchId: string): Promise<Evaluation[]> {
+  const data = await gql(
+    `query GetEvaluations($matchId: ID!) {
+       evaluations(where: { match: { id: { equals: $matchId } } }, take: 200) {
+         id player { id name number } match { id } theme { id title category } score createdAt
+       }
+     }`,
+    { matchId }
+  );
+  return data.evaluations;
+}
+
+export async function setEvaluation(matchId: string, playerId: string, themeId: string, score: number): Promise<Evaluation> {
+  const existingData = await gql(
+    `query { evaluations(where: { match: { id: { equals: "${matchId}" } }, player: { id: { equals: "${playerId}" } } }, take: 1) { id } }`
+  );
+  const existing = existingData.evaluations[0];
+  if (existing) {
+    const data = await gql(
+      `mutation UpdateEvaluation($id: ID!, $data: EvaluationUpdateInput!) {
+         updateEvaluation(where: { id: $id }, data: $data) { id player { id name number } match { id } theme { id title category } score createdAt }
+       }`,
+      { id: existing.id, data: { theme: { connect: { id: themeId } }, score } }
+    );
+    return data.updateEvaluation;
+  } else {
+    const data = await gql(
+      `mutation CreateEvaluation($data: EvaluationCreateInput!) {
+         createEvaluation(data: $data) { id player { id name number } match { id } theme { id title category } score createdAt }
+       }`,
+      { data: {
+          match: { connect: { id: matchId } },
+          player: { connect: { id: playerId } },
+          theme: { connect: { id: themeId } },
+          score,
+          createdAt: new Date().toISOString(),
+      }}
+    );
+    return data.createEvaluation;
+  }
+}
+
 // ── Field positions ───────────────────────────────────────────────────────────
 // Note: position definitions have moved to teamConfig.ts
 // buildFieldState now accepts dynamic posKeys from the active format
@@ -607,6 +712,15 @@ export interface SeasonPlayerStats {
     goals: number;
     periods: Record<number, number>;
   }>;
+  evaluations: Array<{
+    matchId: string;
+    opponent: string;
+    date: string;
+    themeId: string;
+    themeTitle: string;
+    themeCategory: string;
+    score: number;
+  }>;
 }
 
 export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats[]> {
@@ -630,16 +744,19 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
   const allSessions: Array<PlayTimeSession & { matchId: string }> = [];
   const allAttendances: Array<Attendance & { matchId: string }> = [];
   const allGoals: Array<Goal & { matchId: string }> = [];
+  const allEvaluations: Array<Evaluation & { matchId: string }> = [];
 
   for (const m of matches) {
-    const [att, sess, goals] = await Promise.all([
+    const [att, sess, goals, evals] = await Promise.all([
       getAttendancesForMatch(m.id),
       getPlayTimeSessionsForMatch(m.id),
       getGoalsForMatch(m.id),
+      getEvaluationsForMatch(m.id),
     ]);
     att.forEach(a => allAttendances.push({ ...a, matchId: m.id }));
     sess.forEach(s => allSessions.push({ ...s, matchId: m.id }));
     goals.forEach(g => allGoals.push({ ...g, matchId: m.id }));
+    evals.forEach(e => allEvaluations.push({ ...e, matchId: m.id }));
   }
 
   const statsMap = new Map<string, SeasonPlayerStats>();
@@ -647,6 +764,7 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
   for (const player of players.players as Player[]) {
     const playerAtts = allAttendances.filter(a => a.player.id === player.id);
     const playerGoals = allGoals.filter(g => g.player.id === player.id);
+    const playerEvals = allEvaluations.filter(e => e.player.id === player.id);
 
     let totalSeconds = 0;
     let totalGoals = 0;
@@ -685,8 +803,21 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
       matchBreakdown.push({ matchId: m.id, opponent: m.opponent, date: m.date, totalSeconds: matchSec, goals: matchGoals, periods });
     }
 
-    if (totalSeconds > 0 || totalGoals > 0) {
-      statsMap.set(player.id, { player, totalSeconds, matchCount, totalGoals, periodBreakdown, goalsByPeriod, matchBreakdown });
+    const evaluations: SeasonPlayerStats['evaluations'] = playerEvals.map(e => {
+      const m = matches.find(mm => mm.id === e.matchId);
+      return {
+        matchId: e.matchId,
+        opponent: m?.opponent ?? '',
+        date: m?.date ?? '',
+        themeId: e.theme.id,
+        themeTitle: e.theme.title,
+        themeCategory: e.theme.category,
+        score: e.score,
+      };
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    if (totalSeconds > 0 || totalGoals > 0 || evaluations.length > 0) {
+      statsMap.set(player.id, { player, totalSeconds, matchCount, totalGoals, periodBreakdown, goalsByPeriod, matchBreakdown, evaluations });
     }
   }
 
