@@ -1,0 +1,50 @@
+.dc-wrap { display: flex; flex-direction: column; gap: 8px; }
+
+.dc-toolbar, .dc-bg-toolbar {
+  display: flex; gap: 4px; flex-wrap: wrap; align-items: center;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 6px;
+}
+.dc-sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 4px; }
+
+.dc-tool {
+  width: 38px; height: 38px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 2px solid transparent; border-radius: var(--radius);
+  font-size: 16px; color: var(--text); cursor: pointer; transition: all .12s;
+}
+.dc-tool:hover:not(:disabled) { background: var(--bg-hover); }
+.dc-tool.active { background: var(--red); border-color: var(--red); color: white; }
+.dc-tool:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.dc-bg-btn {
+  padding: 7px 12px; background: none; border: 2px solid var(--border);
+  border-radius: var(--radius); font-family: var(--font-heading); font-size: 12px;
+  font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+  color: var(--text-dim); cursor: pointer; transition: all .12s;
+}
+.dc-bg-btn:hover { color: var(--text); border-color: var(--text-dim); }
+.dc-bg-btn.active { background: var(--red); border-color: var(--red); color: white; }
+.dc-bg-imported {
+  font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+  text-transform: uppercase; color: var(--text-dim); margin-right: auto; padding: 0 4px;
+}
+
+.dc-color-toolbar { display: flex; align-items: center; gap: 8px; padding: 4px 2px; }
+.dc-color-label { font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+.dc-swatch {
+  width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--border);
+  cursor: pointer; padding: 0; transition: all .12s;
+}
+.dc-swatch.active { border-color: white; box-shadow: 0 0 0 2px var(--red); }
+
+.dc-canvas-container {
+  width: 100%; max-width: 420px; margin: 0 auto;
+  border-radius: var(--radius-lg); overflow: hidden;
+  border: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.dc-svg {
+  width: 100%; height: auto; display: block;
+  touch-action: none; user-select: none;
+  -webkit-user-select: none;
+}

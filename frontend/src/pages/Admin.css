@@ -166,6 +166,34 @@
 .adm-theme-active-toggle { border: none; cursor: pointer; }
 .adm-theme-actions { display: flex; gap: 4px; }
 
+/* ═══════════ DATA TAB (import/export) ═══════════ */
+.adm-data-tab { display: flex; flex-direction: column; gap: 16px; max-width: 720px; }
+.adm-data-card { padding: 18px 20px; }
+.adm-data-card-title { font-family: var(--font-display); font-size: 20px; letter-spacing: 1px; margin-bottom: 8px; }
+.adm-data-card-desc { font-size: 13px; color: var(--text-mid); line-height: 1.6; margin-bottom: 14px; }
+
+.adm-import-preview, .adm-import-result { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border-soft); }
+.adm-import-preview-title { font-family: var(--font-heading); font-size: 13px; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 10px; }
+.adm-import-preview-date { font-weight: 400; color: var(--text-dim); text-transform: none; letter-spacing: 0; }
+.adm-import-counts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.adm-import-count-tag { font-size: 11px; }
+
+.adm-wipe-box { background: rgba(204,26,26,0.08); border: 1px solid rgba(204,26,26,0.25); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px; }
+.adm-wipe-checkbox { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; font-size: 13px; line-height: 1.5; color: var(--text-mid); }
+.adm-wipe-checkbox input { margin-top: 3px; flex-shrink: 0; width: 16px; height: 16px; }
+.adm-wipe-confirm-input { margin: 12px 0 0; max-width: 220px; }
+
+.adm-import-progress { margin-top: 14px; }
+.adm-import-progress-label { font-family: var(--font-heading); font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+
+.adm-import-errors { margin-top: 14px; }
+.adm-import-errors-title { font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--red); margin-bottom: 6px; }
+.adm-import-errors-list { max-height: 180px; overflow-y: auto; font-size: 12px; color: var(--text-mid); background: var(--bg-elevated); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+
+.adm-trainer-creds { margin-top: 16px; background: rgba(245,197,24,0.1); border: 1px solid rgba(245,197,24,0.3); border-radius: var(--radius); padding: 14px; }
+.adm-trainer-creds-title { font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--yellow); margin-bottom: 10px; line-height: 1.5; }
+.adm-trainer-creds code { font-family: monospace; background: var(--bg-elevated); padding: 2px 6px; border-radius: 3px; }
+
 /* ── Shared form ── */
 .form-group { margin-bottom: 16px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

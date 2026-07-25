@@ -12,26 +12,28 @@ generator client {
 }
 
 model Trainer {
-  id       String  @id @default(cuid())
-  name     String  @default("")
-  email    String  @unique @default("")
-  password String
-  role     String? @default("trainer")
-  team     Team?   @relation("Trainer_team", fields: [teamId], references: [id])
-  teamId   String? @map("team")
+  id        String     @id @default(cuid())
+  name      String     @default("")
+  email     String     @unique @default("")
+  password  String
+  role      String?    @default("trainer")
+  team      Team?      @relation("Trainer_team", fields: [teamId], references: [id])
+  teamId    String?    @map("team")
+  trainings Training[] @relation("Training_trainer")
 
   @@index([teamId])
 }
 
 model Team {
-  id       String    @id @default(cuid())
-  name     String    @default("")
-  category String
-  club     String    @default("")
-  active   String?   @default("true")
-  trainers Trainer[] @relation("Trainer_team")
-  players  Player[]  @relation("Player_team")
-  matches  Match[]   @relation("Match_team")
+  id        String     @id @default(cuid())
+  name      String     @default("")
+  category  String
+  club      String     @default("")
+  active    String?    @default("true")
+  trainers  Trainer[]  @relation("Trainer_team")
+  players   Player[]   @relation("Player_team")
+  matches   Match[]    @relation("Match_team")
+  trainings Training[] @relation("Training_team")
 }
 
 model Player {
@@ -153,4 +155,68 @@ model Evaluation {
   @@index([playerId])
   @@index([matchId])
   @@index([themeId])
+}
+
+model Training {
+  id                      String     @id @default(cuid())
+  trainer                 Trainer?   @relation("Training_trainer", fields: [trainerId], references: [id])
+  trainerId               String?    @map("trainer")
+  team                    Team?      @relation("Training_team", fields: [teamId], references: [id])
+  teamId                  String?    @map("team")
+  date                    DateTime
+  titel                   String     @default("")
+  duurMinuten             Int?       @default(90)
+  aantalSpelers           String     @default("")
+  status                  String?    @default("concept")
+  createdAt               DateTime?  @default(now())
+  coachNaam               String     @default("")
+  tijdstip                String     @default("")
+  leeftijdscategorie      String     @default("")
+  niveau                  String     @default("")
+  hoofdmoment             String     @default("")
+  spelfase                String     @default("")
+  basisvaardigheid        String     @default("")
+  speluitdagingWie        String     @default("")
+  speluitdagingWat        String     @default("")
+  speluitdagingWaar       String     @default("")
+  speluitdagingWanneer    String     @default("")
+  coachingswoorden        String     @default("")
+  materiaal               String     @default("")
+  actiefAanpak            String     @default("")
+  funAanpak               String     @default("")
+  individueleAandacht     String     @default("")
+  teamprincipe            String     @default("")
+  spelprincipe            String     @default("")
+  focusPunten             String     @default("")
+  jaarplanLabel           String     @default("")
+  evalBehouden            String     @default("")
+  evalWijzigen            String     @default("")
+  evalWarenActief         String     @default("")
+  evalHaddenFun           String     @default("")
+  evalBijgeleerd          String     @default("")
+  evalIndividueleAandacht String     @default("")
+  exercises               Exercise[] @relation("Exercise_training")
+
+  @@index([trainerId])
+  @@index([teamId])
+}
+
+model Exercise {
+  id                    String    @id @default(cuid())
+  training              Training? @relation("Exercise_training", fields: [trainingId], references: [id])
+  trainingId            String?   @map("training")
+  order                 Int?      @default(0)
+  fase                  String
+  naam                  String    @default("")
+  duurMinuten           Int?      @default(10)
+  organisatieSpelers    String    @default("")
+  organisatieAfmetingen String    @default("")
+  organisatieMateriaal  String    @default("")
+  beschrijving          String    @default("")
+  drawingData           String    @default("")
+  coachingPunten        String    @default("")
+  maximaalActief        String    @default("")
+  fun                   String    @default("")
+
+  @@index([trainingId])
 }

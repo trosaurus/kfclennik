@@ -6,6 +6,8 @@ import {
   createPlayer, deletePlayer,
   getWeekThemes, createWeekTheme, updateWeekTheme, deleteWeekTheme, WeekTheme, THEME_CATEGORY_LABELS,
   POSITION_LABELS, POSITION_FULL, POSITIONS,
+  exportAllData, downloadJSON, countFullDataExport, parseFullDataExportFile,
+  wipeAllSportData, importAllData, FullDataExport, ImportProgress, ImportResult,
 } from '../lib/api';
 import { useTeam } from '../lib/TeamContext';
 import './Admin.css';
@@ -17,7 +19,15 @@ const FORMAT_MAP: Record<string,string> = {
   U13:'11v11', U15:'11v11', U17:'11v11',
 };
 
-type Tab = 'teams' | 'trainers' | 'players' | 'themes';
+const ENTITY_LABELS: Record<string, string> = {
+  teams: 'Ploegen', weekThemes: "Weekthema's", trainers: 'Trainers', players: 'Spelers',
+  matches: 'Wedstrijden', periods: 'Periodes', goals: 'Doelpunten', attendances: 'Aanwezigheden',
+  playTimeSessions: 'Speeltijdsessies', evaluations: 'Evaluaties',
+};
+
+const WIPE_CONFIRM_WORD = 'VERWIJDER';
+
+type Tab = 'teams' | 'trainers' | 'players' | 'themes' | 'data';
 
 export default function Admin() {
   const { trainer: currentTrainer } = useTeam();
@@ -60,6 +70,19 @@ export default function Admin() {
   const [themeSaving, setThemeSaving] = useState(false);
   const [themeConfirmDelete, setThemeConfirmDelete] = useState<WeekTheme | null>(null);
 
+  // ── Data export/import state ──────────────────────────────────────────────
+  const [exporting, setExporting]           = useState(false);
+  const [exportError, setExportError]       = useState('');
+  const [importFile, setImportFile]         = useState<File | null>(null);
+  const [importPreview, setImportPreview]   = useState<FullDataExport | null>(null);
+  const [importFileError, setImportFileError] = useState('');
+  const [wipeFirst, setWipeFirst]           = useState(false);
+  const [wipeTypedConfirm, setWipeTypedConfirm] = useState('');
+  const [importing, setImporting]           = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  const [importResult, setImportResult]     = useState<ImportResult | null>(null);
+  const [importStage, setImportStage]       = useState<'idle' | 'wiping' | 'importing' | 'done'>('idle');
+
   useEffect(() => { load(); }, []);
 
   async function load() {
@@ -94,6 +117,58 @@ export default function Admin() {
   async function handleDeleteTheme(t: WeekTheme) {
     setThemeConfirmDelete(null);
     await deleteWeekTheme(t.id); await load();
+  }
+
+  // ── Data export/import ────────────────────────────────────────────────────
+
+  async function handleExport() {
+    setExporting(true); setExportError('');
+    try {
+      const data = await exportAllData();
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadJSON(data, `kfc-lennik-export-${stamp}.json`);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : 'Export mislukt');
+    } finally { setExporting(false); }
+  }
+
+  async function handleImportFileChange(file: File | null) {
+    setImportFile(file); setImportPreview(null); setImportFileError(''); setImportResult(null);
+    setWipeFirst(false); setWipeTypedConfirm('');
+    if (!file) return;
+    try {
+      const parsed = await parseFullDataExportFile(file);
+      setImportPreview(parsed);
+    } catch (e) {
+      setImportFileError(e instanceof Error ? e.message : 'Kon bestand niet lezen');
+    }
+  }
+
+  async function handleRunImport() {
+    if (!importPreview) return;
+    if (wipeFirst && wipeTypedConfirm !== WIPE_CONFIRM_WORD) return;
+    const confirmMsg = wipeFirst
+      ? 'Dit wist EERST alle bestaande ploegen, spelers, wedstrijden, speeltijden, doelpunten en evaluaties, en importeert daarna het bestand. Trainersaccounts blijven behouden. Doorgaan?'
+      : 'Dit voegt de data uit het bestand toe aan de bestaande data (niets wordt overschreven). Doorgaan?';
+    if (!confirm(confirmMsg)) return;
+
+    setImporting(true); setImportResult(null);
+    try {
+      if (wipeFirst) {
+        setImportStage('wiping');
+        await wipeAllSportData();
+      }
+      setImportStage('importing');
+      const result = await importAllData(importPreview, p => setImportProgress(p));
+      setImportResult(result);
+      setImportStage('done');
+      await load();
+    } catch (e) {
+      setImportFileError(e instanceof Error ? e.message : 'Import mislukt');
+      setImportStage('idle');
+    } finally {
+      setImporting(false); setImportProgress(null);
+    }
   }
 
   // ── Team CRUD ──────────────────────────────────────────────────────────────
@@ -240,9 +315,10 @@ export default function Admin() {
           { key: 'trainers' as Tab, icon: '👤', label: 'Trainers',  count: trainers.length },
           { key: 'players' as Tab,  icon: '👥', label: 'Spelers',   count: allPlayers.length },
           { key: 'themes' as Tab,   icon: '🎯', label: 'Weekthema\'s', count: themes.length },
+          { key: 'data' as Tab,     icon: '💾', label: 'Data',      count: null },
         ]).map(t => (
           <button key={t.key} className={`adm-tab ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
-            {t.icon} {t.label} <span className="adm-tab-count">{t.count}</span>
+            {t.icon} {t.label} {t.count !== null && <span className="adm-tab-count">{t.count}</span>}
           </button>
         ))}
       </div>
@@ -477,6 +553,147 @@ export default function Admin() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* ── DATA TAB ───────────────────────────────────────────────────────── */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {tab === 'data' && (
+        <div className="adm-data-tab">
+          {/* Export */}
+          <div className="card adm-data-card">
+            <div className="adm-data-card-title">⬇ Exporteren</div>
+            <p className="adm-data-card-desc">
+              Download alle data uit de app (ploegen, trainers, spelers, wedstrijden, speeltijden, doelpunten,
+              weekthema's en evaluaties) als één JSON-bestand. Bruikbaar als back-up of om data te migreren.
+              Wachtwoorden van trainers zitten hier <strong>niet</strong> in.
+            </p>
+            {exportError && <div className="adm-error">⚠ {exportError}</div>}
+            <button className="btn btn-primary" disabled={exporting} onClick={handleExport}>
+              {exporting ? 'Bezig met exporteren...' : '⬇ Exporteer alle data (JSON)'}
+            </button>
+          </div>
+
+          {/* Import */}
+          <div className="card adm-data-card">
+            <div className="adm-data-card-title">⬆ Importeren</div>
+            <p className="adm-data-card-desc">
+              Importeer een eerder geëxporteerd JSON-bestand. Alle records krijgen nieuwe id's en worden
+              standaard <strong>toegevoegd</strong> aan de bestaande data. Trainersaccounts krijgen een
+              nieuw, tijdelijk wachtwoord (zichtbaar na import) — bestaande accounts met hetzelfde e-mailadres
+              worden niet aangepast.
+            </p>
+
+            <div className="form-group">
+              <input
+                type="file" accept="application/json"
+                className="input-field"
+                onChange={e => handleImportFileChange(e.target.files?.[0] ?? null)}
+              />
+            </div>
+
+            {importFileError && <div className="adm-error">⚠ {importFileError}</div>}
+
+            {importPreview && (
+              <div className="adm-import-preview">
+                <div className="adm-import-preview-title">
+                  Gevonden in {importFile?.name}
+                  {importPreview.exportedAt && (
+                    <span className="adm-import-preview-date">
+                      {' '}— geëxporteerd op {new Date(importPreview.exportedAt).toLocaleString('nl-BE')}
+                    </span>
+                  )}
+                </div>
+                <div className="adm-import-counts">
+                  {Object.entries(countFullDataExport(importPreview)).map(([key, count]) => (
+                    <span key={key} className="tag tag-black adm-import-count-tag">
+                      {ENTITY_LABELS[key] ?? key}: {count}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="adm-wipe-box">
+                  <label className="adm-wipe-checkbox">
+                    <input type="checkbox" checked={wipeFirst}
+                      onChange={e => { setWipeFirst(e.target.checked); setWipeTypedConfirm(''); }} />
+                    <span>⚠ Eerst alle bestaande sportdata wissen (ploegen, spelers, wedstrijden, speeltijden,
+                      doelpunten, weekthema's, evaluaties). Trainersaccounts blijven behouden.</span>
+                  </label>
+                  {wipeFirst && (
+                    <div className="form-group adm-wipe-confirm-input">
+                      <label className="input-label">Typ {WIPE_CONFIRM_WORD} om te bevestigen</label>
+                      <input className="input-field" value={wipeTypedConfirm}
+                        onChange={e => setWipeTypedConfirm(e.target.value)} placeholder={WIPE_CONFIRM_WORD} />
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  className="btn btn-primary"
+                  disabled={importing || (wipeFirst && wipeTypedConfirm !== WIPE_CONFIRM_WORD)}
+                  onClick={handleRunImport}
+                >
+                  {importing
+                    ? (importStage === 'wiping' ? 'Bestaande data wissen...' : 'Bezig met importeren...')
+                    : '⬆ Importeer data'}
+                </button>
+
+                {importing && importProgress && (
+                  <div className="adm-import-progress">
+                    <div className="adm-import-progress-label">
+                      {importProgress.label} — {importProgress.done}/{importProgress.total}
+                    </div>
+                    <div className="sz-bar-wrap">
+                      <div className="sz-bar-fill" style={{ width: `${(importProgress.done / Math.max(1, importProgress.total)) * 100}%` }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {importResult && (
+              <div className="adm-import-result">
+                <div className="adm-import-preview-title">Import voltooid</div>
+                <div className="adm-import-counts">
+                  {Object.entries(importResult.counts).map(([key, count]) => (
+                    <span key={key} className="tag tag-green adm-import-count-tag">
+                      {ENTITY_LABELS[key] ?? key}: {count}
+                    </span>
+                  ))}
+                </div>
+
+                {importResult.errors.length > 0 && (
+                  <div className="adm-import-errors">
+                    <div className="adm-import-errors-title">{importResult.errors.length} fout(en)</div>
+                    <div className="adm-import-errors-list">
+                      {importResult.errors.map((err, i) => <div key={i}>{err}</div>)}
+                    </div>
+                  </div>
+                )}
+
+                {importResult.trainerCredentials.length > 0 && (
+                  <div className="adm-trainer-creds">
+                    <div className="adm-trainer-creds-title">
+                      ⚠ Tijdelijke wachtwoorden voor geïmporteerde trainers — bewaar dit nu, dit wordt niet opnieuw getoond
+                    </div>
+                    <table className="data-table">
+                      <thead><tr><th>E-mail</th><th>Tijdelijk wachtwoord</th></tr></thead>
+                      <tbody>
+                        {importResult.trainerCredentials.map(c => (
+                          <tr key={c.email}><td>{c.email}</td><td><code>{c.tempPassword}</code></td></tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <button className="btn btn-outline btn-sm" style={{ marginTop: 10 }}
+                      onClick={() => downloadJSON(importResult.trainerCredentials, 'kfc-lennik-tijdelijke-wachtwoorden.json')}>
+                      ⬇ Download als bestand
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

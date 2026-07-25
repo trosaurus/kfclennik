@@ -1,0 +1,95 @@
+.te-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.te-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.te-block { padding: 18px 20px; margin-bottom: 16px; }
+.te-block-title { font-family: var(--font-display); font-size: 20px; letter-spacing: 1px; margin-bottom: 14px; }
+.te-block-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.te-block-title-row .te-block-title { margin-bottom: 0; }
+
+.te-jaarplan-label { font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--red); margin-bottom: 12px; }
+.te-extra-badge { font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); background: var(--bg-elevated); padding: 2px 7px; border-radius: 3px; margin-left: 8px; vertical-align: middle; }
+
+.te-row-5 { grid-template-columns: repeat(5, 1fr); }
+@media (max-width: 900px) { .te-row-5 { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 480px) { .te-row-5 { grid-template-columns: 1fr; } }
+
+.te-speluitdaging { margin-bottom: 16px; }
+.te-speluitdaging-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
+@media (max-width: 480px) { .te-speluitdaging-grid { grid-template-columns: 1fr; } }
+.te-su-field { display: flex; flex-direction: column; gap: 4px; }
+.te-su-pill {
+  display: inline-block; align-self: flex-start;
+  font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  background: var(--bg-elevated); color: var(--text-mid); padding: 2px 8px; border-radius: 10px; margin-bottom: 0;
+}
+
+.te-organisatie { margin-bottom: 16px; }
+.te-organisatie-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
+@media (max-width: 480px) { .te-organisatie-grid { grid-template-columns: 1fr; } }
+
+.te-pct-label { font-family: var(--font-heading); font-size: 12px; font-weight: 700; }
+.te-pct-label.ok   { color: var(--green); }
+.te-pct-label.warn { color: var(--red); }
+.te-pct-bar { height: 10px; }
+.te-bar-ok   { background: linear-gradient(90deg, var(--green), #16a34a) !important; }
+.te-bar-warn { background: linear-gradient(90deg, var(--red-dark), var(--red)) !important; }
+.te-pct-warning { font-size: 12px; color: var(--red); margin-top: 8px; }
+
+.te-krachtige-leeromgeving { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-soft); }
+.te-kl-list { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-mid); line-height: 1.7; }
+
+.te-exercises { margin-bottom: 16px; }
+.te-exercises-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.te-add-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.te-ex-card { margin-bottom: 8px; overflow: visible; }
+.te-ex-header {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 12px 16px; background: none; border: none; color: var(--text);
+  cursor: pointer; text-align: left; min-height: 48px;
+}
+.te-ex-header:hover { background: var(--bg-hover); }
+.te-fase-tag { flex-shrink: 0; }
+.te-fase-opwarming     { background: rgba(59,130,246,0.2);  color: #93c5fd; }
+.te-fase-tussenvorm    { background: rgba(245,197,24,0.15); color: var(--yellow); }
+.te-fase-wedstrijdvorm { background: var(--green-bg);       color: var(--green); }
+.te-fase-cooling_down  { background: var(--bg-elevated);    color: var(--text-mid); }
+.te-ex-name { flex: 1; font-size: 14px; font-weight: 600; }
+.te-ex-duur { font-family: var(--font-heading); font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
+.te-chevron { font-size: 10px; color: var(--text-dim); flex-shrink: 0; }
+
+.te-ex-body { padding: 4px 16px 16px; border-top: 1px solid var(--border-soft); }
+.te-ex-drawing { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 14px 0; }
+.te-ex-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-soft); flex-wrap: wrap; }
+.te-reorder-btns { display: flex; gap: 6px; }
+
+/* Fullscreen tekentool modal */
+.te-draw-overlay { padding: 0; align-items: stretch; }
+.te-draw-modal {
+  background: var(--bg); width: 100%; height: 100%;
+  display: flex; flex-direction: column; padding: 12px;
+}
+.te-draw-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 4px 14px; font-family: var(--font-heading); font-size: 14px; font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .te-header-actions { width: 100%; }
+  .te-header-actions .btn { flex: 1; justify-content: center; }
+}
+
+/* Genereer-oefening modal */
+.te-gen-modal { max-width: 560px; }
+.te-gen-desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; margin-bottom: 16px; }
+.te-gen-fase-tabs { display: flex; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
+.te-gen-fase-tabs .sb-toggle { flex: 1; }
+.te-gen-hint { font-size: 13px; color: var(--text-dim); background: var(--bg-elevated); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 12px; line-height: 1.5; }
+.te-gen-list { display: flex; flex-direction: column; gap: 10px; max-height: 46vh; overflow-y: auto; margin-bottom: 4px; }
+.te-gen-card { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
+.te-gen-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.te-gen-card-name { font-size: 14px; font-weight: 700; }
+.te-gen-card-duur { font-family: var(--font-heading); font-size: 11px; color: var(--text-dim); flex-shrink: 0; }
+.te-gen-card-desc { font-size: 12px; color: var(--text-mid); line-height: 1.5; margin-bottom: 10px; }
+.te-gen-card-drawing { max-width: 220px; margin: 0 auto 10px; }
+.te-gen-card-drawing .dc-canvas-container { max-width: 220px; }

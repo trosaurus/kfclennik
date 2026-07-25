@@ -866,8 +866,9 @@ function PlayerRow({ ps, isPlaying, busy, onToggle, onSub, periodSec, playerGoal
 
   return (
     <div className={`md-player-row ${ps.onField ? 'on-field' : 'on-bench'}`}>
-      <div className="md-pr-num">{ps.player.number ? `#${ps.player.number}` : '—'}</div>
-      <div className="md-pr-info">
+      <div className="md-pr-top">
+        <span className="md-pr-num">{ps.player.number ? `#${ps.player.number}` : '—'}</span>
+        <span className="md-pr-name" title={ps.player.name}>{ps.player.name}</span>
         {ps.player.position && <span className="md-pr-pos">{POSITION_LABELS[ps.player.position]}</span>}
         {goalCount > 0 && (
           <span className="md-goal-badge">
@@ -875,50 +876,49 @@ function PlayerRow({ ps, isPlaying, busy, onToggle, onSub, periodSec, playerGoal
           </span>
         )}
       </div>
-      <div className="md-pr-times">
-        <div className="md-pr-timer">
-          <span className="md-pr-timer-name" title={ps.player.name}>{ps.player.name}</span>
+      <div className="md-pr-bottom">
+        <div className="md-pr-times">
           <span className={`md-timer ${ps.onField ? 'running' : ''}`}>{formatDuration(ps.totalSeconds)}</span>
           {ps.onField && <span className="md-timer-dot">●</span>}
+          {periodSec > 0 && (
+            <span className="md-pr-period-time">kwart: {formatDuration(periodSec)}</span>
+          )}
         </div>
-        {periodSec > 0 && (
-          <div className="md-pr-period-time">kwart: {formatDuration(periodSec)}</div>
-        )}
-      </div>
-      <div className="md-pr-btns">
-        {/* Goal button — always visible during active/paused */}
-        {(isPlaying || ps.onField) && (
-          <button
-            className="btn btn-sm md-goal-btn"
-            disabled={busy}
-            onClick={onGoal}
-            title="Doelpunt registreren"
-          >
-            ⚽
-          </button>
-        )}
-        {goalCount > 0 && lastGoal && (
-          <button
-            className="btn btn-ghost btn-sm md-undo-btn"
-            disabled={busy}
-            onClick={() => onUndoGoal(lastGoal.id, lastGoal.periodNumber)}
-            title="Laatste doelpunt ongedaan maken"
-          >
-            ↩
-          </button>
-        )}
-        {(isPlaying || !ps.onField) && (
-          <>
-            <button className={`btn btn-sm ${ps.onField ? 'btn-danger' : 'btn-ghost'}`}
-              disabled={busy} onClick={onToggle}
-              title={ps.onField ? 'Haal van veld' : 'Breng op veld'}>
-              {busy ? '…' : ps.onField ? '⏸' : '▶'}
+        <div className="md-pr-btns">
+          {/* Goal button — always visible during active/paused */}
+          {(isPlaying || ps.onField) && (
+            <button
+              className="btn btn-sm md-goal-btn"
+              disabled={busy}
+              onClick={onGoal}
+              title="Doelpunt registreren"
+            >
+              ⚽
             </button>
-            {ps.onField && (
-              <button className="btn btn-outline btn-sm" onClick={onSub} disabled={busy} title="Vervangen">↔</button>
-            )}
-          </>
-        )}
+          )}
+          {goalCount > 0 && lastGoal && (
+            <button
+              className="btn btn-ghost btn-sm md-undo-btn"
+              disabled={busy}
+              onClick={() => onUndoGoal(lastGoal.id, lastGoal.periodNumber)}
+              title="Laatste doelpunt ongedaan maken"
+            >
+              ↩
+            </button>
+          )}
+          {(isPlaying || !ps.onField) && (
+            <>
+              <button className={`btn btn-sm ${ps.onField ? 'btn-danger' : 'btn-ghost'}`}
+                disabled={busy} onClick={onToggle}
+                title={ps.onField ? 'Haal van veld' : 'Breng op veld'}>
+                {busy ? '…' : ps.onField ? '⏸' : '▶'}
+              </button>
+              {ps.onField && (
+                <button className="btn btn-outline btn-sm" onClick={onSub} disabled={busy} title="Vervangen">↔</button>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

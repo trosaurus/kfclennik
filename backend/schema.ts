@@ -22,6 +22,7 @@ export const lists: Lists = {
         defaultValue: 'trainer',
       }),
       team: relationship({ ref: 'Team.trainers', many: false }),
+      trainings: relationship({ ref: 'Training.trainer', many: true }),
     },
     ui: { labelField: 'name' },
   }),
@@ -57,6 +58,7 @@ export const lists: Lists = {
       trainers: relationship({ ref: 'Trainer.team', many: true }),
       players: relationship({ ref: 'Player.team', many: true }),
       matches: relationship({ ref: 'Match.team', many: true }),
+      trainings: relationship({ ref: 'Training.team', many: true }),
     },
     ui: { labelField: 'name' },
   }),
@@ -243,5 +245,98 @@ export const lists: Lists = {
       createdAt: timestamp({ defaultValue: { kind: 'now' } }),
     },
     ui: { labelField: 'score' },
+  }),
+
+  // ── Training (voorbereide trainingssessie — velden volgen Template_training_KFC) ──
+  Training: list({
+    access: allowAll,
+    fields: {
+      trainer:  relationship({ ref: 'Trainer.trainings', many: false }),   // maker, voor attributie
+      team:     relationship({ ref: 'Team.trainings',    many: false }),
+      date:     timestamp({ validation: { isRequired: true } }),
+      titel:    text({ defaultValue: '' }),
+      duurMinuten:   integer({ defaultValue: 90 }),
+      aantalSpelers: text({ defaultValue: '' }),                // vrije tekst, bv. "10-14"
+      status: select({
+        defaultValue: 'concept',
+        options: [
+          { label: 'Concept',    value: 'concept' },
+          { label: 'Klaar',      value: 'klaar' },
+          { label: 'Afgewerkt',  value: 'afgewerkt' },
+        ],
+      }),
+      createdAt: timestamp({ defaultValue: { kind: 'now' } }),
+
+      // ── Kop (template pagina 2 — bewust leeg standaard) ──
+      coachNaam:            text({ defaultValue: '' }),
+      tijdstip:             text({ defaultValue: '' }),
+      leeftijdscategorie:   text({ defaultValue: '' }),
+      niveau:               text({ defaultValue: '' }),
+
+      // ── "LEREN" (template pagina 2) ──
+      hoofdmoment:          text({ defaultValue: '' }),
+      spelfase:             text({ defaultValue: '' }),
+      basisvaardigheid:     text({ defaultValue: '' }),
+      speluitdagingWie:      text({ defaultValue: '' }),
+      speluitdagingWat:      text({ defaultValue: '' }),
+      speluitdagingWaar:     text({ defaultValue: '' }),
+      speluitdagingWanneer:  text({ defaultValue: '' }),
+      coachingswoorden:     text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+      materiaal:            text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+
+      // ── "ACTIEF, FUN & INDIVIDUELE AANDACHT" (template pagina 2) ──
+      actiefAanpak:          text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+      funAanpak:             text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+      individueleAandacht:   text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+
+      // ── Jaarplan-koppeling (extra t.o.v. het template — automatische weekthema-invulling) ──
+      teamprincipe:  text({ defaultValue: '' }),
+      spelprincipe:  text({ defaultValue: '' }),
+      focusPunten:   text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+      jaarplanLabel: text({ defaultValue: '' }),                // bv. "Cyclus 3 · Week 2 · Balbezit"
+
+      // ── "REFLECTIE • 360° EVALUATIE NA ELKE TRAINING" (template pagina 6) ──
+      evalBehouden:            text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+      evalWijzigen:            text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+      evalWarenActief:         text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+      evalHaddenFun:           text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+      evalBijgeleerd:          text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+      evalIndividueleAandacht: text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+
+      exercises: relationship({ ref: 'Exercise.training', many: true }),
+    },
+    ui: { labelField: 'titel' },
+  }),
+
+  // ── Exercise (oefening binnen een training — velden volgen template pagina 3-4) ──
+  Exercise: list({
+    access: allowAll,
+    fields: {
+      training: relationship({ ref: 'Training.exercises', many: false }),
+      order:    integer({ defaultValue: 0 }),
+      fase: select({
+        validation: { isRequired: true },
+        options: [
+          { label: 'Opwarming',     value: 'opwarming' },
+          { label: 'Tussenvorm',    value: 'tussenvorm' },
+          { label: 'Wedstrijdvorm', value: 'wedstrijdvorm' },
+          { label: 'Cooling down',  value: 'cooling_down' },
+        ],
+      }),
+      naam:        text({ validation: { isRequired: true } }),
+      duurMinuten: integer({ defaultValue: 10 }),               // "Organisatie oefening" — duur
+
+      // ── "Organisatie oefening" (2x2-grid op het template) ──
+      organisatieSpelers:     text({ defaultValue: '' }),
+      organisatieAfmetingen:  text({ defaultValue: '' }),
+      organisatieMateriaal:   text({ defaultValue: '' }),
+
+      beschrijving:    text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),  // "Beschrijving oefening"
+      drawingData:     text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),  // "Tekening oefening" — JSON-string (DrawingScene)
+      coachingPunten:  text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),  // "Coaching"
+      maximaalActief:  text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),  // "Maximaal actief"
+      fun:             text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),  // "Fun"
+    },
+    ui: { labelField: 'naam' },
   }),
 };

@@ -8,6 +8,8 @@ type Trainer {
   password: PasswordState
   role: String
   team: Team
+  trainings(where: TrainingWhereInput! = {}, orderBy: [TrainingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TrainingWhereUniqueInput): [Training!]
+  trainingsCount(where: TrainingWhereInput! = {}): Int
 }
 
 type PasswordState {
@@ -28,6 +30,7 @@ input TrainerWhereInput {
   email: StringFilter
   role: StringNullableFilter
   team: TeamWhereInput
+  trainings: TrainingManyRelationFilter
 }
 
 input IDFilter {
@@ -90,6 +93,12 @@ input StringNullableFilter {
   not: StringNullableFilter
 }
 
+input TrainingManyRelationFilter {
+  every: TrainingWhereInput
+  some: TrainingWhereInput
+  none: TrainingWhereInput
+}
+
 input TrainerOrderByInput {
   id: OrderDirection
   name: OrderDirection
@@ -108,12 +117,20 @@ input TrainerUpdateInput {
   password: String
   role: String
   team: TeamRelateToOneForUpdateInput
+  trainings: TrainingRelateToManyForUpdateInput
 }
 
 input TeamRelateToOneForUpdateInput {
   create: TeamCreateInput
   connect: TeamWhereUniqueInput
   disconnect: Boolean
+}
+
+input TrainingRelateToManyForUpdateInput {
+  disconnect: [TrainingWhereUniqueInput!]
+  set: [TrainingWhereUniqueInput!]
+  create: [TrainingCreateInput!]
+  connect: [TrainingWhereUniqueInput!]
 }
 
 input TrainerUpdateArgs {
@@ -127,11 +144,17 @@ input TrainerCreateInput {
   password: String
   role: String
   team: TeamRelateToOneForCreateInput
+  trainings: TrainingRelateToManyForCreateInput
 }
 
 input TeamRelateToOneForCreateInput {
   create: TeamCreateInput
   connect: TeamWhereUniqueInput
+}
+
+input TrainingRelateToManyForCreateInput {
+  create: [TrainingCreateInput!]
+  connect: [TrainingWhereUniqueInput!]
 }
 
 type Team {
@@ -146,6 +169,8 @@ type Team {
   playersCount(where: PlayerWhereInput! = {}): Int
   matches(where: MatchWhereInput! = {}, orderBy: [MatchOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: MatchWhereUniqueInput): [Match!]
   matchesCount(where: MatchWhereInput! = {}): Int
+  trainings(where: TrainingWhereInput! = {}, orderBy: [TrainingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TrainingWhereUniqueInput): [Training!]
+  trainingsCount(where: TrainingWhereInput! = {}): Int
 }
 
 input TeamWhereUniqueInput {
@@ -164,6 +189,7 @@ input TeamWhereInput {
   trainers: TrainerManyRelationFilter
   players: PlayerManyRelationFilter
   matches: MatchManyRelationFilter
+  trainings: TrainingManyRelationFilter
 }
 
 input TrainerManyRelationFilter {
@@ -200,6 +226,7 @@ input TeamUpdateInput {
   trainers: TrainerRelateToManyForUpdateInput
   players: PlayerRelateToManyForUpdateInput
   matches: MatchRelateToManyForUpdateInput
+  trainings: TrainingRelateToManyForUpdateInput
 }
 
 input TrainerRelateToManyForUpdateInput {
@@ -236,6 +263,7 @@ input TeamCreateInput {
   trainers: TrainerRelateToManyForCreateInput
   players: PlayerRelateToManyForCreateInput
   matches: MatchRelateToManyForCreateInput
+  trainings: TrainingRelateToManyForCreateInput
 }
 
 input TrainerRelateToManyForCreateInput {
@@ -951,6 +979,343 @@ input EvaluationCreateInput {
   createdAt: DateTime
 }
 
+type Training {
+  id: ID!
+  trainer: Trainer
+  team: Team
+  date: DateTime
+  titel: String
+  duurMinuten: Int
+  aantalSpelers: String
+  status: String
+  createdAt: DateTime
+  coachNaam: String
+  tijdstip: String
+  leeftijdscategorie: String
+  niveau: String
+  hoofdmoment: String
+  spelfase: String
+  basisvaardigheid: String
+  speluitdagingWie: String
+  speluitdagingWat: String
+  speluitdagingWaar: String
+  speluitdagingWanneer: String
+  coachingswoorden: String
+  materiaal: String
+  actiefAanpak: String
+  funAanpak: String
+  individueleAandacht: String
+  teamprincipe: String
+  spelprincipe: String
+  focusPunten: String
+  jaarplanLabel: String
+  evalBehouden: String
+  evalWijzigen: String
+  evalWarenActief: String
+  evalHaddenFun: String
+  evalBijgeleerd: String
+  evalIndividueleAandacht: String
+  exercises(where: ExerciseWhereInput! = {}, orderBy: [ExerciseOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ExerciseWhereUniqueInput): [Exercise!]
+  exercisesCount(where: ExerciseWhereInput! = {}): Int
+}
+
+input TrainingWhereUniqueInput {
+  id: ID
+}
+
+input TrainingWhereInput {
+  AND: [TrainingWhereInput!]
+  OR: [TrainingWhereInput!]
+  NOT: [TrainingWhereInput!]
+  id: IDFilter
+  trainer: TrainerWhereInput
+  team: TeamWhereInput
+  date: DateTimeFilter
+  titel: StringFilter
+  duurMinuten: IntNullableFilter
+  aantalSpelers: StringFilter
+  status: StringNullableFilter
+  createdAt: DateTimeNullableFilter
+  coachNaam: StringFilter
+  tijdstip: StringFilter
+  leeftijdscategorie: StringFilter
+  niveau: StringFilter
+  hoofdmoment: StringFilter
+  spelfase: StringFilter
+  basisvaardigheid: StringFilter
+  speluitdagingWie: StringFilter
+  speluitdagingWat: StringFilter
+  speluitdagingWaar: StringFilter
+  speluitdagingWanneer: StringFilter
+  coachingswoorden: StringFilter
+  materiaal: StringFilter
+  actiefAanpak: StringFilter
+  funAanpak: StringFilter
+  individueleAandacht: StringFilter
+  teamprincipe: StringFilter
+  spelprincipe: StringFilter
+  focusPunten: StringFilter
+  jaarplanLabel: StringFilter
+  evalBehouden: StringFilter
+  evalWijzigen: StringFilter
+  evalWarenActief: StringFilter
+  evalHaddenFun: StringFilter
+  evalBijgeleerd: StringFilter
+  evalIndividueleAandacht: StringFilter
+  exercises: ExerciseManyRelationFilter
+}
+
+input ExerciseManyRelationFilter {
+  every: ExerciseWhereInput
+  some: ExerciseWhereInput
+  none: ExerciseWhereInput
+}
+
+input TrainingOrderByInput {
+  id: OrderDirection
+  date: OrderDirection
+  titel: OrderDirection
+  duurMinuten: OrderDirection
+  aantalSpelers: OrderDirection
+  status: OrderDirection
+  createdAt: OrderDirection
+  coachNaam: OrderDirection
+  tijdstip: OrderDirection
+  leeftijdscategorie: OrderDirection
+  niveau: OrderDirection
+  hoofdmoment: OrderDirection
+  spelfase: OrderDirection
+  basisvaardigheid: OrderDirection
+  speluitdagingWie: OrderDirection
+  speluitdagingWat: OrderDirection
+  speluitdagingWaar: OrderDirection
+  speluitdagingWanneer: OrderDirection
+  coachingswoorden: OrderDirection
+  materiaal: OrderDirection
+  actiefAanpak: OrderDirection
+  funAanpak: OrderDirection
+  individueleAandacht: OrderDirection
+  teamprincipe: OrderDirection
+  spelprincipe: OrderDirection
+  focusPunten: OrderDirection
+  jaarplanLabel: OrderDirection
+  evalBehouden: OrderDirection
+  evalWijzigen: OrderDirection
+  evalWarenActief: OrderDirection
+  evalHaddenFun: OrderDirection
+  evalBijgeleerd: OrderDirection
+  evalIndividueleAandacht: OrderDirection
+}
+
+input TrainingUpdateInput {
+  trainer: TrainerRelateToOneForUpdateInput
+  team: TeamRelateToOneForUpdateInput
+  date: DateTime
+  titel: String
+  duurMinuten: Int
+  aantalSpelers: String
+  status: String
+  createdAt: DateTime
+  coachNaam: String
+  tijdstip: String
+  leeftijdscategorie: String
+  niveau: String
+  hoofdmoment: String
+  spelfase: String
+  basisvaardigheid: String
+  speluitdagingWie: String
+  speluitdagingWat: String
+  speluitdagingWaar: String
+  speluitdagingWanneer: String
+  coachingswoorden: String
+  materiaal: String
+  actiefAanpak: String
+  funAanpak: String
+  individueleAandacht: String
+  teamprincipe: String
+  spelprincipe: String
+  focusPunten: String
+  jaarplanLabel: String
+  evalBehouden: String
+  evalWijzigen: String
+  evalWarenActief: String
+  evalHaddenFun: String
+  evalBijgeleerd: String
+  evalIndividueleAandacht: String
+  exercises: ExerciseRelateToManyForUpdateInput
+}
+
+input TrainerRelateToOneForUpdateInput {
+  create: TrainerCreateInput
+  connect: TrainerWhereUniqueInput
+  disconnect: Boolean
+}
+
+input ExerciseRelateToManyForUpdateInput {
+  disconnect: [ExerciseWhereUniqueInput!]
+  set: [ExerciseWhereUniqueInput!]
+  create: [ExerciseCreateInput!]
+  connect: [ExerciseWhereUniqueInput!]
+}
+
+input TrainingUpdateArgs {
+  where: TrainingWhereUniqueInput!
+  data: TrainingUpdateInput!
+}
+
+input TrainingCreateInput {
+  trainer: TrainerRelateToOneForCreateInput
+  team: TeamRelateToOneForCreateInput
+  date: DateTime
+  titel: String
+  duurMinuten: Int
+  aantalSpelers: String
+  status: String
+  createdAt: DateTime
+  coachNaam: String
+  tijdstip: String
+  leeftijdscategorie: String
+  niveau: String
+  hoofdmoment: String
+  spelfase: String
+  basisvaardigheid: String
+  speluitdagingWie: String
+  speluitdagingWat: String
+  speluitdagingWaar: String
+  speluitdagingWanneer: String
+  coachingswoorden: String
+  materiaal: String
+  actiefAanpak: String
+  funAanpak: String
+  individueleAandacht: String
+  teamprincipe: String
+  spelprincipe: String
+  focusPunten: String
+  jaarplanLabel: String
+  evalBehouden: String
+  evalWijzigen: String
+  evalWarenActief: String
+  evalHaddenFun: String
+  evalBijgeleerd: String
+  evalIndividueleAandacht: String
+  exercises: ExerciseRelateToManyForCreateInput
+}
+
+input TrainerRelateToOneForCreateInput {
+  create: TrainerCreateInput
+  connect: TrainerWhereUniqueInput
+}
+
+input ExerciseRelateToManyForCreateInput {
+  create: [ExerciseCreateInput!]
+  connect: [ExerciseWhereUniqueInput!]
+}
+
+type Exercise {
+  id: ID!
+  training: Training
+  order: Int
+  fase: String
+  naam: String
+  duurMinuten: Int
+  organisatieSpelers: String
+  organisatieAfmetingen: String
+  organisatieMateriaal: String
+  beschrijving: String
+  drawingData: String
+  coachingPunten: String
+  maximaalActief: String
+  fun: String
+}
+
+input ExerciseWhereUniqueInput {
+  id: ID
+}
+
+input ExerciseWhereInput {
+  AND: [ExerciseWhereInput!]
+  OR: [ExerciseWhereInput!]
+  NOT: [ExerciseWhereInput!]
+  id: IDFilter
+  training: TrainingWhereInput
+  order: IntNullableFilter
+  fase: StringFilter
+  naam: StringFilter
+  duurMinuten: IntNullableFilter
+  organisatieSpelers: StringFilter
+  organisatieAfmetingen: StringFilter
+  organisatieMateriaal: StringFilter
+  beschrijving: StringFilter
+  drawingData: StringFilter
+  coachingPunten: StringFilter
+  maximaalActief: StringFilter
+  fun: StringFilter
+}
+
+input ExerciseOrderByInput {
+  id: OrderDirection
+  order: OrderDirection
+  fase: OrderDirection
+  naam: OrderDirection
+  duurMinuten: OrderDirection
+  organisatieSpelers: OrderDirection
+  organisatieAfmetingen: OrderDirection
+  organisatieMateriaal: OrderDirection
+  beschrijving: OrderDirection
+  drawingData: OrderDirection
+  coachingPunten: OrderDirection
+  maximaalActief: OrderDirection
+  fun: OrderDirection
+}
+
+input ExerciseUpdateInput {
+  training: TrainingRelateToOneForUpdateInput
+  order: Int
+  fase: String
+  naam: String
+  duurMinuten: Int
+  organisatieSpelers: String
+  organisatieAfmetingen: String
+  organisatieMateriaal: String
+  beschrijving: String
+  drawingData: String
+  coachingPunten: String
+  maximaalActief: String
+  fun: String
+}
+
+input TrainingRelateToOneForUpdateInput {
+  create: TrainingCreateInput
+  connect: TrainingWhereUniqueInput
+  disconnect: Boolean
+}
+
+input ExerciseUpdateArgs {
+  where: ExerciseWhereUniqueInput!
+  data: ExerciseUpdateInput!
+}
+
+input ExerciseCreateInput {
+  training: TrainingRelateToOneForCreateInput
+  order: Int
+  fase: String
+  naam: String
+  duurMinuten: Int
+  organisatieSpelers: String
+  organisatieAfmetingen: String
+  organisatieMateriaal: String
+  beschrijving: String
+  drawingData: String
+  coachingPunten: String
+  maximaalActief: String
+  fun: String
+}
+
+input TrainingRelateToOneForCreateInput {
+  create: TrainingCreateInput
+  connect: TrainingWhereUniqueInput
+}
+
 """
 The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
 """
@@ -1017,6 +1382,18 @@ type Mutation {
   updateEvaluations(data: [EvaluationUpdateArgs!]!): [Evaluation]
   deleteEvaluation(where: EvaluationWhereUniqueInput!): Evaluation
   deleteEvaluations(where: [EvaluationWhereUniqueInput!]!): [Evaluation]
+  createTraining(data: TrainingCreateInput!): Training
+  createTrainings(data: [TrainingCreateInput!]!): [Training]
+  updateTraining(where: TrainingWhereUniqueInput!, data: TrainingUpdateInput!): Training
+  updateTrainings(data: [TrainingUpdateArgs!]!): [Training]
+  deleteTraining(where: TrainingWhereUniqueInput!): Training
+  deleteTrainings(where: [TrainingWhereUniqueInput!]!): [Training]
+  createExercise(data: ExerciseCreateInput!): Exercise
+  createExercises(data: [ExerciseCreateInput!]!): [Exercise]
+  updateExercise(where: ExerciseWhereUniqueInput!, data: ExerciseUpdateInput!): Exercise
+  updateExercises(data: [ExerciseUpdateArgs!]!): [Exercise]
+  deleteExercise(where: ExerciseWhereUniqueInput!): Exercise
+  deleteExercises(where: [ExerciseWhereUniqueInput!]!): [Exercise]
   endSession: Boolean!
   authenticateTrainerWithPassword(email: String!, password: String!): TrainerAuthenticationWithPasswordResult
   createInitialTrainer(data: CreateInitialTrainerInput!): TrainerAuthenticationWithPasswordSuccess!
@@ -1070,6 +1447,12 @@ type Query {
   evaluations(where: EvaluationWhereInput! = {}, orderBy: [EvaluationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: EvaluationWhereUniqueInput): [Evaluation!]
   evaluation(where: EvaluationWhereUniqueInput!): Evaluation
   evaluationsCount(where: EvaluationWhereInput! = {}): Int
+  trainings(where: TrainingWhereInput! = {}, orderBy: [TrainingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TrainingWhereUniqueInput): [Training!]
+  training(where: TrainingWhereUniqueInput!): Training
+  trainingsCount(where: TrainingWhereInput! = {}): Int
+  exercises(where: ExerciseWhereInput! = {}, orderBy: [ExerciseOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ExerciseWhereUniqueInput): [Exercise!]
+  exercise(where: ExerciseWhereUniqueInput!): Exercise
+  exercisesCount(where: ExerciseWhereInput! = {}): Int
   keystone: KeystoneMeta!
   authenticatedItem: AuthenticatedItem
 }

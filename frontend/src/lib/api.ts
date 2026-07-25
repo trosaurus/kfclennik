@@ -704,6 +704,7 @@ export interface SeasonPlayerStats {
   totalGoals: number;        // doelpunten heel seizoen
   periodBreakdown: Record<number, number>; // period 1-4 → seconds
   goalsByPeriod: Record<number, number>;   // period 1-4 → goals
+  positionBreakdown: Record<string, number>; // fieldPosition key ('K','9',...) → seconds
   matchBreakdown: Array<{
     matchId: string;
     opponent: string;
@@ -771,6 +772,7 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
     let matchCount = 0;
     const periodBreakdown: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
     const goalsByPeriod: Record<number, number>   = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    const positionBreakdown: Record<string, number> = {};
     const matchBreakdown: SeasonPlayerStats['matchBreakdown'] = [];
 
     for (const m of matches) {
@@ -794,6 +796,9 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
         const p = s.period ?? 1;
         periods[p] = (periods[p] || 0) + (s.durationSeconds || 0);
         periodBreakdown[p] = (periodBreakdown[p] || 0) + (s.durationSeconds || 0);
+        if (s.fieldPosition) {
+          positionBreakdown[s.fieldPosition] = (positionBreakdown[s.fieldPosition] || 0) + (s.durationSeconds || 0);
+        }
       }
       for (const g of matchGoalsList) {
         const p = g.periodNumber ?? 1;
@@ -817,7 +822,7 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
     }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     if (totalSeconds > 0 || totalGoals > 0 || evaluations.length > 0) {
-      statsMap.set(player.id, { player, totalSeconds, matchCount, totalGoals, periodBreakdown, goalsByPeriod, matchBreakdown, evaluations });
+      statsMap.set(player.id, { player, totalSeconds, matchCount, totalGoals, periodBreakdown, goalsByPeriod, positionBreakdown, matchBreakdown, evaluations });
     }
   }
 
@@ -965,6 +970,274 @@ export async function importMatchesCSV(
   return { rows: created, errors };
 }
 
+// ── Volledige data-export / import (backup & restore) ─────────────────────────
+
+const FULL_TAKE = 20000;
+
+export interface FullDataExport {
+  version: 1;
+  exportedAt: string;
+  teams: Array<{ id: string; name: string; category: string; club: string; active: string }>;
+  weekThemes: Array<{ id: string; title: string; category: string; description: string; active: string; createdAt: string | null }>;
+  trainers: Array<{ id: string; name: string; email: string; role: string; teamId: string | null }>;
+  players: Array<{ id: string; name: string; number: number | null; position: string | null; active: string; teamId: string | null }>;
+  matches: Array<{
+    id: string; opponent: string; date: string; location: string; status: string;
+    currentPeriod: number; periodStatus: string; scoreHome: number; scoreAway: number;
+    matchStartTime: string | null; teamId: string | null; weekThemeId: string | null;
+  }>;
+  periods: Array<{ id: string; matchId: string | null; periodNumber: number; scoreHome: number; scoreAway: number; startTime: string | null; endTime: string | null; durationSeconds: number }>;
+  goals: Array<{ id: string; playerId: string | null; matchId: string | null; periodNumber: number; scoredAt: string | null }>;
+  attendances: Array<{ id: string; playerId: string | null; matchId: string | null; present: string; selected: string }>;
+  playTimeSessions: Array<{ id: string; attendanceId: string | null; period: number; fieldPosition: string | null; startTime: string | null; endTime: string | null; durationSeconds: number; active: string }>;
+  evaluations: Array<{ id: string; playerId: string | null; matchId: string | null; themeId: string | null; score: number; createdAt: string | null }>;
+}
+
+export async function exportAllData(): Promise<FullDataExport> {
+  const data = await gql(`query {
+    teams(take: ${FULL_TAKE}) { id name category club active }
+    weekThemes(take: ${FULL_TAKE}) { id title category description active createdAt }
+    trainers(take: ${FULL_TAKE}) { id name email role team { id } }
+    players(take: ${FULL_TAKE}) { id name number position active team { id } }
+    matches(take: ${FULL_TAKE}) {
+      id opponent date location status currentPeriod periodStatus scoreHome scoreAway matchStartTime
+      team { id } weekTheme { id }
+    }
+    periods(take: ${FULL_TAKE}) { id periodNumber scoreHome scoreAway startTime endTime durationSeconds match { id } }
+    goals(take: ${FULL_TAKE}) { id periodNumber scoredAt player { id } match { id } }
+    attendances(take: ${FULL_TAKE}) { id present selected player { id } match { id } }
+    playTimeSessions(take: ${FULL_TAKE}) { id period fieldPosition startTime endTime durationSeconds active attendance { id } }
+    evaluations(take: ${FULL_TAKE}) { id score createdAt player { id } match { id } theme { id } }
+  }`);
+
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    teams: data.teams,
+    weekThemes: data.weekThemes,
+    trainers: data.trainers.map((t: any) => ({ id: t.id, name: t.name, email: t.email, role: t.role, teamId: t.team?.id ?? null })),
+    players: data.players.map((p: any) => ({ id: p.id, name: p.name, number: p.number, position: p.position, active: p.active, teamId: p.team?.id ?? null })),
+    matches: data.matches.map((m: any) => ({
+      id: m.id, opponent: m.opponent, date: m.date, location: m.location, status: m.status,
+      currentPeriod: m.currentPeriod, periodStatus: m.periodStatus, scoreHome: m.scoreHome, scoreAway: m.scoreAway,
+      matchStartTime: m.matchStartTime, teamId: m.team?.id ?? null, weekThemeId: m.weekTheme?.id ?? null,
+    })),
+    periods: data.periods.map((p: any) => ({
+      id: p.id, matchId: p.match?.id ?? null, periodNumber: p.periodNumber, scoreHome: p.scoreHome, scoreAway: p.scoreAway,
+      startTime: p.startTime, endTime: p.endTime, durationSeconds: p.durationSeconds,
+    })),
+    goals: data.goals.map((g: any) => ({ id: g.id, playerId: g.player?.id ?? null, matchId: g.match?.id ?? null, periodNumber: g.periodNumber, scoredAt: g.scoredAt })),
+    attendances: data.attendances.map((a: any) => ({ id: a.id, playerId: a.player?.id ?? null, matchId: a.match?.id ?? null, present: a.present, selected: a.selected })),
+    playTimeSessions: data.playTimeSessions.map((s: any) => ({
+      id: s.id, attendanceId: s.attendance?.id ?? null, period: s.period, fieldPosition: s.fieldPosition,
+      startTime: s.startTime, endTime: s.endTime, durationSeconds: s.durationSeconds, active: s.active,
+    })),
+    evaluations: data.evaluations.map((e: any) => ({
+      id: e.id, playerId: e.player?.id ?? null, matchId: e.match?.id ?? null, themeId: e.theme?.id ?? null,
+      score: e.score, createdAt: e.createdAt,
+    })),
+  };
+}
+
+export function downloadJSON(data: unknown, filename: string): void {
+  const content = JSON.stringify(data, null, 2);
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+export function countFullDataExport(data: FullDataExport): Record<string, number> {
+  return {
+    teams: data.teams.length, weekThemes: data.weekThemes.length, trainers: data.trainers.length,
+    players: data.players.length, matches: data.matches.length, periods: data.periods.length,
+    goals: data.goals.length, attendances: data.attendances.length,
+    playTimeSessions: data.playTimeSessions.length, evaluations: data.evaluations.length,
+  };
+}
+
+export async function parseFullDataExportFile(file: File): Promise<FullDataExport> {
+  const text = await file.text();
+  let json: any;
+  try { json = JSON.parse(text); } catch { throw new Error('Ongeldig JSON-bestand'); }
+  const requiredArrays = ['teams', 'weekThemes', 'trainers', 'players', 'matches', 'periods', 'goals', 'attendances', 'playTimeSessions', 'evaluations'];
+  for (const key of requiredArrays) {
+    if (!Array.isArray(json[key])) throw new Error(`Ontbrekend of ongeldig veld "${key}" in het bestand`);
+  }
+  return json as FullDataExport;
+}
+
+// Deletes all sport data (teams, players, matches and everything linked to a match/player).
+// Trainer accounts are never touched here, so nobody gets locked out of the app.
+async function deleteAllOf(listQueryField: string, deleteManyMutation: string): Promise<number> {
+  const data = await gql(`query { ${listQueryField}(take: ${FULL_TAKE}) { id } }`);
+  const items: Array<{ id: string }> = data[listQueryField];
+  if (items.length === 0) return 0;
+  const where = items.map(i => `{ id: "${i.id}" }`).join(', ');
+  await gql(`mutation { ${deleteManyMutation}(where: [${where}]) { id } }`);
+  return items.length;
+}
+
+export async function wipeAllSportData(): Promise<Record<string, number>> {
+  const counts: Record<string, number> = {};
+  counts.evaluations      = await deleteAllOf('evaluations', 'deleteEvaluations');
+  counts.playTimeSessions = await deleteAllOf('playTimeSessions', 'deletePlayTimeSessions');
+  counts.goals            = await deleteAllOf('goals', 'deleteGoals');
+  counts.attendances      = await deleteAllOf('attendances', 'deleteAttendances');
+  counts.periods          = await deleteAllOf('periods', 'deletePeriods');
+  counts.matches          = await deleteAllOf('matches', 'deleteMatches');
+  counts.players          = await deleteAllOf('players', 'deletePlayers');
+  counts.weekThemes       = await deleteAllOf('weekThemes', 'deleteWeekThemes');
+  counts.teams            = await deleteAllOf('teams', 'deleteTeams');
+  return counts;
+}
+
+export interface ImportProgress { label: string; done: number; total: number; }
+
+export interface ImportResult {
+  counts: Record<string, number>;
+  errors: string[];
+  trainerCredentials: Array<{ email: string; tempPassword: string }>;
+}
+
+function randomTempPassword(): string {
+  const bytes = new Uint8Array(9);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(36).padStart(2, '0')).join('').slice(0, 12);
+}
+
+export async function importAllData(
+  data: FullDataExport,
+  onProgress?: (p: ImportProgress) => void
+): Promise<ImportResult> {
+  const errors: string[] = [];
+  const trainerCredentials: Array<{ email: string; tempPassword: string }> = [];
+
+  const teamMap       = new Map<string, string>();
+  const themeMap       = new Map<string, string>();
+  const playerMap      = new Map<string, string>();
+  const matchMap       = new Map<string, string>();
+  const attendanceMap  = new Map<string, string>();
+
+  async function step<T>(label: string, items: T[], fn: (item: T) => Promise<void>): Promise<number> {
+    let success = 0;
+    for (let i = 0; i < items.length; i++) {
+      try { await fn(items[i]); success++; }
+      catch (e) { errors.push(`${label} #${i + 1}: ${e instanceof Error ? e.message : 'onbekende fout'}`); }
+      onProgress?.({ label, done: i + 1, total: items.length });
+    }
+    return success;
+  }
+
+  const counts: Record<string, number> = {};
+
+  counts.teams = await step('Ploegen', data.teams, async t => {
+    const created = await gql(
+      `mutation($data: TeamCreateInput!) { createTeam(data: $data) { id } }`,
+      { data: { name: t.name, category: t.category, club: t.club, active: t.active } }
+    );
+    teamMap.set(t.id, created.createTeam.id);
+  });
+
+  counts.weekThemes = await step("Weekthema's", data.weekThemes, async wt => {
+    const input: Record<string, unknown> = { title: wt.title, category: wt.category, description: wt.description, active: wt.active };
+    if (wt.createdAt) input.createdAt = wt.createdAt;
+    const created = await gql(`mutation($data: WeekThemeCreateInput!) { createWeekTheme(data: $data) { id } }`, { data: input });
+    themeMap.set(wt.id, created.createWeekTheme.id);
+  });
+
+  counts.trainers = await step('Trainers', data.trainers, async tr => {
+    const tempPassword = randomTempPassword();
+    const teamId = tr.teamId ? teamMap.get(tr.teamId) : undefined;
+    const input: Record<string, unknown> = { name: tr.name, email: tr.email, password: tempPassword, role: tr.role };
+    if (teamId) input.team = { connect: { id: teamId } };
+    await gql(`mutation($data: TrainerCreateInput!) { createTrainer(data: $data) { id } }`, { data: input });
+    trainerCredentials.push({ email: tr.email, tempPassword });
+  });
+
+  counts.players = await step('Spelers', data.players, async p => {
+    const teamId = p.teamId ? teamMap.get(p.teamId) : undefined;
+    const input: Record<string, unknown> = { name: p.name, active: p.active };
+    if (p.number != null) input.number = p.number;
+    if (p.position) input.position = p.position;
+    if (teamId) input.team = { connect: { id: teamId } };
+    const created = await gql(`mutation($data: PlayerCreateInput!) { createPlayer(data: $data) { id } }`, { data: input });
+    playerMap.set(p.id, created.createPlayer.id);
+  });
+
+  counts.matches = await step('Wedstrijden', data.matches, async m => {
+    const teamId = m.teamId ? teamMap.get(m.teamId) : undefined;
+    const themeId = m.weekThemeId ? themeMap.get(m.weekThemeId) : undefined;
+    const input: Record<string, unknown> = {
+      opponent: m.opponent, date: m.date, location: m.location, status: m.status,
+      currentPeriod: m.currentPeriod, periodStatus: m.periodStatus, scoreHome: m.scoreHome, scoreAway: m.scoreAway,
+    };
+    if (m.matchStartTime) input.matchStartTime = m.matchStartTime;
+    if (teamId) input.team = { connect: { id: teamId } };
+    if (themeId) input.weekTheme = { connect: { id: themeId } };
+    const created = await gql(`mutation($data: MatchCreateInput!) { createMatch(data: $data) { id } }`, { data: input });
+    matchMap.set(m.id, created.createMatch.id);
+  });
+
+  counts.periods = await step('Periodes', data.periods, async p => {
+    const matchId = p.matchId ? matchMap.get(p.matchId) : undefined;
+    if (!matchId) throw new Error('bijhorende wedstrijd ontbreekt');
+    const input: Record<string, unknown> = {
+      match: { connect: { id: matchId } }, periodNumber: p.periodNumber,
+      scoreHome: p.scoreHome, scoreAway: p.scoreAway, durationSeconds: p.durationSeconds,
+    };
+    if (p.startTime) input.startTime = p.startTime;
+    if (p.endTime) input.endTime = p.endTime;
+    await gql(`mutation($data: PeriodCreateInput!) { createPeriod(data: $data) { id } }`, { data: input });
+  });
+
+  counts.goals = await step('Doelpunten', data.goals, async g => {
+    const matchId = g.matchId ? matchMap.get(g.matchId) : undefined;
+    if (!matchId) throw new Error('bijhorende wedstrijd ontbreekt');
+    const input: Record<string, unknown> = { match: { connect: { id: matchId } }, periodNumber: g.periodNumber };
+    if (g.scoredAt) input.scoredAt = g.scoredAt;
+    const playerId = g.playerId ? playerMap.get(g.playerId) : undefined;
+    if (playerId) input.player = { connect: { id: playerId } };
+    await gql(`mutation($data: GoalCreateInput!) { createGoal(data: $data) { id } }`, { data: input });
+  });
+
+  counts.attendances = await step('Aanwezigheden', data.attendances, async a => {
+    const matchId = a.matchId ? matchMap.get(a.matchId) : undefined;
+    if (!matchId) throw new Error('bijhorende wedstrijd ontbreekt');
+    const input: Record<string, unknown> = { match: { connect: { id: matchId } }, present: a.present, selected: a.selected };
+    const playerId = a.playerId ? playerMap.get(a.playerId) : undefined;
+    if (playerId) input.player = { connect: { id: playerId } };
+    const created = await gql(`mutation($data: AttendanceCreateInput!) { createAttendance(data: $data) { id } }`, { data: input });
+    attendanceMap.set(a.id, created.createAttendance.id);
+  });
+
+  counts.playTimeSessions = await step('Speeltijdsessies', data.playTimeSessions, async s => {
+    const attendanceId = s.attendanceId ? attendanceMap.get(s.attendanceId) : undefined;
+    if (!attendanceId) throw new Error('bijhorende aanwezigheid ontbreekt');
+    const input: Record<string, unknown> = {
+      attendance: { connect: { id: attendanceId } }, period: s.period, durationSeconds: s.durationSeconds, active: s.active,
+    };
+    if (s.fieldPosition) input.fieldPosition = s.fieldPosition;
+    if (s.startTime) input.startTime = s.startTime;
+    if (s.endTime) input.endTime = s.endTime;
+    await gql(`mutation($data: PlayTimeSessionCreateInput!) { createPlayTimeSession(data: $data) { id } }`, { data: input });
+  });
+
+  counts.evaluations = await step('Evaluaties', data.evaluations, async e => {
+    const matchId = e.matchId ? matchMap.get(e.matchId) : undefined;
+    const themeId = e.themeId ? themeMap.get(e.themeId) : undefined;
+    if (!matchId || !themeId) throw new Error('bijhorende wedstrijd of thema ontbreekt');
+    const input: Record<string, unknown> = { match: { connect: { id: matchId } }, theme: { connect: { id: themeId } }, score: e.score };
+    if (e.createdAt) input.createdAt = e.createdAt;
+    const playerId = e.playerId ? playerMap.get(e.playerId) : undefined;
+    if (playerId) input.player = { connect: { id: playerId } };
+    await gql(`mutation($data: EvaluationCreateInput!) { createEvaluation(data: $data) { id } }`, { data: input });
+  });
+
+  return { counts, errors, trainerCredentials };
+}
+
 function parseCSV(text: string): string[][] {
   // Handles quoted fields with semicolon or comma delimiter
   const lines = text.replace(/\r/g, '').split('\n');
@@ -1006,4 +1279,238 @@ export function setPeriodLineup(matchId: string, period: number, playerIds: stri
 
 export function clearPeriodLineup(matchId: string, period: number): void {
   try { localStorage.removeItem(`lineup:${matchId}:${period}`); } catch { /* ignore */ }
+}
+
+// ── Trainingen (voorbereiding — velden volgen Template_training_KFC) ──────────
+
+export type ExerciseFase = 'opwarming' | 'tussenvorm' | 'wedstrijdvorm' | 'cooling_down';
+
+export const EXERCISE_FASE_LABELS: Record<ExerciseFase, string> = {
+  opwarming: 'Opwarming', tussenvorm: 'Tussenvorm', wedstrijdvorm: 'Wedstrijdvorm', cooling_down: 'Cooling down',
+};
+
+export interface Exercise {
+  id: string;
+  order: number;
+  fase: ExerciseFase;
+  naam: string;
+  duurMinuten: number;
+  organisatieSpelers: string;
+  organisatieAfmetingen: string;
+  organisatieMateriaal: string;
+  beschrijving: string;
+  drawingData: string;   // JSON-serialized DrawingScene, or ''
+  coachingPunten: string;
+  maximaalActief: string;
+  fun: string;
+}
+
+export interface Training {
+  id: string;
+  trainer: { id: string; name: string } | null;
+  team: { id: string } | null;
+  date: string;
+  titel: string;
+  duurMinuten: number;
+  aantalSpelers: string;
+  status: string;   // concept | klaar | afgewerkt
+  createdAt: string;
+
+  // Kop
+  coachNaam: string;
+  tijdstip: string;
+  leeftijdscategorie: string;
+  niveau: string;
+
+  // "Leren"
+  hoofdmoment: string;
+  spelfase: string;
+  basisvaardigheid: string;
+  speluitdagingWie: string;
+  speluitdagingWat: string;
+  speluitdagingWaar: string;
+  speluitdagingWanneer: string;
+  coachingswoorden: string;
+  materiaal: string;
+
+  // "Actief, fun & individuele aandacht"
+  actiefAanpak: string;
+  funAanpak: string;
+  individueleAandacht: string;
+
+  // Jaarplan-koppeling (extra t.o.v. het template)
+  teamprincipe: string;
+  spelprincipe: string;
+  focusPunten: string;
+  jaarplanLabel: string;
+
+  // "Reflectie · 360° evaluatie"
+  evalBehouden: string;
+  evalWijzigen: string;
+  evalWarenActief: string;
+  evalHaddenFun: string;
+  evalBijgeleerd: string;
+  evalIndividueleAandacht: string;
+
+  exercises: Exercise[];
+}
+
+const TRAINING_FIELDS = `
+  id trainer { id name } team { id } date titel duurMinuten aantalSpelers status createdAt
+  coachNaam tijdstip leeftijdscategorie niveau
+  hoofdmoment spelfase basisvaardigheid
+  speluitdagingWie speluitdagingWat speluitdagingWaar speluitdagingWanneer
+  coachingswoorden materiaal
+  actiefAanpak funAanpak individueleAandacht
+  teamprincipe spelprincipe focusPunten jaarplanLabel
+  evalBehouden evalWijzigen evalWarenActief evalHaddenFun evalBijgeleerd evalIndividueleAandacht
+`;
+const EXERCISE_FIELDS = `
+  id order fase naam duurMinuten
+  organisatieSpelers organisatieAfmetingen organisatieMateriaal
+  beschrijving drawingData coachingPunten maximaalActief fun
+`;
+
+export async function getTrainings(teamId?: string): Promise<Training[]> {
+  const where = teamId ? `, where: { team: { id: { equals: "${teamId}" } } }` : '';
+  const data = await gql(`query {
+    trainings(take: 500, orderBy: { date: desc }${where}) { ${TRAINING_FIELDS} exercises { ${EXERCISE_FIELDS} } }
+  }`);
+  return (data.trainings as Training[]).map(t => ({
+    ...t, exercises: [...t.exercises].sort((a, b) => a.order - b.order),
+  }));
+}
+
+export async function getTraining(id: string): Promise<Training | null> {
+  const data = await gql(
+    `query GetTraining($id: ID!) { training(where: { id: $id }) { ${TRAINING_FIELDS} exercises { ${EXERCISE_FIELDS} } } }`,
+    { id }
+  );
+  const t = data.training as Training | null;
+  if (!t) return null;
+  return { ...t, exercises: [...t.exercises].sort((a, b) => a.order - b.order) };
+}
+
+export async function createTraining(input: {
+  date: string; trainerId?: string; teamId?: string; titel?: string;
+}): Promise<Training> {
+  const trainingData: Record<string, unknown> = { date: input.date, titel: input.titel ?? '' };
+  if (input.trainerId) trainingData.trainer = { connect: { id: input.trainerId } };
+  if (input.teamId) trainingData.team = { connect: { id: input.teamId } };
+  const data = await gql(
+    `mutation CreateTraining($data: TrainingCreateInput!) { createTraining(data: $data) { ${TRAINING_FIELDS} } }`,
+    { data: trainingData }
+  );
+  return { ...data.createTraining, exercises: [] };
+}
+
+export async function updateTraining(id: string, input: Record<string, unknown>): Promise<Training> {
+  const data = await gql(
+    `mutation UpdateTraining($id: ID!, $data: TrainingUpdateInput!) { updateTraining(where: { id: $id }, data: $data) { ${TRAINING_FIELDS} } }`,
+    { id, data: input }
+  );
+  return data.updateTraining;
+}
+
+export async function deleteTraining(id: string): Promise<void> {
+  await gql(`mutation { deleteTraining(where: { id: "${id}" }) { id } }`);
+}
+
+export async function createExercise(trainingId: string, input: {
+  fase: ExerciseFase; naam: string; duurMinuten: number; order: number;
+  organisatieSpelers?: string; organisatieAfmetingen?: string; organisatieMateriaal?: string;
+  beschrijving?: string; coachingPunten?: string; maximaalActief?: string; fun?: string; drawingData?: string;
+}): Promise<Exercise> {
+  const data = await gql(
+    `mutation CreateExercise($data: ExerciseCreateInput!) { createExercise(data: $data) { ${EXERCISE_FIELDS} } }`,
+    { data: {
+        training: { connect: { id: trainingId } },
+        fase: input.fase, naam: input.naam, duurMinuten: input.duurMinuten, order: input.order,
+        organisatieSpelers: input.organisatieSpelers ?? '', organisatieAfmetingen: input.organisatieAfmetingen ?? '',
+        organisatieMateriaal: input.organisatieMateriaal ?? '', beschrijving: input.beschrijving ?? '',
+        coachingPunten: input.coachingPunten ?? '', maximaalActief: input.maximaalActief ?? '', fun: input.fun ?? '',
+        drawingData: input.drawingData ?? '',
+    }}
+  );
+  return data.createExercise;
+}
+
+export async function updateExercise(id: string, input: Record<string, unknown>): Promise<Exercise> {
+  const data = await gql(
+    `mutation UpdateExercise($id: ID!, $data: ExerciseUpdateInput!) { updateExercise(where: { id: $id }, data: $data) { ${EXERCISE_FIELDS} } }`,
+    { id, data: input }
+  );
+  return data.updateExercise;
+}
+
+export async function deleteExercise(id: string): Promise<void> {
+  await gql(`mutation { deleteExercise(where: { id: "${id}" }) { id } }`);
+}
+
+export async function reorderExercises(updates: Array<{ id: string; order: number }>): Promise<void> {
+  if (updates.length === 0) return;
+  await gql(
+    `mutation ReorderExercises($data: [ExerciseUpdateArgs!]!) { updateExercises(data: $data) { id } }`,
+    { data: updates.map(u => ({ where: { id: u.id }, data: { order: u.order } })) }
+  );
+}
+
+/** Percentage van de totale trainingstijd dat wedstrijdvorm is (Voetbal Vlaanderen: minimum 50%). */
+export function wedstrijdvormPercentage(exercises: Exercise[]): number {
+  const total = exercises.reduce((a, e) => a + (e.duurMinuten || 0), 0);
+  if (total === 0) return 0;
+  const wedstrijdvorm = exercises.filter(e => e.fase === 'wedstrijdvorm').reduce((a, e) => a + (e.duurMinuten || 0), 0);
+  return (wedstrijdvorm / total) * 100;
+}
+
+// ── Tekentool: scene-model voor veldoefeningen ─────────────────────────────────
+// "Kies je tekenfiguur" (template pagina 7): spelers/pionnen in meerdere kleuren,
+// jokers, ladder, vlag, en 3 pijltypes (pass/dribbel/loop zonder bal).
+
+export type DrawingElementType =
+  | 'player' | 'cone' | 'joker' | 'goal' | 'ball' | 'ladder' | 'flag'
+  | 'arrow-pass' | 'arrow-dribble' | 'arrow-run' | 'text';
+
+export type PlayerColor = 'red' | 'blue' | 'white' | 'grey';
+export type ConeColor = 'orange' | 'red' | 'green' | 'blue';
+
+export interface DrawingElement {
+  id: string;
+  type: DrawingElementType;
+  x: number; y: number;     // % van viewBox (0-100)
+  x2?: number; y2?: number; // eindpunt, enkel voor pijlen
+  label?: string;           // spelernummer of tekstinhoud
+  color?: string;           // PlayerColor voor 'player', ConeColor voor 'cone'
+}
+
+export const PLAYER_COLORS: { value: PlayerColor; label: string; hex: string }[] = [
+  { value: 'red',   label: 'Rood',  hex: '#CC1A1A' },
+  { value: 'blue',  label: 'Blauw', hex: '#2563eb' },
+  { value: 'white', label: 'Wit',   hex: '#f5f5f5' },
+  { value: 'grey',  label: 'Grijs', hex: '#6b7280' },
+];
+export const CONE_COLORS: { value: ConeColor; label: string; hex: string }[] = [
+  { value: 'orange', label: 'Oranje', hex: '#F5A623' },
+  { value: 'red',    label: 'Rood',   hex: '#CC1A1A' },
+  { value: 'green',  label: 'Groen',  hex: '#22c55e' },
+  { value: 'blue',   label: 'Blauw',  hex: '#2563eb' },
+];
+
+export type DrawingBackground = 'grid' | 'half' | 'full';
+
+export interface DrawingScene {
+  background: DrawingBackground;
+  elements: DrawingElement[];
+  /** Data-URI van de originele veldtekening (bv. bij PDF-import) — getoond als
+   * achtergrond i.p.v. het vector-veld, tot de trainer een preset-achtergrond kiest. */
+  backgroundImage?: string;
+}
+
+export function parseDrawingScene(raw: string): DrawingScene {
+  if (!raw) return { background: 'grid', elements: [] };
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.elements)) return parsed as DrawingScene;
+  } catch { /* fall through to default */ }
+  return { background: 'grid', elements: [] };
 }

@@ -15,6 +15,8 @@ export default function Layout() {
     { to: '/spelers',     label: 'Spelers',      icon: '👥' },
     { to: '/wedstrijden', label: 'Wedstrijden',  icon: '📋' },
     { to: '/seizoen',     label: 'Seizoen',      icon: '📈' },
+    { to: '/trainingen',  label: 'Trainingen',   icon: '📝' },
+    { to: '/profiel',     label: 'Profiel',      icon: '👤' },
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: '⚙️' }] : []),
   ];
 
