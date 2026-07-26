@@ -991,6 +991,28 @@ export interface FullDataExport {
   attendances: Array<{ id: string; playerId: string | null; matchId: string | null; present: string; selected: string }>;
   playTimeSessions: Array<{ id: string; attendanceId: string | null; period: number; fieldPosition: string | null; startTime: string | null; endTime: string | null; durationSeconds: number; active: string }>;
   evaluations: Array<{ id: string; playerId: string | null; matchId: string | null; themeId: string | null; score: number; createdAt: string | null }>;
+  trainings: Array<{
+    id: string; trainerId: string | null; teamId: string | null; date: string; titel: string;
+    duurMinuten: number; aantalSpelers: string; status: string; createdAt: string | null;
+    coachNaam: string; tijdstip: string; leeftijdscategorie: string; niveau: string;
+    hoofdmoment: string; spelfase: string; basisvaardigheid: string;
+    speluitdagingWie: string; speluitdagingWat: string; speluitdagingWaar: string; speluitdagingWanneer: string;
+    coachingswoorden: string; materiaal: string;
+    actiefAanpak: string; funAanpak: string; individueleAandacht: string;
+    teamprincipe: string; spelprincipe: string; focusPunten: string; jaarplanLabel: string;
+    evalBehouden: string; evalWijzigen: string; evalWarenActief: string; evalHaddenFun: string; evalBijgeleerd: string; evalIndividueleAandacht: string;
+  }>;
+  exercises: Array<{
+    id: string; trainingId: string | null; order: number; fase: string; naam: string; duurMinuten: number;
+    organisatieSpelers: string; organisatieAfmetingen: string; organisatieMateriaal: string;
+    beschrijving: string; drawingData: string; coachingPunten: string; maximaalActief: string; fun: string;
+  }>;
+  oefeningDatabank: Array<{
+    id: string; naam: string; fase: string; categorie: string | null; doelgroep: string | null; teamprincipe: string;
+    duurMinuten: number; organisatieSpelers: string; organisatieAfmetingen: string; organisatieMateriaal: string;
+    beschrijving: string; drawingData: string; coachingPunten: string; maximaalActief: string; fun: string;
+    createdById: string | null; createdAt: string | null;
+  }>;
 }
 
 export async function exportAllData(): Promise<FullDataExport> {
@@ -1008,6 +1030,29 @@ export async function exportAllData(): Promise<FullDataExport> {
     attendances(take: ${FULL_TAKE}) { id present selected player { id } match { id } }
     playTimeSessions(take: ${FULL_TAKE}) { id period fieldPosition startTime endTime durationSeconds active attendance { id } }
     evaluations(take: ${FULL_TAKE}) { id score createdAt player { id } match { id } theme { id } }
+    trainings(take: ${FULL_TAKE}) {
+      id date titel duurMinuten aantalSpelers status createdAt
+      coachNaam tijdstip leeftijdscategorie niveau
+      hoofdmoment spelfase basisvaardigheid
+      speluitdagingWie speluitdagingWat speluitdagingWaar speluitdagingWanneer
+      coachingswoorden materiaal
+      actiefAanpak funAanpak individueleAandacht
+      teamprincipe spelprincipe focusPunten jaarplanLabel
+      evalBehouden evalWijzigen evalWarenActief evalHaddenFun evalBijgeleerd evalIndividueleAandacht
+      trainer { id } team { id }
+    }
+    exercises(take: ${FULL_TAKE}) {
+      id order fase naam duurMinuten
+      organisatieSpelers organisatieAfmetingen organisatieMateriaal
+      beschrijving drawingData coachingPunten maximaalActief fun
+      training { id }
+    }
+    oefeningDatabanks(take: ${FULL_TAKE}) {
+      id naam fase categorie doelgroep teamprincipe duurMinuten
+      organisatieSpelers organisatieAfmetingen organisatieMateriaal
+      beschrijving drawingData coachingPunten maximaalActief fun
+      createdBy { id } createdAt
+    }
   }`);
 
   return {
@@ -1036,6 +1081,29 @@ export async function exportAllData(): Promise<FullDataExport> {
       id: e.id, playerId: e.player?.id ?? null, matchId: e.match?.id ?? null, themeId: e.theme?.id ?? null,
       score: e.score, createdAt: e.createdAt,
     })),
+    trainings: data.trainings.map((t: any) => ({
+      id: t.id, trainerId: t.trainer?.id ?? null, teamId: t.team?.id ?? null, date: t.date, titel: t.titel,
+      duurMinuten: t.duurMinuten, aantalSpelers: t.aantalSpelers, status: t.status, createdAt: t.createdAt,
+      coachNaam: t.coachNaam, tijdstip: t.tijdstip, leeftijdscategorie: t.leeftijdscategorie, niveau: t.niveau,
+      hoofdmoment: t.hoofdmoment, spelfase: t.spelfase, basisvaardigheid: t.basisvaardigheid,
+      speluitdagingWie: t.speluitdagingWie, speluitdagingWat: t.speluitdagingWat, speluitdagingWaar: t.speluitdagingWaar, speluitdagingWanneer: t.speluitdagingWanneer,
+      coachingswoorden: t.coachingswoorden, materiaal: t.materiaal,
+      actiefAanpak: t.actiefAanpak, funAanpak: t.funAanpak, individueleAandacht: t.individueleAandacht,
+      teamprincipe: t.teamprincipe, spelprincipe: t.spelprincipe, focusPunten: t.focusPunten, jaarplanLabel: t.jaarplanLabel,
+      evalBehouden: t.evalBehouden, evalWijzigen: t.evalWijzigen, evalWarenActief: t.evalWarenActief,
+      evalHaddenFun: t.evalHaddenFun, evalBijgeleerd: t.evalBijgeleerd, evalIndividueleAandacht: t.evalIndividueleAandacht,
+    })),
+    exercises: data.exercises.map((ex: any) => ({
+      id: ex.id, trainingId: ex.training?.id ?? null, order: ex.order, fase: ex.fase, naam: ex.naam, duurMinuten: ex.duurMinuten,
+      organisatieSpelers: ex.organisatieSpelers, organisatieAfmetingen: ex.organisatieAfmetingen, organisatieMateriaal: ex.organisatieMateriaal,
+      beschrijving: ex.beschrijving, drawingData: ex.drawingData, coachingPunten: ex.coachingPunten, maximaalActief: ex.maximaalActief, fun: ex.fun,
+    })),
+    oefeningDatabank: data.oefeningDatabanks.map((o: any) => ({
+      id: o.id, naam: o.naam, fase: o.fase, categorie: o.categorie ?? null, doelgroep: o.doelgroep ?? null, teamprincipe: o.teamprincipe,
+      duurMinuten: o.duurMinuten, organisatieSpelers: o.organisatieSpelers, organisatieAfmetingen: o.organisatieAfmetingen, organisatieMateriaal: o.organisatieMateriaal,
+      beschrijving: o.beschrijving, drawingData: o.drawingData, coachingPunten: o.coachingPunten, maximaalActief: o.maximaalActief, fun: o.fun,
+      createdById: o.createdBy?.id ?? null, createdAt: o.createdAt,
+    })),
   };
 }
 
@@ -1054,6 +1122,7 @@ export function countFullDataExport(data: FullDataExport): Record<string, number
     players: data.players.length, matches: data.matches.length, periods: data.periods.length,
     goals: data.goals.length, attendances: data.attendances.length,
     playTimeSessions: data.playTimeSessions.length, evaluations: data.evaluations.length,
+    trainings: data.trainings.length, exercises: data.exercises.length, oefeningDatabank: data.oefeningDatabank.length,
   };
 }
 
@@ -1064,6 +1133,10 @@ export async function parseFullDataExportFile(file: File): Promise<FullDataExpor
   const requiredArrays = ['teams', 'weekThemes', 'trainers', 'players', 'matches', 'periods', 'goals', 'attendances', 'playTimeSessions', 'evaluations'];
   for (const key of requiredArrays) {
     if (!Array.isArray(json[key])) throw new Error(`Ontbrekend of ongeldig veld "${key}" in het bestand`);
+  }
+  // Later toegevoegd — oudere exports hebben deze velden nog niet, dus optioneel met lege lijst als fallback.
+  for (const key of ['trainings', 'exercises', 'oefeningDatabank']) {
+    if (!Array.isArray(json[key])) json[key] = [];
   }
   return json as FullDataExport;
 }
@@ -1087,6 +1160,9 @@ export async function wipeAllSportData(): Promise<Record<string, number>> {
   counts.attendances      = await deleteAllOf('attendances', 'deleteAttendances');
   counts.periods          = await deleteAllOf('periods', 'deletePeriods');
   counts.matches          = await deleteAllOf('matches', 'deleteMatches');
+  counts.exercises        = await deleteAllOf('exercises', 'deleteExercises');
+  counts.trainings        = await deleteAllOf('trainings', 'deleteTrainings');
+  counts.oefeningDatabank = await deleteAllOf('oefeningDatabanks', 'deleteOefeningDatabanks');
   counts.players          = await deleteAllOf('players', 'deletePlayers');
   counts.weekThemes       = await deleteAllOf('weekThemes', 'deleteWeekThemes');
   counts.teams            = await deleteAllOf('teams', 'deleteTeams');
@@ -1116,9 +1192,11 @@ export async function importAllData(
 
   const teamMap       = new Map<string, string>();
   const themeMap       = new Map<string, string>();
+  const trainerMap     = new Map<string, string>();
   const playerMap      = new Map<string, string>();
   const matchMap       = new Map<string, string>();
   const attendanceMap  = new Map<string, string>();
+  const trainingMap    = new Map<string, string>();
 
   async function step<T>(label: string, items: T[], fn: (item: T) => Promise<void>): Promise<number> {
     let success = 0;
@@ -1152,8 +1230,55 @@ export async function importAllData(
     const teamId = tr.teamId ? teamMap.get(tr.teamId) : undefined;
     const input: Record<string, unknown> = { name: tr.name, email: tr.email, password: tempPassword, role: tr.role };
     if (teamId) input.team = { connect: { id: teamId } };
-    await gql(`mutation($data: TrainerCreateInput!) { createTrainer(data: $data) { id } }`, { data: input });
+    const created = await gql(`mutation($data: TrainerCreateInput!) { createTrainer(data: $data) { id } }`, { data: input });
+    trainerMap.set(tr.id, created.createTrainer.id);
     trainerCredentials.push({ email: tr.email, tempPassword });
+  });
+
+  counts.trainings = await step('Trainingen', data.trainings, async t => {
+    const teamId = t.teamId ? teamMap.get(t.teamId) : undefined;
+    const trainerId = t.trainerId ? trainerMap.get(t.trainerId) : undefined;
+    const input: Record<string, unknown> = {
+      date: t.date, titel: t.titel, duurMinuten: t.duurMinuten, aantalSpelers: t.aantalSpelers, status: t.status,
+      coachNaam: t.coachNaam, tijdstip: t.tijdstip, leeftijdscategorie: t.leeftijdscategorie, niveau: t.niveau,
+      hoofdmoment: t.hoofdmoment, spelfase: t.spelfase, basisvaardigheid: t.basisvaardigheid,
+      speluitdagingWie: t.speluitdagingWie, speluitdagingWat: t.speluitdagingWat, speluitdagingWaar: t.speluitdagingWaar, speluitdagingWanneer: t.speluitdagingWanneer,
+      coachingswoorden: t.coachingswoorden, materiaal: t.materiaal,
+      actiefAanpak: t.actiefAanpak, funAanpak: t.funAanpak, individueleAandacht: t.individueleAandacht,
+      teamprincipe: t.teamprincipe, spelprincipe: t.spelprincipe, focusPunten: t.focusPunten, jaarplanLabel: t.jaarplanLabel,
+      evalBehouden: t.evalBehouden, evalWijzigen: t.evalWijzigen, evalWarenActief: t.evalWarenActief,
+      evalHaddenFun: t.evalHaddenFun, evalBijgeleerd: t.evalBijgeleerd, evalIndividueleAandacht: t.evalIndividueleAandacht,
+    };
+    if (t.createdAt) input.createdAt = t.createdAt;
+    if (teamId) input.team = { connect: { id: teamId } };
+    if (trainerId) input.trainer = { connect: { id: trainerId } };
+    const created = await gql(`mutation($data: TrainingCreateInput!) { createTraining(data: $data) { id } }`, { data: input });
+    trainingMap.set(t.id, created.createTraining.id);
+  });
+
+  counts.exercises = await step('Oefeningen (in trainingen)', data.exercises, async ex => {
+    const trainingId = ex.trainingId ? trainingMap.get(ex.trainingId) : undefined;
+    if (!trainingId) throw new Error('bijhorende training ontbreekt');
+    const input: Record<string, unknown> = {
+      training: { connect: { id: trainingId } }, order: ex.order, fase: ex.fase, naam: ex.naam, duurMinuten: ex.duurMinuten,
+      organisatieSpelers: ex.organisatieSpelers, organisatieAfmetingen: ex.organisatieAfmetingen, organisatieMateriaal: ex.organisatieMateriaal,
+      beschrijving: ex.beschrijving, drawingData: ex.drawingData, coachingPunten: ex.coachingPunten, maximaalActief: ex.maximaalActief, fun: ex.fun,
+    };
+    await gql(`mutation($data: ExerciseCreateInput!) { createExercise(data: $data) { id } }`, { data: input });
+  });
+
+  counts.oefeningDatabank = await step('Oefendatabank', data.oefeningDatabank, async o => {
+    const trainerId = o.createdById ? trainerMap.get(o.createdById) : undefined;
+    const input: Record<string, unknown> = {
+      naam: o.naam, fase: o.fase, teamprincipe: o.teamprincipe, duurMinuten: o.duurMinuten,
+      organisatieSpelers: o.organisatieSpelers, organisatieAfmetingen: o.organisatieAfmetingen, organisatieMateriaal: o.organisatieMateriaal,
+      beschrijving: o.beschrijving, drawingData: o.drawingData, coachingPunten: o.coachingPunten, maximaalActief: o.maximaalActief, fun: o.fun,
+    };
+    if (o.categorie) input.categorie = o.categorie;
+    if (o.doelgroep) input.doelgroep = o.doelgroep;
+    if (o.createdAt) input.createdAt = o.createdAt;
+    if (trainerId) input.createdBy = { connect: { id: trainerId } };
+    await gql(`mutation($data: OefeningDatabankCreateInput!) { createOefeningDatabank(data: $data) { id } }`, { data: input });
   });
 
   counts.players = await step('Spelers', data.players, async p => {

@@ -23,6 +23,7 @@ const ENTITY_LABELS: Record<string, string> = {
   teams: 'Ploegen', weekThemes: "Weekthema's", trainers: 'Trainers', players: 'Spelers',
   matches: 'Wedstrijden', periods: 'Periodes', goals: 'Doelpunten', attendances: 'Aanwezigheden',
   playTimeSessions: 'Speeltijdsessies', evaluations: 'Evaluaties',
+  trainings: 'Trainingen', exercises: 'Oefeningen (in trainingen)', oefeningDatabank: 'Oefendatabank',
 };
 
 const WIPE_CONFIRM_WORD = 'VERWIJDER';
@@ -566,8 +567,8 @@ export default function Admin() {
             <div className="adm-data-card-title">⬇ Exporteren</div>
             <p className="adm-data-card-desc">
               Download alle data uit de app (ploegen, trainers, spelers, wedstrijden, speeltijden, doelpunten,
-              weekthema's en evaluaties) als één JSON-bestand. Bruikbaar als back-up of om data te migreren.
-              Wachtwoorden van trainers zitten hier <strong>niet</strong> in.
+              weekthema's, trainingen incl. hun oefeningen, de oefendatabank en evaluaties) als één JSON-bestand.
+              Bruikbaar als back-up of om data te migreren. Wachtwoorden van trainers zitten hier <strong>niet</strong> in.
             </p>
             {exportError && <div className="adm-error">⚠ {exportError}</div>}
             <button className="btn btn-primary" disabled={exporting} onClick={handleExport}>
@@ -618,7 +619,7 @@ export default function Admin() {
                     <input type="checkbox" checked={wipeFirst}
                       onChange={e => { setWipeFirst(e.target.checked); setWipeTypedConfirm(''); }} />
                     <span>⚠ Eerst alle bestaande sportdata wissen (ploegen, spelers, wedstrijden, speeltijden,
-                      doelpunten, weekthema's, evaluaties). Trainersaccounts blijven behouden.</span>
+                      doelpunten, weekthema's, trainingen, oefeningen, oefendatabank, evaluaties). Trainersaccounts blijven behouden.</span>
                   </label>
                   {wipeFirst && (
                     <div className="form-group adm-wipe-confirm-input">
