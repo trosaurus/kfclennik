@@ -12,14 +12,15 @@ generator client {
 }
 
 model Trainer {
-  id        String     @id @default(cuid())
-  name      String     @default("")
-  email     String     @unique @default("")
-  password  String
-  role      String?    @default("trainer")
-  team      Team?      @relation("Trainer_team", fields: [teamId], references: [id])
-  teamId    String?    @map("team")
-  trainings Training[] @relation("Training_trainer")
+  id                              String             @id @default(cuid())
+  name                            String             @default("")
+  email                           String             @unique @default("")
+  password                        String
+  role                            String?            @default("trainer")
+  team                            Team?              @relation("Trainer_team", fields: [teamId], references: [id])
+  teamId                          String?            @map("team")
+  trainings                       Training[]         @relation("Training_trainer")
+  from_OefeningDatabank_createdBy OefeningDatabank[] @relation("OefeningDatabank_createdBy")
 
   @@index([teamId])
 }
@@ -199,6 +200,29 @@ model Training {
 
   @@index([trainerId])
   @@index([teamId])
+}
+
+model OefeningDatabank {
+  id                    String    @id @default(cuid())
+  naam                  String    @default("")
+  fase                  String
+  categorie             String?
+  doelgroep             String?
+  teamprincipe          String    @default("")
+  duurMinuten           Int?      @default(10)
+  organisatieSpelers    String    @default("")
+  organisatieAfmetingen String    @default("")
+  organisatieMateriaal  String    @default("")
+  beschrijving          String    @default("")
+  drawingData           String    @default("")
+  coachingPunten        String    @default("")
+  maximaalActief        String    @default("")
+  fun                   String    @default("")
+  createdBy             Trainer?  @relation("OefeningDatabank_createdBy", fields: [createdById], references: [id])
+  createdById           String?   @map("createdBy")
+  createdAt             DateTime? @default(now())
+
+  @@index([createdById])
 }
 
 model Exercise {

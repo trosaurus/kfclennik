@@ -308,6 +308,59 @@ export const lists: Lists = {
     ui: { labelField: 'titel' },
   }),
 
+  // ── OefeningDatabank (herbruikbare oefeningenbibliotheek, club-breed gedeeld) ──
+  OefeningDatabank: list({
+    access: allowAll,
+    fields: {
+      naam: text({ validation: { isRequired: true } }),
+      fase: select({
+        validation: { isRequired: true },
+        options: [
+          { label: 'Opwarming',     value: 'opwarming' },
+          { label: 'Tussenvorm',    value: 'tussenvorm' },
+          { label: 'Wedstrijdvorm', value: 'wedstrijdvorm' },
+          { label: 'Cooling down',  value: 'cooling_down' },
+        ],
+      }),
+      categorie: select({
+        options: [
+          { label: 'Bal+ (aanvallend)',  value: 'B+' },
+          { label: 'Bal- (verdedigend)', value: 'B-' },
+        ],
+      }),
+      doelgroep: select({
+        options: [
+          { label: 'U6',  value: 'U6' },
+          { label: 'U7',  value: 'U7' },
+          { label: 'U8',  value: 'U8' },
+          { label: 'U9',  value: 'U9' },
+          { label: 'U10', value: 'U10' },
+          { label: 'U11', value: 'U11' },
+          { label: 'U12', value: 'U12' },
+          { label: 'U13', value: 'U13' },
+          { label: 'U15', value: 'U15' },
+          { label: 'U17', value: 'U17' },
+        ],
+      }),
+      teamprincipe: text({ defaultValue: '' }),          // vrije tekst, matcht jaarplan-vocabularium
+      duurMinuten:  integer({ defaultValue: 10 }),
+
+      organisatieSpelers:    text({ defaultValue: '' }),
+      organisatieAfmetingen: text({ defaultValue: '' }),
+      organisatieMateriaal:  text({ defaultValue: '' }),
+
+      beschrijving:    text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+      drawingData:     text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),  // JSON-string (DrawingScene)
+      coachingPunten:  text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+      maximaalActief:  text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+      fun:             text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
+
+      createdBy: relationship({ ref: 'Trainer', many: false }),   // attributie, geen back-reference nodig
+      createdAt: timestamp({ defaultValue: { kind: 'now' } }),
+    },
+    ui: { labelField: 'naam' },
+  }),
+
   // ── Exercise (oefening binnen een training — velden volgen template pagina 3-4) ──
   Exercise: list({
     access: allowAll,

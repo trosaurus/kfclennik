@@ -10,6 +10,7 @@ import SpelerProfiel from './pages/SpelerProfiel';
 import Trainingen from './pages/Trainingen';
 import TrainingEditor from './pages/TrainingEditor';
 import TrainingsModus from './pages/TrainingsModus';
+import Oefendatabank from './pages/Oefendatabank';
 import Admin from './pages/Admin';
 
 function AppRoutes() {
@@ -36,6 +37,7 @@ function AppRoutes() {
         <Route path="/profiel"     element={<SpelerProfiel />} />
         <Route path="/trainingen"     element={<Trainingen />} />
         <Route path="/trainingen/:id" element={<TrainingEditor />} />
+        <Route path="/oefendatabank"  element={<Oefendatabank />} />
         <Route path="/admin"       element={trainer.role === 'admin' ? <Admin /> : <Navigate to="/" replace />} />
         <Route path="/matches"     element={<Navigate to="/wedstrijden" replace />} />
         <Route path="/matches/:id" element={<Navigate to="/wedstrijden" replace />} />

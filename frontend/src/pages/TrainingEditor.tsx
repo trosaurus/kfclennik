@@ -5,11 +5,13 @@ import {
   getTraining, updateTraining, createExercise, updateExercise, deleteExercise,
   Training, Exercise, ExerciseFase, EXERCISE_FASE_LABELS,
   wedstrijdvormPercentage, parseDrawingScene, exportTrainingToPptx,
+  getOefeningDatabank, createOefeningDatabankItem, OefeningDatabankItem, OefeningCategorie, Doelgroep, DOELGROEP_LEEFTIJDEN,
 } from '../lib/api';
 import { getJaarplanWeekForDate, getCategoryBracket, formatJaarplanLabel } from '../lib/jaarplan';
 import { suggestExercises, LibraryExercise, KRACHTIGE_LEEROMGEVING_PRINCIPES } from '../lib/oefeningenbibliotheek';
 import DrawingCanvas from '../components/DrawingCanvas';
 import './TrainingEditor.css';
+import './Oefendatabank.css'; // hergebruikt .od-card-teamprincipe voor de databank-picker
 
 interface LocalExercise extends Exercise { isNew?: boolean }
 
@@ -33,6 +35,14 @@ function exerciseFromLibrary(lib: LibraryExercise): LocalExercise {
   };
 }
 
+function exerciseFromDatabank(it: OefeningDatabankItem): LocalExercise {
+  return {
+    id: `new-${uid()}`, isNew: true, order: 0, fase: it.fase, naam: it.naam, duurMinuten: it.duurMinuten,
+    organisatieSpelers: it.organisatieSpelers, organisatieAfmetingen: it.organisatieAfmetingen, organisatieMateriaal: it.organisatieMateriaal,
+    beschrijving: it.beschrijving, drawingData: it.drawingData, coachingPunten: it.coachingPunten, maximaalActief: it.maximaalActief, fun: it.fun,
+  };
+}
+
 const FASE_ORDER: ExerciseFase[] = ['opwarming', 'tussenvorm', 'wedstrijdvorm', 'cooling_down'];
 
 const EMPTY_FORM = {
@@ -49,7 +59,7 @@ const EMPTY_FORM = {
 export default function TrainingEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { category } = useTeam();
+  const { category, trainer } = useTeam();
 
   const [training, setTraining] = useState<Training | null>(null);
   const [loading, setLoading]   = useState(true);
@@ -69,6 +79,20 @@ export default function TrainingEditor() {
   const [genModalOpen, setGenModalOpen] = useState(false);
   const [genFase, setGenFase] = useState<ExerciseFase>('opwarming');
   const [genOffset, setGenOffset] = useState(0);
+
+  const [dbItems, setDbItems] = useState<OefeningDatabankItem[]>([]);
+  const [dbLoaded, setDbLoaded] = useState(false);
+  const [dbModalOpen, setDbModalOpen] = useState(false);
+  const [dbFase, setDbFase] = useState<ExerciseFase>('opwarming');
+  const [dbCategorie, setDbCategorie] = useState<OefeningCategorie | ''>('');
+  const [dbDoelgroep, setDbDoelgroep] = useState<Doelgroep | ''>('');
+  const [dbSearch, setDbSearch] = useState('');
+
+  const [saveToDbFor, setSaveToDbFor] = useState<string | null>(null);
+  const [saveToDbCategorie, setSaveToDbCategorie] = useState<OefeningCategorie | ''>('');
+  const [saveToDbDoelgroep, setSaveToDbDoelgroep] = useState<Doelgroep | ''>('');
+  const [saveToDbTeamprincipe, setSaveToDbTeamprincipe] = useState('');
+  const [savingToDb, setSavingToDb] = useState(false);
 
   useEffect(() => { if (id) load(id); }, [id]);
 
@@ -122,6 +146,47 @@ export default function TrainingEditor() {
     setExpandedId(ex.id);
     setGenModalOpen(false);
   }
+  async function openDbModal() {
+    setDbModalOpen(true);
+    if (!dbLoaded) {
+      try { setDbItems(await getOefeningDatabank()); setDbLoaded(true); }
+      catch (e) { setError(e instanceof Error ? e.message : 'Oefendatabank laden mislukt'); }
+    }
+  }
+  function useDbItem(it: OefeningDatabankItem) {
+    const ex = exerciseFromDatabank(it);
+    setExercises(list => [...list, ex]);
+    setExpandedId(ex.id);
+    setDbModalOpen(false);
+  }
+
+  function openSaveToDb(ex: LocalExercise) {
+    setSaveToDbFor(ex.id);
+    setSaveToDbCategorie('');
+    setSaveToDbDoelgroep((DOELGROEP_LEEFTIJDEN as readonly string[]).includes(category ?? '') ? (category as Doelgroep) : '');
+    setSaveToDbTeamprincipe(form.teamprincipe || '');
+  }
+  async function handleSaveToDb() {
+    const ex = exercises.find(e => e.id === saveToDbFor);
+    if (!ex) return;
+    setSavingToDb(true); setError('');
+    try {
+      await createOefeningDatabankItem({
+        naam: ex.naam || 'Naamloze oefening', fase: ex.fase, categorie: saveToDbCategorie || undefined,
+        doelgroep: saveToDbDoelgroep || undefined,
+        teamprincipe: saveToDbTeamprincipe, duurMinuten: ex.duurMinuten,
+        organisatieSpelers: ex.organisatieSpelers, organisatieAfmetingen: ex.organisatieAfmetingen, organisatieMateriaal: ex.organisatieMateriaal,
+        beschrijving: ex.beschrijving, drawingData: ex.drawingData,
+        coachingPunten: ex.coachingPunten, maximaalActief: ex.maximaalActief, fun: ex.fun,
+        trainerId: trainer?.id,
+      });
+      setDbLoaded(false); // volgende keer de databank-modal opent, actuele lijst ophalen
+      setSaveToDbFor(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Bewaren in oefendatabank mislukt');
+    } finally { setSavingToDb(false); }
+  }
+
   function updateLocal(exId: string, patch: Partial<LocalExercise>) {
     setExercises(list => list.map(e => e.id === exId ? { ...e, ...patch } : e));
   }
@@ -202,6 +267,20 @@ export default function TrainingEditor() {
   const genContext = { hoofdmoment: form.hoofdmoment, spelfase: form.spelfase, teamprincipe: form.teamprincipe, spelprincipe: form.spelprincipe, basisvaardigheid: form.basisvaardigheid };
   const genHasContext = Object.values(genContext).some(v => v.trim());
   const genSuggestions = suggestExercises(genFase, genContext, genOffset, 3);
+
+  const dbFiltered = dbItems
+    .filter(it =>
+      it.fase === dbFase &&
+      (!dbCategorie || it.categorie === dbCategorie) &&
+      (!dbDoelgroep || it.doelgroep === dbDoelgroep) &&
+      (!dbSearch.trim() || it.naam.toLowerCase().includes(dbSearch.trim().toLowerCase()) || it.teamprincipe.toLowerCase().includes(dbSearch.trim().toLowerCase()))
+    )
+    .sort((a, b) => {
+      const ai = a.doelgroep ? DOELGROEP_LEEFTIJDEN.indexOf(a.doelgroep) : DOELGROEP_LEEFTIJDEN.length;
+      const bi = b.doelgroep ? DOELGROEP_LEEFTIJDEN.indexOf(b.doelgroep) : DOELGROEP_LEEFTIJDEN.length;
+      return ai - bi || a.naam.localeCompare(b.naam);
+    });
+  const saveToDbExercise = exercises.find(e => e.id === saveToDbFor) ?? null;
 
   return (
     <div className="page">
@@ -410,6 +489,7 @@ export default function TrainingEditor() {
             {FASE_ORDER.map(f => (
               <button key={f} className="btn btn-outline btn-sm" onClick={() => addExercise(f)}>+ {EXERCISE_FASE_LABELS[f]}</button>
             ))}
+            <button className="btn btn-outline btn-sm" onClick={openDbModal}>📚 Kies uit databank</button>
             <button className="btn btn-primary btn-sm" onClick={() => openGenerator('opwarming')}>✨ Genereer oefening</button>
           </div>
         </div>
@@ -496,6 +576,7 @@ export default function TrainingEditor() {
                     <div className="te-reorder-btns">
                       <button className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => moveExercise(ex.id, -1)}>▲ Omhoog</button>
                       <button className="btn btn-ghost btn-sm" disabled={i === exercises.length - 1} onClick={() => moveExercise(ex.id, 1)}>▼ Omlaag</button>
+                      <button className="btn btn-outline btn-sm" onClick={() => openSaveToDb(ex)}>💾 Bewaar in databank</button>
                     </div>
                     <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => removeExercise(ex.id)}>🗑️ Verwijderen</button>
                   </div>
@@ -602,6 +683,107 @@ export default function TrainingEditor() {
             <div className="modal-actions">
               <button className="btn btn-outline btn-sm" onClick={() => setGenOffset(o => o + 3)}>🔄 Andere voorstellen</button>
               <button className="btn btn-outline" onClick={() => setGenModalOpen(false)}>Sluiten</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Kies-uit-databank modal ── */}
+      {dbModalOpen && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDbModalOpen(false)}>
+          <div className="modal te-gen-modal">
+            <div className="modal-title">📚 Kies uit oefendatabank</div>
+            <p className="te-gen-desc">Herbruikbare oefeningen die trainers eerder in de oefendatabank bewaarden.</p>
+
+            <div className="te-gen-fase-tabs">
+              {FASE_ORDER.map(f => (
+                <button key={f} className={`sb-toggle ${dbFase === f ? 'active' : ''}`} onClick={() => setDbFase(f)}>{EXERCISE_FASE_LABELS[f]}</button>
+              ))}
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label className="input-label">Categorie</label>
+                <select className="input-field" value={dbCategorie} onChange={e => setDbCategorie(e.target.value as OefeningCategorie | '')}>
+                  <option value="">Alle categorieën</option>
+                  <option value="B+">Bal+ (aanvallend)</option>
+                  <option value="B-">Bal- (verdedigend)</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="input-label">Doelgroep</label>
+                <select className="input-field" value={dbDoelgroep} onChange={e => setDbDoelgroep(e.target.value as Doelgroep | '')}>
+                  <option value="">Alle doelgroepen</option>
+                  {DOELGROEP_LEEFTIJDEN.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-group" style={{ marginBottom: 12 }}>
+              <label className="input-label">Zoeken</label>
+              <input className="input-field" value={dbSearch} onChange={e => setDbSearch(e.target.value)} placeholder="Naam of teamprincipe..." />
+            </div>
+
+            {dbFiltered.length === 0 ? (
+              <div className="te-gen-hint">Geen oefeningen in de databank voor deze filters.</div>
+            ) : (
+              <div className="te-gen-list">
+                {dbFiltered.map(it => (
+                  <div key={it.id} className="te-gen-card">
+                    <div className="te-gen-card-top">
+                      <span className="te-gen-card-name">{it.naam}</span>
+                      <span className="te-gen-card-duur">{it.duurMinuten}min</span>
+                    </div>
+                    {(it.categorie || it.doelgroep || it.teamprincipe) && (
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                        {it.categorie && <span className={`tag ${it.categorie === 'B+' ? 'tag-green' : 'tag-black'}`}>{it.categorie}</span>}
+                        {it.doelgroep && <span className="tag tag-black">{it.doelgroep}</span>}
+                        {it.teamprincipe && <span className="od-card-teamprincipe">{it.teamprincipe}</span>}
+                      </div>
+                    )}
+                    <div className="te-gen-card-desc">{it.beschrijving}</div>
+                    <div className="te-gen-card-drawing">
+                      <DrawingCanvas scene={parseDrawingScene(it.drawingData)} readOnly />
+                    </div>
+                    <button className="btn btn-primary btn-sm" onClick={() => useDbItem(it)}>Gebruik deze oefening</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={() => setDbModalOpen(false)}>Sluiten</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Bewaar-in-databank modal ── */}
+      {saveToDbExercise && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSaveToDbFor(null)}>
+          <div className="modal">
+            <div className="modal-title">💾 Bewaar "{saveToDbExercise.naam || 'oefening'}" in databank</div>
+            <div className="form-group">
+              <label className="input-label">Categorie</label>
+              <select className="input-field" value={saveToDbCategorie} onChange={e => setSaveToDbCategorie(e.target.value as OefeningCategorie | '')}>
+                <option value="">— geen —</option>
+                <option value="B+">Bal+ (aanvallend)</option>
+                <option value="B-">Bal- (verdedigend)</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="input-label">Doelgroep</label>
+              <select className="input-field" value={saveToDbDoelgroep} onChange={e => setSaveToDbDoelgroep(e.target.value as Doelgroep | '')}>
+                <option value="">— alle leeftijden —</option>
+                {DOELGROEP_LEEFTIJDEN.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="input-label">Teamprincipe</label>
+              <input className="input-field" value={saveToDbTeamprincipe} onChange={e => setSaveToDbTeamprincipe(e.target.value)} placeholder="bv. Opbouw via de doelman" />
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={() => setSaveToDbFor(null)}>Annuleer</button>
+              <button className="btn btn-primary" disabled={savingToDb} onClick={handleSaveToDb}>{savingToDb ? 'Bewaren...' : 'Bewaar in databank'}</button>
             </div>
           </div>
         </div>

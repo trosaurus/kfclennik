@@ -1482,6 +1482,83 @@ export async function exportTrainingToPptx(trainingId: string, filename: string)
   URL.revokeObjectURL(url);
 }
 
+// ── Oefendatabank (club-brede, herbruikbare oefeningenbibliotheek) ─────────────
+
+export type OefeningCategorie = 'B+' | 'B-';
+
+// Zelfde volgorde/waarden als Team.category in het backend-schema.
+export const DOELGROEP_LEEFTIJDEN = ['U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U15', 'U17'] as const;
+export type Doelgroep = typeof DOELGROEP_LEEFTIJDEN[number];
+
+export interface OefeningDatabankItem {
+  id: string;
+  naam: string;
+  fase: ExerciseFase;
+  categorie: OefeningCategorie | null;
+  doelgroep: Doelgroep | null;
+  teamprincipe: string;
+  duurMinuten: number;
+  organisatieSpelers: string;
+  organisatieAfmetingen: string;
+  organisatieMateriaal: string;
+  beschrijving: string;
+  drawingData: string;
+  coachingPunten: string;
+  maximaalActief: string;
+  fun: string;
+  createdBy: { id: string; name: string } | null;
+  createdAt: string;
+}
+
+const OEFENING_FIELDS = `
+  id naam fase categorie doelgroep teamprincipe duurMinuten
+  organisatieSpelers organisatieAfmetingen organisatieMateriaal
+  beschrijving drawingData coachingPunten maximaalActief fun
+  createdBy { id name } createdAt
+`;
+
+export async function getOefeningDatabank(): Promise<OefeningDatabankItem[]> {
+  const data = await gql(`query {
+    oefeningDatabanks(take: 2000, orderBy: { createdAt: desc }) { ${OEFENING_FIELDS} }
+  }`);
+  return data.oefeningDatabanks;
+}
+
+export async function createOefeningDatabankItem(input: {
+  naam: string; fase: ExerciseFase; categorie?: OefeningCategorie; doelgroep?: Doelgroep; teamprincipe?: string; duurMinuten: number;
+  organisatieSpelers?: string; organisatieAfmetingen?: string; organisatieMateriaal?: string;
+  beschrijving?: string; drawingData?: string; coachingPunten?: string; maximaalActief?: string; fun?: string;
+  trainerId?: string;
+}): Promise<OefeningDatabankItem> {
+  const itemData: Record<string, unknown> = {
+    naam: input.naam, fase: input.fase, teamprincipe: input.teamprincipe ?? '', duurMinuten: input.duurMinuten,
+    organisatieSpelers: input.organisatieSpelers ?? '', organisatieAfmetingen: input.organisatieAfmetingen ?? '',
+    organisatieMateriaal: input.organisatieMateriaal ?? '', beschrijving: input.beschrijving ?? '',
+    drawingData: input.drawingData ?? '', coachingPunten: input.coachingPunten ?? '',
+    maximaalActief: input.maximaalActief ?? '', fun: input.fun ?? '',
+  };
+  if (input.categorie) itemData.categorie = input.categorie;
+  if (input.doelgroep) itemData.doelgroep = input.doelgroep;
+  if (input.trainerId) itemData.createdBy = { connect: { id: input.trainerId } };
+  const data = await gql(
+    `mutation CreateOefening($data: OefeningDatabankCreateInput!) { createOefeningDatabank(data: $data) { ${OEFENING_FIELDS} } }`,
+    { data: itemData }
+  );
+  return data.createOefeningDatabank;
+}
+
+export async function updateOefeningDatabankItem(id: string, input: Record<string, unknown>): Promise<OefeningDatabankItem> {
+  const data = await gql(
+    `mutation UpdateOefening($id: ID!, $data: OefeningDatabankUpdateInput!) { updateOefeningDatabank(where: { id: $id }, data: $data) { ${OEFENING_FIELDS} } }`,
+    { id, data: input }
+  );
+  return data.updateOefeningDatabank;
+}
+
+export async function deleteOefeningDatabankItem(id: string): Promise<void> {
+  await gql(`mutation { deleteOefeningDatabank(where: { id: "${id}" }) { id } }`);
+}
+
 // ── Tekentool: scene-model voor veldoefeningen ─────────────────────────────────
 // "Kies je tekenfiguur" (template pagina 7): spelers/pionnen in meerdere kleuren,
 // jokers, ladder, vlag, en 3 pijltypes (pass/dribbel/loop zonder bal).

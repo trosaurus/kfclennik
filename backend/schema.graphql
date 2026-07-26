@@ -1211,6 +1211,115 @@ input ExerciseRelateToManyForCreateInput {
   connect: [ExerciseWhereUniqueInput!]
 }
 
+type OefeningDatabank {
+  id: ID!
+  naam: String
+  fase: String
+  categorie: String
+  doelgroep: String
+  teamprincipe: String
+  duurMinuten: Int
+  organisatieSpelers: String
+  organisatieAfmetingen: String
+  organisatieMateriaal: String
+  beschrijving: String
+  drawingData: String
+  coachingPunten: String
+  maximaalActief: String
+  fun: String
+  createdBy: Trainer
+  createdAt: DateTime
+}
+
+input OefeningDatabankWhereUniqueInput {
+  id: ID
+}
+
+input OefeningDatabankWhereInput {
+  AND: [OefeningDatabankWhereInput!]
+  OR: [OefeningDatabankWhereInput!]
+  NOT: [OefeningDatabankWhereInput!]
+  id: IDFilter
+  naam: StringFilter
+  fase: StringFilter
+  categorie: StringNullableFilter
+  doelgroep: StringNullableFilter
+  teamprincipe: StringFilter
+  duurMinuten: IntNullableFilter
+  organisatieSpelers: StringFilter
+  organisatieAfmetingen: StringFilter
+  organisatieMateriaal: StringFilter
+  beschrijving: StringFilter
+  drawingData: StringFilter
+  coachingPunten: StringFilter
+  maximaalActief: StringFilter
+  fun: StringFilter
+  createdBy: TrainerWhereInput
+  createdAt: DateTimeNullableFilter
+}
+
+input OefeningDatabankOrderByInput {
+  id: OrderDirection
+  naam: OrderDirection
+  fase: OrderDirection
+  categorie: OrderDirection
+  doelgroep: OrderDirection
+  teamprincipe: OrderDirection
+  duurMinuten: OrderDirection
+  organisatieSpelers: OrderDirection
+  organisatieAfmetingen: OrderDirection
+  organisatieMateriaal: OrderDirection
+  beschrijving: OrderDirection
+  drawingData: OrderDirection
+  coachingPunten: OrderDirection
+  maximaalActief: OrderDirection
+  fun: OrderDirection
+  createdAt: OrderDirection
+}
+
+input OefeningDatabankUpdateInput {
+  naam: String
+  fase: String
+  categorie: String
+  doelgroep: String
+  teamprincipe: String
+  duurMinuten: Int
+  organisatieSpelers: String
+  organisatieAfmetingen: String
+  organisatieMateriaal: String
+  beschrijving: String
+  drawingData: String
+  coachingPunten: String
+  maximaalActief: String
+  fun: String
+  createdBy: TrainerRelateToOneForUpdateInput
+  createdAt: DateTime
+}
+
+input OefeningDatabankUpdateArgs {
+  where: OefeningDatabankWhereUniqueInput!
+  data: OefeningDatabankUpdateInput!
+}
+
+input OefeningDatabankCreateInput {
+  naam: String
+  fase: String
+  categorie: String
+  doelgroep: String
+  teamprincipe: String
+  duurMinuten: Int
+  organisatieSpelers: String
+  organisatieAfmetingen: String
+  organisatieMateriaal: String
+  beschrijving: String
+  drawingData: String
+  coachingPunten: String
+  maximaalActief: String
+  fun: String
+  createdBy: TrainerRelateToOneForCreateInput
+  createdAt: DateTime
+}
+
 type Exercise {
   id: ID!
   training: Training
@@ -1388,6 +1497,12 @@ type Mutation {
   updateTrainings(data: [TrainingUpdateArgs!]!): [Training]
   deleteTraining(where: TrainingWhereUniqueInput!): Training
   deleteTrainings(where: [TrainingWhereUniqueInput!]!): [Training]
+  createOefeningDatabank(data: OefeningDatabankCreateInput!): OefeningDatabank
+  createOefeningDatabanks(data: [OefeningDatabankCreateInput!]!): [OefeningDatabank]
+  updateOefeningDatabank(where: OefeningDatabankWhereUniqueInput!, data: OefeningDatabankUpdateInput!): OefeningDatabank
+  updateOefeningDatabanks(data: [OefeningDatabankUpdateArgs!]!): [OefeningDatabank]
+  deleteOefeningDatabank(where: OefeningDatabankWhereUniqueInput!): OefeningDatabank
+  deleteOefeningDatabanks(where: [OefeningDatabankWhereUniqueInput!]!): [OefeningDatabank]
   createExercise(data: ExerciseCreateInput!): Exercise
   createExercises(data: [ExerciseCreateInput!]!): [Exercise]
   updateExercise(where: ExerciseWhereUniqueInput!, data: ExerciseUpdateInput!): Exercise
@@ -1451,6 +1566,9 @@ type Query {
   trainings(where: TrainingWhereInput! = {}, orderBy: [TrainingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TrainingWhereUniqueInput): [Training!]
   training(where: TrainingWhereUniqueInput!): Training
   trainingsCount(where: TrainingWhereInput! = {}): Int
+  oefeningDatabanks(where: OefeningDatabankWhereInput! = {}, orderBy: [OefeningDatabankOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: OefeningDatabankWhereUniqueInput): [OefeningDatabank!]
+  oefeningDatabank(where: OefeningDatabankWhereUniqueInput!): OefeningDatabank
+  oefeningDatabanksCount(where: OefeningDatabankWhereInput! = {}): Int
   exercises(where: ExerciseWhereInput! = {}, orderBy: [ExerciseOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ExerciseWhereUniqueInput): [Exercise!]
   exercise(where: ExerciseWhereUniqueInput!): Exercise
   exercisesCount(where: ExerciseWhereInput! = {}): Int
