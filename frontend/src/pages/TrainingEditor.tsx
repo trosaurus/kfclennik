@@ -4,7 +4,7 @@ import { useTeam } from '../lib/TeamContext';
 import {
   getTraining, updateTraining, createExercise, updateExercise, deleteExercise,
   Training, Exercise, ExerciseFase, EXERCISE_FASE_LABELS,
-  wedstrijdvormPercentage, parseDrawingScene,
+  wedstrijdvormPercentage, parseDrawingScene, exportTrainingToPptx,
 } from '../lib/api';
 import { getJaarplanWeekForDate, getCategoryBracket, formatJaarplanLabel } from '../lib/jaarplan';
 import { suggestExercises, LibraryExercise, KRACHTIGE_LEEROMGEVING_PRINCIPES } from '../lib/oefeningenbibliotheek';
@@ -54,6 +54,7 @@ export default function TrainingEditor() {
   const [training, setTraining] = useState<Training | null>(null);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError]       = useState('');
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -61,6 +62,9 @@ export default function TrainingEditor() {
   const [deletedIds, setDeletedIds] = useState<string[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [drawingFor, setDrawingFor] = useState<string | null>(null);
+  const [openKop, setOpenKop] = useState(false);
+  const [openLeren, setOpenLeren] = useState(false);
+  const [openActief, setOpenActief] = useState(false);
 
   const [genModalOpen, setGenModalOpen] = useState(false);
   const [genFase, setGenFase] = useState<ExerciseFase>('opwarming');
@@ -174,6 +178,18 @@ export default function TrainingEditor() {
     } finally { setSaving(false); }
   }
 
+  async function handleExportPptx() {
+    if (!training) return;
+    setExporting(true); setError('');
+    try {
+      await handleSave(); // exporteer altijd de meest recente (net opgeslagen) gegevens
+      const safeName = (form.titel || 'training').replace(/[^\p{L}\p{N}\-_]+/gu, '_').slice(0, 60);
+      await exportTrainingToPptx(training.id, `${safeName || 'training'}.pptx`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'PowerPoint-export mislukt');
+    } finally { setExporting(false); }
+  }
+
   const pct = wedstrijdvormPercentage(exercises);
   const totalMin = exercises.reduce((a, e) => a + (e.duurMinuten || 0), 0);
   const wedstrijdMin = exercises.filter(e => e.fase === 'wedstrijdvorm').reduce((a, e) => a + (e.duurMinuten || 0), 0);
@@ -193,6 +209,9 @@ export default function TrainingEditor() {
         <button className="btn btn-ghost btn-sm" onClick={() => navigate('/trainingen')}>← Terug</button>
         <div className="te-header-actions">
           <button className="btn btn-outline" onClick={() => navigate(`/trainingen/${training.id}/modus`)}>▶ Trainingsmodus</button>
+          <button className="btn btn-outline" disabled={exporting || saving} onClick={handleExportPptx}>
+            {exporting ? 'Exporteren...' : '📊 Exporteer naar PowerPoint'}
+          </button>
           <button className="btn btn-primary" disabled={saving} onClick={handleSave}>{saving ? 'Opslaan...' : '💾 Opslaan'}</button>
         </div>
       </div>
@@ -201,124 +220,145 @@ export default function TrainingEditor() {
 
       {/* ── Kop ── */}
       <div className="card te-block">
-        <div className="te-block-title">Trainingsvoorbereiding</div>
-        <div className="form-row te-row-5">
-          <div className="form-group">
-            <label className="input-label">Naam coach</label>
-            <input className="input-field" value={form.coachNaam} onChange={e => setForm({ ...form, coachNaam: e.target.value })} />
-          </div>
-          <div className="form-group">
-            <label className="input-label">Datum</label>
-            <input type="date" className="input-field" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
-          </div>
-          <div className="form-group">
-            <label className="input-label">Tijdstip</label>
-            <input className="input-field" value={form.tijdstip} onChange={e => setForm({ ...form, tijdstip: e.target.value })} placeholder="bv. 18:30" />
-          </div>
-          <div className="form-group">
-            <label className="input-label">Leeftijdscategorie</label>
-            <input className="input-field" value={form.leeftijdscategorie} onChange={e => setForm({ ...form, leeftijdscategorie: e.target.value })} />
-          </div>
-          <div className="form-group">
-            <label className="input-label">Niveau</label>
-            <input className="input-field" value={form.niveau} onChange={e => setForm({ ...form, niveau: e.target.value })} />
-          </div>
-        </div>
-        <div className="form-row">
-          <div className="form-group">
-            <label className="input-label">Titel</label>
-            <input className="input-field" value={form.titel} onChange={e => setForm({ ...form, titel: e.target.value })} placeholder="bv. Linies doorbreken — diagonale passing" />
-          </div>
-          <div className="form-group">
-            <label className="input-label">Duur (min)</label>
-            <input type="number" className="input-field" value={form.duurMinuten} min={0}
-              onChange={e => setForm({ ...form, duurMinuten: parseInt(e.target.value) || 0 })} />
-          </div>
-          <div className="form-group">
-            <label className="input-label">Aantal spelers</label>
-            <input className="input-field" value={form.aantalSpelers} onChange={e => setForm({ ...form, aantalSpelers: e.target.value })} placeholder="bv. 10-14" />
-          </div>
-          <div className="form-group">
-            <label className="input-label">Status</label>
-            <select className="input-field" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
-              <option value="concept">Concept</option>
-              <option value="klaar">Klaar</option>
-              <option value="afgewerkt">Afgewerkt</option>
-            </select>
-          </div>
-        </div>
+        <button className="te-block-header-btn" onClick={() => setOpenKop(o => !o)}>
+          <span className="te-block-title">Trainingsvoorbereiding</span>
+          <span className="te-chevron">{openKop ? '▲' : '▼'}</span>
+        </button>
+        {openKop && (
+          <>
+            <div className="form-row te-row-5">
+              <div className="form-group">
+                <label className="input-label">Naam coach</label>
+                <input className="input-field" value={form.coachNaam} onChange={e => setForm({ ...form, coachNaam: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="input-label">Datum</label>
+                <input type="date" className="input-field" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="input-label">Tijdstip</label>
+                <input className="input-field" value={form.tijdstip} onChange={e => setForm({ ...form, tijdstip: e.target.value })} placeholder="bv. 18:30" />
+              </div>
+              <div className="form-group">
+                <label className="input-label">Leeftijdscategorie</label>
+                <input className="input-field" value={form.leeftijdscategorie} onChange={e => setForm({ ...form, leeftijdscategorie: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="input-label">Niveau</label>
+                <input className="input-field" value={form.niveau} onChange={e => setForm({ ...form, niveau: e.target.value })} />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="input-label">Titel</label>
+                <input className="input-field" value={form.titel} onChange={e => setForm({ ...form, titel: e.target.value })} placeholder="bv. Linies doorbreken — diagonale passing" />
+              </div>
+              <div className="form-group">
+                <label className="input-label">Duur (min)</label>
+                <input type="number" className="input-field" value={form.duurMinuten} min={0}
+                  onChange={e => setForm({ ...form, duurMinuten: parseInt(e.target.value) || 0 })} />
+              </div>
+              <div className="form-group">
+                <label className="input-label">Aantal spelers</label>
+                <input className="input-field" value={form.aantalSpelers} onChange={e => setForm({ ...form, aantalSpelers: e.target.value })} placeholder="bv. 10-14" />
+              </div>
+              <div className="form-group">
+                <label className="input-label">Status</label>
+                <select className="input-field" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
+                  <option value="concept">Concept</option>
+                  <option value="klaar">Klaar</option>
+                  <option value="afgewerkt">Afgewerkt</option>
+                </select>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Leren ── */}
       <div className="card te-block">
-        <div className="te-block-title">Leren</div>
-        <div className="form-row">
-          <div className="form-group">
-            <label className="input-label">Hoofdmoment</label>
-            <input className="input-field" value={form.hoofdmoment} onChange={e => setForm({ ...form, hoofdmoment: e.target.value })} />
-          </div>
-          <div className="form-group">
-            <label className="input-label">Spelfase</label>
-            <input className="input-field" value={form.spelfase} onChange={e => setForm({ ...form, spelfase: e.target.value })} />
-          </div>
-          <div className="form-group">
-            <label className="input-label">Basisvaardigheid</label>
-            <input className="input-field" value={form.basisvaardigheid} onChange={e => setForm({ ...form, basisvaardigheid: e.target.value })} />
-          </div>
-        </div>
+        <button className="te-block-header-btn" onClick={() => setOpenLeren(o => !o)}>
+          <span className="te-block-title">Leren</span>
+          <span className="te-chevron">{openLeren ? '▲' : '▼'}</span>
+        </button>
+        {openLeren && (
+          <>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="input-label">Hoofdmoment</label>
+                <input className="input-field" value={form.hoofdmoment} onChange={e => setForm({ ...form, hoofdmoment: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="input-label">Spelfase</label>
+                <input className="input-field" value={form.spelfase} onChange={e => setForm({ ...form, spelfase: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="input-label">Basisvaardigheid</label>
+                <input className="input-field" value={form.basisvaardigheid} onChange={e => setForm({ ...form, basisvaardigheid: e.target.value })} />
+              </div>
+            </div>
 
-        <div className="te-speluitdaging">
-          <div className="input-label">Speluitdaging</div>
-          <div className="te-speluitdaging-grid">
-            <div className="te-su-field">
-              <span className="te-su-pill">Wie</span>
-              <input className="input-field" value={form.speluitdagingWie} onChange={e => setForm({ ...form, speluitdagingWie: e.target.value })} />
+            <div className="te-speluitdaging">
+              <div className="input-label">Speluitdaging</div>
+              <div className="te-speluitdaging-grid">
+                <div className="te-su-field">
+                  <span className="te-su-pill">Wie</span>
+                  <input className="input-field" value={form.speluitdagingWie} onChange={e => setForm({ ...form, speluitdagingWie: e.target.value })} />
+                </div>
+                <div className="te-su-field">
+                  <span className="te-su-pill">Wat</span>
+                  <input className="input-field" value={form.speluitdagingWat} onChange={e => setForm({ ...form, speluitdagingWat: e.target.value })} />
+                </div>
+                <div className="te-su-field">
+                  <span className="te-su-pill">Waar</span>
+                  <input className="input-field" value={form.speluitdagingWaar} onChange={e => setForm({ ...form, speluitdagingWaar: e.target.value })} />
+                </div>
+                <div className="te-su-field">
+                  <span className="te-su-pill">Wanneer</span>
+                  <input className="input-field" value={form.speluitdagingWanneer} onChange={e => setForm({ ...form, speluitdagingWanneer: e.target.value })} />
+                </div>
+              </div>
             </div>
-            <div className="te-su-field">
-              <span className="te-su-pill">Wat</span>
-              <input className="input-field" value={form.speluitdagingWat} onChange={e => setForm({ ...form, speluitdagingWat: e.target.value })} />
-            </div>
-            <div className="te-su-field">
-              <span className="te-su-pill">Waar</span>
-              <input className="input-field" value={form.speluitdagingWaar} onChange={e => setForm({ ...form, speluitdagingWaar: e.target.value })} />
-            </div>
-            <div className="te-su-field">
-              <span className="te-su-pill">Wanneer</span>
-              <input className="input-field" value={form.speluitdagingWanneer} onChange={e => setForm({ ...form, speluitdagingWanneer: e.target.value })} />
-            </div>
-          </div>
-        </div>
 
-        <div className="form-row">
-          <div className="form-group">
-            <label className="input-label">Coachingswoorden</label>
-            <textarea className="input-field" rows={3} value={form.coachingswoorden} onChange={e => setForm({ ...form, coachingswoorden: e.target.value })} />
-          </div>
-          <div className="form-group">
-            <label className="input-label">Materiaal</label>
-            <textarea className="input-field" rows={3} value={form.materiaal} onChange={e => setForm({ ...form, materiaal: e.target.value })} />
-          </div>
-        </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="input-label">Coachingswoorden</label>
+                <textarea className="input-field" rows={3} value={form.coachingswoorden} onChange={e => setForm({ ...form, coachingswoorden: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label className="input-label">Materiaal</label>
+                <textarea className="input-field" rows={3} value={form.materiaal} onChange={e => setForm({ ...form, materiaal: e.target.value })} />
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Actief, fun & individuele aandacht ── */}
       <div className="card te-block">
-        <div className="te-block-title">Actief, fun &amp; individuele aandacht</div>
-        <div className="form-group">
-          <label className="input-label">Hoe zorg ik dat de spelers maximaal actief zijn?</label>
-          <textarea className="input-field" rows={2} value={form.actiefAanpak} onChange={e => setForm({ ...form, actiefAanpak: e.target.value })}
-            placeholder="bv. wisselspelers ook actief met bal, iedereen betrekken en vragen stellen, opwarming altijd met bal" />
-        </div>
-        <div className="form-group">
-          <label className="input-label">Hoe integreer ik fun?</label>
-          <textarea className="input-field" rows={2} value={form.funAanpak} onChange={e => setForm({ ...form, funAanpak: e.target.value })}
-            placeholder="bv. iedereen speelt evenveel, positieve benadering, interesse tonen in elke speler (connectie)" />
-        </div>
-        <div className="form-group">
-          <label className="input-label">Hoe geef ik individuele aandacht aan elke speler?</label>
-          <textarea className="input-field" rows={2} value={form.individueleAandacht} onChange={e => setForm({ ...form, individueleAandacht: e.target.value })}
-            placeholder="bv. iedereen bij naam aangesproken, aandacht voor ieders 'rugzak', bankzitters betrokken houden" />
-        </div>
+        <button className="te-block-header-btn" onClick={() => setOpenActief(o => !o)}>
+          <span className="te-block-title">Actief, fun &amp; individuele aandacht</span>
+          <span className="te-chevron">{openActief ? '▲' : '▼'}</span>
+        </button>
+        {openActief && (
+          <>
+            <div className="form-group">
+              <label className="input-label">Hoe zorg ik dat de spelers maximaal actief zijn?</label>
+              <textarea className="input-field" rows={2} value={form.actiefAanpak} onChange={e => setForm({ ...form, actiefAanpak: e.target.value })}
+                placeholder="bv. wisselspelers ook actief met bal, iedereen betrekken en vragen stellen, opwarming altijd met bal" />
+            </div>
+            <div className="form-group">
+              <label className="input-label">Hoe integreer ik fun?</label>
+              <textarea className="input-field" rows={2} value={form.funAanpak} onChange={e => setForm({ ...form, funAanpak: e.target.value })}
+                placeholder="bv. iedereen speelt evenveel, positieve benadering, interesse tonen in elke speler (connectie)" />
+            </div>
+            <div className="form-group">
+              <label className="input-label">Hoe geef ik individuele aandacht aan elke speler?</label>
+              <textarea className="input-field" rows={2} value={form.individueleAandacht} onChange={e => setForm({ ...form, individueleAandacht: e.target.value })}
+                placeholder="bv. iedereen bij naam aangesproken, aandacht voor ieders 'rugzak', bankzitters betrokken houden" />
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Jaarplan (extra) ── */}

@@ -2,6 +2,7 @@ import { config } from '@keystone-6/core';
 import { statelessSessions } from '@keystone-6/core/session';
 import { createAuth } from '@keystone-6/auth';
 import { lists } from './schema';
+import { extendGraphqlSchema } from './customSchema';
 
 const { withAuth } = createAuth({
   listKey: 'Trainer',
@@ -28,6 +29,7 @@ export default withAuth(
     },
     lists,
     session,
+    extendGraphqlSchema,
     server: {
       cors: {
         origin: ['http://localhost:5173'],

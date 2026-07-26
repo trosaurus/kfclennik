@@ -8,10 +8,14 @@
     "start": "npx keystone prisma db push --accept-data-loss && keystone start"
   },
   "dependencies": {
+    "@graphql-tools/schema": "^10.0.38",
     "@keystone-6/auth": "^7.0.0",
     "@keystone-6/core": "^5.0.0",
     "@prisma/client": "4.16.2",
-    "prisma": "4.16.2"
+    "graphql": "^16.14.2",
+    "pptx-automizer": "^0.8.2",
+    "prisma": "4.16.2",
+    "sharp": "^0.35.3"
   },
   "engines": {
     "node": "18.x"

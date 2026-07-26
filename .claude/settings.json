@@ -11,10 +11,29 @@
       "Bash(rm -rf /tmp/pptx_inspect)",
       "Bash(node \"C:\\\\Users\\\\tomde\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-tomde-kfc-lennik\\\\8751363e-70ae-440f-ae5c-2ba682056715\\\\scratchpad\\\\test_spatial.js\")",
       "Bash(node \"C:\\\\Users\\\\tomde\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-tomde-kfc-lennik\\\\8751363e-70ae-440f-ae5c-2ba682056715\\\\scratchpad\\\\test_spatial_exercise.js\")",
-      "Bash(mkdir -p /tmp/pptx_inspect2)"
+      "Bash(mkdir -p /tmp/pptx_inspect2)",
+      "Bash(rm -rf /tmp/tpl_inspect)",
+      "Bash(mkdir -p /tmp/tpl_inspect)",
+      "Bash(unzip -o -q \"/c/Users/tomde/Downloads/Template training KFC.pptx\" -d extracted)",
+      "Bash(npm view *)",
+      "Bash(mkdir -p /tmp/automizer_test)",
+      "Bash(npm init *)",
+      "Bash(cd /tmp/automizer_test && cat node_modules/pptx-automizer/README.md 2>/dev/null | head -200)",
+      "Bash(cd /tmp/automizer_test && sed -n '200,420p' node_modules/pptx-automizer/README.md)",
+      "Bash(awk '/^## Modify Text/,/^## Modify Tables/' node_modules/pptx-automizer/README.md)",
+      "Bash(awk '/## Generate shapes with PptxGenJS/,/## Remove elements/' node_modules/pptx-automizer/README.md)",
+      "Bash(cd /tmp/automizer_test && find node_modules/pptx-automizer/dist -iname \"*text*\" | head -20)",
+      "Bash(cd /tmp/automizer_test && cat node_modules/pptx-automizer/dist/helper/modify-text-helper.d.ts *)",
+      "Bash(rm -rf /tmp/automizer_test)",
+      "Bash(mkdir -p \"/c/Users/tomde/kfc-lennik/backend/assets/templates\" && cp \"/c/Users/tomde/Downloads/Template training KFC.pptx\" \"/c/Users/tomde/kfc-lennik/backend/assets/templates/training-kfc-template.pptx\" && ls -la \"/c/Users/tomde/kfc-lennik/backend/assets/templates/\")",
+      "Bash(npx --package typescript tsc --noEmit -p tsconfig.json)",
+      "Bash(xargs grep -l \"extendGraphqlSchema\")",
+      "Bash(node -e \"const k = require\\('@keystone-6/core'\\); console.log\\(Object.keys\\(k\\)\\);\")",
+      "Bash(rm -rf /tmp/tpl_inspect /tmp/automizer_test)"
     ],
     "additionalDirectories": [
-      "\\tmp"
+      "\\tmp",
+      "C:\\Users\\tomde\\Downloads"
     ]
   }
 }

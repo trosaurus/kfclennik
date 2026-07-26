@@ -6,6 +6,13 @@
 .te-block-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
 .te-block-title-row .te-block-title { margin-bottom: 0; }
 
+.te-block-header-btn {
+  display: flex; align-items: center; justify-content: space-between; width: 100%;
+  background: none; border: none; padding: 0; margin-bottom: 14px; cursor: pointer; text-align: left;
+}
+.te-block-header-btn .te-block-title { margin-bottom: 0; }
+.te-block-header-btn .te-chevron { font-size: 13px; color: var(--text-dim); flex-shrink: 0; margin-left: 12px; }
+
 .te-jaarplan-label { font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--red); margin-bottom: 12px; }
 .te-extra-badge { font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); background: var(--bg-elevated); padding: 2px 7px; border-radius: 3px; margin-left: 8px; vertical-align: middle; }
 

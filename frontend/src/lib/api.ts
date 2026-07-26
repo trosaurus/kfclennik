@@ -1463,6 +1463,25 @@ export function wedstrijdvormPercentage(exercises: Exercise[]): number {
   return (wedstrijdvorm / total) * 100;
 }
 
+/** Vult het officiële KFC-trainingssjabloon (PowerPoint) in met deze training
+ * en download het resultaat — gegenereerd server-side, geen externe API. */
+export async function exportTrainingToPptx(trainingId: string, filename: string): Promise<void> {
+  const data = await gql(
+    `mutation ExportTrainingPptx($id: ID!) { exportTrainingPptx(id: $id) }`,
+    { id: trainingId }
+  );
+  const base64: string | null = data.exportTrainingPptx;
+  if (!base64) throw new Error('PowerPoint-export mislukt');
+  const res = await fetch(
+    `data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,${base64}`
+  );
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Tekentool: scene-model voor veldoefeningen ─────────────────────────────────
 // "Kies je tekenfiguur" (template pagina 7): spelers/pionnen in meerdere kleuren,
 // jokers, ladder, vlag, en 3 pijltypes (pass/dribbel/loop zonder bal).
