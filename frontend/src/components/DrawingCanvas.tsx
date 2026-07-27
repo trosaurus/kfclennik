@@ -21,14 +21,18 @@ interface Props {
 type Tool = 'select' | DrawingElementType;
 
 const POINT_TOOLS: { tool: DrawingElementType; icon: string; title: string }[] = [
-  { tool: 'player', icon: '●',  title: 'Speler' },
-  { tool: 'cone',   icon: '▲',  title: 'Pion' },
-  { tool: 'joker',  icon: '◆',  title: 'Joker' },
-  { tool: 'goal',   icon: '🥅', title: 'Doeltje' },
-  { tool: 'ball',   icon: '⚽', title: 'Bal' },
-  { tool: 'ladder', icon: '☰',  title: 'Ladder' },
-  { tool: 'flag',   icon: '🚩', title: 'Vlag' },
-  { tool: 'text',   icon: 'T',  title: 'Tekst' },
+  { tool: 'player', icon: '●',    title: 'Speler' },
+  { tool: 'cone',   icon: '▲',    title: 'Pion' },
+  { tool: 'marker', icon: '◼',    title: 'Marker (plat schijfje)' },
+  { tool: 'joker',  icon: '◆',    title: 'Joker' },
+  { tool: 'coach',  icon: '🧑‍🏫', title: 'Trainer' },
+  { tool: 'goal',   icon: '🥅',   title: 'Doeltje' },
+  { tool: 'ball',   icon: '⚽',   title: 'Bal' },
+  { tool: 'hoop',   icon: '◯',    title: 'Hoepel / poortje' },
+  { tool: 'wall',   icon: '🧱',   title: 'Muur' },
+  { tool: 'ladder', icon: '☰',    title: 'Ladder' },
+  { tool: 'flag',   icon: '🚩',   title: 'Vlag' },
+  { tool: 'text',   icon: 'T',    title: 'Tekst' },
 ];
 
 const ARROW_TOOLS: { tool: DrawingElementType; icon: string; title: string }[] = [
@@ -36,6 +40,8 @@ const ARROW_TOOLS: { tool: DrawingElementType; icon: string; title: string }[] =
   { tool: 'arrow-dribble', icon: '⇝', title: 'Pijl: dribbel' },
   { tool: 'arrow-run',     icon: '⤍', title: 'Pijl: loop zonder bal' },
 ];
+
+const MIN_SCALE = 0.4, MAX_SCALE = 3.5;
 
 function uid(): string {
   return (crypto as any).randomUUID ? crypto.randomUUID() : `el-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -71,9 +77,14 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   const [history, setHistory] = useState<DrawingScene[]>([]);
   const [future, setFuture] = useState<DrawingScene[]>([]);
   const dragRef = useRef<{ id: string; dx: number; dy: number } | null>(null);
+  const rotateDragRef = useRef<{ id: string } | null>(null);
+  const resizeDragRef = useRef<{ id: string; startScale: number; startDist: number } | null>(null);
   const dragStartSceneRef = useRef<DrawingScene | null>(null);
   const draftArrowRef = useRef<{ x: number; y: number } | null>(null);
   const [draftArrow, setDraftArrow] = useState<{ x: number; y: number; x2: number; y2: number } | null>(null);
+  const clipboardRef = useRef<Omit<DrawingElement, 'id'> | null>(null);
+  const pasteOffsetRef = useRef(0);
+  const [hasClipboard, setHasClipboard] = useState(false);
 
   function toSvgCoords(e: { clientX: number; clientY: number }): { x: number; y: number } {
     const svg = svgRef.current;
@@ -124,6 +135,48 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
     setSelectedId(null);
   }
 
+  // ── Kopiëren / plakken ────────────────────────────────────────────────────
+  function copySelected() {
+    if (!selectedId) return;
+    const el = scene.elements.find(e => e.id === selectedId);
+    if (!el) return;
+    const { id, ...rest } = el;
+    clipboardRef.current = rest;
+    pasteOffsetRef.current = 0;
+    setHasClipboard(true);
+  }
+
+  function pasteClipboard() {
+    const copied = clipboardRef.current;
+    if (!copied) return;
+    pasteOffsetRef.current += 1;
+    const shift = 4 * pasteOffsetRef.current; // % van viewBox, cascadeert bij herhaald plakken
+    const clamp = (v: number) => Math.min(97, Math.max(3, v));
+    const newEl: DrawingElement = {
+      ...copied,
+      id: uid(),
+      x: clamp(copied.x + shift),
+      y: clamp(copied.y + shift),
+      ...(copied.x2 !== undefined ? { x2: clamp(copied.x2 + shift) } : {}),
+      ...(copied.y2 !== undefined ? { y2: clamp(copied.y2 + shift) } : {}),
+    };
+    addElement(newEl);
+    setSelectedId(newEl.id);
+    setTool('select'); // meteen klaar om de plakte kopie te verslepen
+  }
+
+  // Ctrl/Cmd+C en Ctrl/Cmd+V ondersteunen naast de toolbar-knoppen (desktop-gemak).
+  useEffect(() => {
+    if (readOnly) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (e.key === 'c' || e.key === 'C') { e.preventDefault(); copySelected(); }
+      else if (e.key === 'v' || e.key === 'V') { e.preventDefault(); pasteClipboard(); }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
   function setBackground(bg: DrawingBackground) {
     // Een preset kiezen vervangt de geïmporteerde veldtekening (indien aanwezig)
     // door het vector-veld — bewuste, onomkeerbare keuze zoals "opnieuw beginnen".
@@ -155,7 +208,9 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
     let color: string | undefined;
     if (tool === 'player') {
       const count = scene.elements.filter(el => el.type === 'player' && el.color === playerColor).length + 1;
-      label = String(count);
+      const input = prompt('Spelernummer:', String(count));
+      if (input === null) return; // geannuleerd — geen speler plaatsen
+      label = input.trim() || undefined;
       color = playerColor;
     } else if (tool === 'cone') {
       color = coneColor;
@@ -169,6 +224,40 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
 
     if (draftArrowRef.current) {
       setDraftArrow({ x: draftArrowRef.current.x, y: draftArrowRef.current.y, x2: x, y2: y });
+      return;
+    }
+    if (rotateDragRef.current) {
+      const { id } = rotateDragRef.current;
+      const el = scene.elements.find(el => el.id === id);
+      if (!el) return;
+      // Hoek in pixel-ruimte berekenen (i.p.v. de 0-100 percentage-ruimte) zodat
+      // de rotatie visueel klopt, ook als het veld niet vierkant is (W !== H).
+      const px = (x / 100) * W, py = (y / 100) * H;
+      const ecx = (el.x / 100) * W, ecy = (el.y / 100) * H;
+      let deg = Math.atan2(py - ecy, px - ecx) * 180 / Math.PI + 90;
+      deg = ((deg % 360) + 360) % 360;
+      // Magnetisch vastklikken rond elke 15°, zodat rechte hoeken makkelijk te raken zijn.
+      const snapped = Math.round(deg / 15) * 15 % 360;
+      const diff = Math.min(Math.abs(deg - snapped), 360 - Math.abs(deg - snapped));
+      if (diff < 4) deg = snapped;
+      const updated = scene.elements.map(item => item.id === id ? { ...item, rotation: deg } : item);
+      onChange?.({ ...scene, elements: updated });
+      return;
+    }
+    if (resizeDragRef.current) {
+      const { id, startScale, startDist } = resizeDragRef.current;
+      const el = scene.elements.find(el => el.id === id);
+      if (!el || startDist === 0) return;
+      const px = (x / 100) * W, py = (y / 100) * H;
+      const ecx = (el.x / 100) * W, ecy = (el.y / 100) * H;
+      const dist = Math.hypot(px - ecx, py - ecy);
+      let scale = startScale * (dist / startDist);
+      scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
+      // Magnetisch vastklikken rond "hele" stappen van 0.25 voor makkelijk herhaalbare maten.
+      const snapped = Math.round(scale / 0.25) * 0.25;
+      if (Math.abs(scale - snapped) < 0.04) scale = snapped;
+      const updated = scene.elements.map(item => item.id === id ? { ...item, scale } : item);
+      onChange?.({ ...scene, elements: updated });
       return;
     }
     if (dragRef.current) {
@@ -199,6 +288,26 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
       setDraftArrow(null);
       return;
     }
+    if (rotateDragRef.current) {
+      const before = dragStartSceneRef.current;
+      if (before) {
+        setHistory(h => [...h, before]);
+        setFuture([]);
+      }
+      rotateDragRef.current = null;
+      dragStartSceneRef.current = null;
+      return;
+    }
+    if (resizeDragRef.current) {
+      const before = dragStartSceneRef.current;
+      if (before) {
+        setHistory(h => [...h, before]);
+        setFuture([]);
+      }
+      resizeDragRef.current = null;
+      dragStartSceneRef.current = null;
+      return;
+    }
     if (dragRef.current) {
       // Live position was already pushed to the parent via onChange during the drag —
       // here we only need to record the pre-drag snapshot for undo (captured at pointerdown,
@@ -224,6 +333,27 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
     setSelectedId(el.id);
   }
 
+  function onRotateHandlePointerDown(e: React.PointerEvent, el: DrawingElement) {
+    if (readOnly || tool !== 'select') return;
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    rotateDragRef.current = { id: el.id };
+    dragStartSceneRef.current = scene;
+    setSelectedId(el.id);
+  }
+
+  function onResizeHandlePointerDown(e: React.PointerEvent, el: DrawingElement) {
+    if (readOnly || tool !== 'select') return;
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    const { x, y } = toSvgCoords(e);
+    const px = (x / 100) * W, py = (y / 100) * H;
+    const ecx = (el.x / 100) * W, ecy = (el.y / 100) * H;
+    resizeDragRef.current = { id: el.id, startScale: el.scale ?? 1, startDist: Math.hypot(px - ecx, py - ecy) };
+    dragStartSceneRef.current = scene;
+    setSelectedId(el.id);
+  }
+
   return (
     <div className="dc-wrap">
       {!readOnly && (
@@ -236,6 +366,8 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
             <button key={t.tool} className={`dc-tool ${tool === t.tool ? 'active' : ''}`} title={t.title} onClick={() => setTool(t.tool)}>{t.icon}</button>
           ))}
           <span className="dc-sep" />
+          <button className="dc-tool" title="Kopieer geselecteerd (Ctrl+C)" disabled={!selectedId} onClick={copySelected}>⧉</button>
+          <button className="dc-tool" title="Plak (Ctrl+V)" disabled={!hasClipboard} onClick={pasteClipboard}>📋</button>
           <button className="dc-tool" title="Verwijder geselecteerd" disabled={!selectedId} onClick={deleteSelected}>🗑️</button>
           <button className="dc-tool" title="Ongedaan maken" disabled={history.length === 0} onClick={undo}>↩</button>
           <button className="dc-tool" title="Opnieuw" disabled={future.length === 0} onClick={redo}>↪</button>
@@ -294,7 +426,10 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
             ? <image href={scene.backgroundImage} x="0" y="0" width={W} height={H} preserveAspectRatio="xMidYMid slice" />
             : renderBackground(scene.background, W, H)}
 
-          {scene.elements.map(el => renderElement(el, el.id === selectedId, e => onElementPointerDown(e, el), W, H))}
+          {scene.elements.map(el => renderElement(
+            el, el.id === selectedId, e => onElementPointerDown(e, el), W, H,
+            tool === 'select', e => onRotateHandlePointerDown(e, el), e => onResizeHandlePointerDown(e, el),
+          ))}
 
           {draftArrow && renderArrow({ id: 'draft', type: tool as DrawingElementType, x: draftArrow.x, y: draftArrow.y, x2: draftArrow.x2, y2: draftArrow.y2 }, false, W, H)}
         </svg>
@@ -350,7 +485,10 @@ function renderBackground(bg: DrawingBackground, W: number, H: number) {
 
 // ── Element renderers ──────────────────────────────────────────────────────────
 
-function renderElement(el: DrawingElement, selected: boolean, onPointerDown: (e: React.PointerEvent) => void, W: number, H: number) {
+function renderElement(
+  el: DrawingElement, selected: boolean, onPointerDown: (e: React.PointerEvent) => void, W: number, H: number,
+  showHandles?: boolean, onRotateStart?: (e: React.PointerEvent) => void, onResizeStart?: (e: React.PointerEvent) => void,
+) {
   const cx = (el.x / 100) * W;
   const cy = (el.y / 100) * H;
 
@@ -358,79 +496,129 @@ function renderElement(el: DrawingElement, selected: boolean, onPointerDown: (e:
     return <g key={el.id} onPointerDown={onPointerDown}>{renderArrow(el, selected, W, H)}</g>;
   }
 
-  const ring = selected ? <circle cx={cx} cy={cy} r="18" fill="none" stroke="white" strokeWidth="1.5" strokeDasharray="3 2" /> : null;
+  const rotation = el.rotation ?? 0;
+  const scale = el.scale ?? 1;
+  // Schaal + rotatie rond hetzelfde middelpunt (cx,cy): eerst naar de oorsprong
+  // verschuiven, schalen, dan terug — en dat geheel roteren om hetzelfde punt.
+  const transform = (rotation || scale !== 1)
+    ? `translate(${cx} ${cy}) rotate(${rotation}) scale(${scale}) translate(${-cx} ${-cy})`
+    : undefined;
+  // De selectiering schaalt mee (ze toont de werkelijke omvang van het object),
+  // maar blijft buiten de rotatie — een cirkel heeft toch geen oriëntatie.
+  const ring = selected ? <circle cx={cx} cy={cy} r={18 * scale} fill="none" stroke="white" strokeWidth="1.5" strokeDasharray="3 2" /> : null;
+  const rotateHandle = (selected && showHandles && onRotateStart) ? renderRotateHandle(cx, cy, rotation, scale, onRotateStart) : null;
+  const resizeHandle = (selected && showHandles && onResizeStart) ? renderResizeHandle(cx, cy, rotation, scale, onResizeStart) : null;
 
+  return (
+    <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
+      {ring}
+      <g transform={transform}>
+        {renderShape(el, cx, cy)}
+      </g>
+      {rotateHandle}
+      {resizeHandle}
+    </g>
+  );
+}
+
+function renderShape(el: DrawingElement, cx: number, cy: number) {
   if (el.type === 'player') {
     const fill = playerHex(el.color);
     const textFill = el.color === 'white' ? '#16161D' : 'white';
     return (
-      <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
-        {ring}
+      <>
         <circle cx={cx} cy={cy} r="12" fill={fill} stroke="white" strokeWidth="1.5" />
         {el.label && <text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontFamily="'Bebas Neue',sans-serif" fill={textFill}>{el.label}</text>}
-      </g>
+      </>
     );
   }
   if (el.type === 'cone') {
-    return (
-      <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
-        {ring}
-        <path d={`M ${cx} ${cy-9} L ${cx+8} ${cy+7} L ${cx-8} ${cy+7} Z`} fill={coneHex(el.color)} stroke="rgba(0,0,0,0.4)" strokeWidth="1" />
-      </g>
-    );
+    return <path d={`M ${cx} ${cy-9} L ${cx+8} ${cy+7} L ${cx-8} ${cy+7} Z`} fill={coneHex(el.color)} stroke="rgba(0,0,0,0.4)" strokeWidth="1" />;
+  }
+  if (el.type === 'marker') {
+    return <rect x={cx-6} y={cy-6} width="12" height="12" rx="2" fill="#F5C518" stroke="rgba(0,0,0,0.4)" strokeWidth="1" />;
   }
   if (el.type === 'joker') {
+    return <path d={`M ${cx} ${cy-10} L ${cx+9} ${cy} L ${cx} ${cy+10} L ${cx-9} ${cy} Z`} fill="#F5C518" stroke="rgba(0,0,0,0.4)" strokeWidth="1" />;
+  }
+  if (el.type === 'coach') {
     return (
-      <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
-        {ring}
-        <path d={`M ${cx} ${cy-10} L ${cx+9} ${cy} L ${cx} ${cy+10} L ${cx-9} ${cy} Z`} fill="#F5C518" stroke="rgba(0,0,0,0.4)" strokeWidth="1" />
-      </g>
+      <>
+        <rect x={cx-10} y={cy-10} width="20" height="20" rx="4" fill="#16161D" stroke="white" strokeWidth="1.5" />
+        <text x={cx} y={cy+4} textAnchor="middle" fontSize="10" fontFamily="'Bebas Neue',sans-serif" fill="white">T</text>
+      </>
     );
   }
   if (el.type === 'goal') {
-    return (
-      <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
-        {ring}
-        <rect x={cx-14} y={cy-6} width="28" height="12" fill="none" stroke="white" strokeWidth="2" />
-      </g>
-    );
+    return <rect x={cx-14} y={cy-6} width="28" height="12" fill="none" stroke="white" strokeWidth="2" />;
   }
   if (el.type === 'ball') {
+    return <circle cx={cx} cy={cy} r="6" fill="white" stroke="rgba(0,0,0,0.5)" strokeWidth="1" />;
+  }
+  if (el.type === 'hoop') {
+    return <ellipse cx={cx} cy={cy} rx="13" ry="6" fill="none" stroke="#F5C518" strokeWidth="3" />;
+  }
+  if (el.type === 'wall') {
     return (
-      <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
-        {ring}
-        <circle cx={cx} cy={cy} r="6" fill="white" stroke="rgba(0,0,0,0.5)" strokeWidth="1" />
-      </g>
+      <>
+        {[-10, 0, 10].map(dx => (
+          <rect key={dx} x={cx+dx-3} y={cy-11} width="6" height="22" rx="2" fill="#9333ea" stroke="rgba(0,0,0,0.4)" strokeWidth="1" />
+        ))}
+      </>
     );
   }
   if (el.type === 'ladder') {
     const rungs = [-10, -5, 0, 5, 10];
     return (
-      <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
-        {ring}
+      <>
         <line x1={cx-7} y1={cy-12} x2={cx-7} y2={cy+12} stroke="#F5C518" strokeWidth="2" />
         <line x1={cx+7} y1={cy-12} x2={cx+7} y2={cy+12} stroke="#F5C518" strokeWidth="2" />
         {rungs.map(r => <line key={r} x1={cx-7} y1={cy+r} x2={cx+7} y2={cy+r} stroke="#F5C518" strokeWidth="1.5" />)}
-      </g>
+      </>
     );
   }
   if (el.type === 'flag') {
     return (
-      <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
-        {ring}
+      <>
         <line x1={cx} y1={cy-12} x2={cx} y2={cy+12} stroke="white" strokeWidth="1.5" />
         <path d={`M ${cx} ${cy-12} L ${cx+12} ${cy-8} L ${cx} ${cy-4} Z`} fill="var(--red, #CC1A1A)" />
-      </g>
+      </>
     );
   }
   // text
   return (
-    <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
-      {ring}
-      <text x={cx} y={cy} textAnchor="middle" fontSize="13" fontFamily="'Barlow Condensed',sans-serif" fontWeight={700}
-        fill="white" stroke="rgba(0,0,0,0.6)" strokeWidth="3" paintOrder="stroke">
-        {el.label}
-      </text>
+    <text x={cx} y={cy} textAnchor="middle" fontSize="13" fontFamily="'Barlow Condensed',sans-serif" fontWeight={700}
+      fill="white" stroke="rgba(0,0,0,0.6)" strokeWidth="3" paintOrder="stroke">
+      {el.label}
+    </text>
+  );
+}
+
+function renderRotateHandle(cx: number, cy: number, rotation: number, scale: number, onPointerDown: (e: React.PointerEvent) => void) {
+  const innerR = 18 * scale, outerR = innerR + 12;
+  const rad = (rotation - 90) * Math.PI / 180;
+  const hx = cx + outerR * Math.cos(rad), hy = cy + outerR * Math.sin(rad);
+  const ix = cx + innerR * Math.cos(rad), iy = cy + innerR * Math.sin(rad);
+  return (
+    <g className="dc-rotate-handle">
+      <line x1={ix} y1={iy} x2={hx} y2={hy} stroke="white" strokeWidth="1.5" strokeOpacity="0.8" />
+      <circle cx={hx} cy={hy} r="6" fill="white" stroke="var(--red, #CC1A1A)" strokeWidth="1.5"
+        style={{ cursor: 'grab', touchAction: 'none' }} onPointerDown={onPointerDown} />
+    </g>
+  );
+}
+
+function renderResizeHandle(cx: number, cy: number, rotation: number, scale: number, onPointerDown: (e: React.PointerEvent) => void) {
+  // Tegenoverliggende hoek t.o.v. de rotatie-handle, zodat ze nooit overlappen.
+  const innerR = 18 * scale, outerR = innerR + 12;
+  const rad = (rotation + 90) * Math.PI / 180;
+  const hx = cx + outerR * Math.cos(rad), hy = cy + outerR * Math.sin(rad);
+  const ix = cx + innerR * Math.cos(rad), iy = cy + innerR * Math.sin(rad);
+  return (
+    <g className="dc-resize-handle">
+      <line x1={ix} y1={iy} x2={hx} y2={hy} stroke="white" strokeWidth="1.5" strokeOpacity="0.8" />
+      <rect x={hx - 5} y={hy - 5} width="10" height="10" fill="white" stroke="var(--red, #CC1A1A)" strokeWidth="1.5"
+        style={{ cursor: 'nwse-resize', touchAction: 'none' }} onPointerDown={onPointerDown} />
     </g>
   );
 }

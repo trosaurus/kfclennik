@@ -6,6 +6,7 @@
 
 export type DrawingElementType =
   | 'player' | 'cone' | 'joker' | 'goal' | 'ball' | 'ladder' | 'flag'
+  | 'hoop' | 'wall' | 'marker' | 'coach'
   | 'arrow-pass' | 'arrow-dribble' | 'arrow-run' | 'text';
 
 export interface DrawingElement {
@@ -15,6 +16,8 @@ export interface DrawingElement {
   x2?: number; y2?: number;
   label?: string;
   color?: string;
+  rotation?: number;
+  scale?: number;
 }
 
 export type DrawingBackground = 'grid' | 'half' | 'full';
@@ -88,7 +91,14 @@ function renderElement(el: DrawingElement, W: number, H: number): string {
     return renderArrow(el, W, H);
   }
   const cx = (el.x / 100) * W, cy = (el.y / 100) * H;
+  const shape = renderShape(el, cx, cy);
+  const rotation = el.rotation ?? 0;
+  const scale = el.scale ?? 1;
+  if (!rotation && scale === 1) return shape;
+  return `<g transform="translate(${cx} ${cy}) rotate(${rotation}) scale(${scale}) translate(${-cx} ${-cy})">${shape}</g>`;
+}
 
+function renderShape(el: DrawingElement, cx: number, cy: number): string {
   switch (el.type) {
     case 'player': {
       const fill = playerHex(el.color);
@@ -98,12 +108,24 @@ function renderElement(el: DrawingElement, W: number, H: number): string {
     }
     case 'cone':
       return `<path d="M ${cx} ${cy - 9} L ${cx + 8} ${cy + 7} L ${cx - 8} ${cy + 7} Z" fill="${coneHex(el.color)}" stroke="rgba(0,0,0,0.4)" stroke-width="1"/>`;
+    case 'marker':
+      return `<rect x="${cx - 6}" y="${cy - 6}" width="12" height="12" rx="2" fill="#F5C518" stroke="rgba(0,0,0,0.4)" stroke-width="1"/>`;
     case 'joker':
       return `<path d="M ${cx} ${cy - 10} L ${cx + 9} ${cy} L ${cx} ${cy + 10} L ${cx - 9} ${cy} Z" fill="#F5C518" stroke="rgba(0,0,0,0.4)" stroke-width="1"/>`;
+    case 'coach':
+      return `<rect x="${cx - 10}" y="${cy - 10}" width="20" height="20" rx="4" fill="#16161D" stroke="white" stroke-width="1.5"/>` +
+        `<text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="10" font-family="sans-serif" fill="white">T</text>`;
     case 'goal':
       return `<rect x="${cx - 14}" y="${cy - 6}" width="28" height="12" fill="none" stroke="white" stroke-width="2"/>`;
     case 'ball':
       return `<circle cx="${cx}" cy="${cy}" r="6" fill="white" stroke="rgba(0,0,0,0.5)" stroke-width="1"/>`;
+    case 'hoop':
+      return `<ellipse cx="${cx}" cy="${cy}" rx="13" ry="6" fill="none" stroke="#F5C518" stroke-width="3"/>`;
+    case 'wall': {
+      let out = '';
+      for (const dx of [-10, 0, 10]) out += `<rect x="${cx + dx - 3}" y="${cy - 11}" width="6" height="22" rx="2" fill="#9333ea" stroke="rgba(0,0,0,0.4)" stroke-width="1"/>`;
+      return out;
+    }
     case 'ladder': {
       let out = `<line x1="${cx - 7}" y1="${cy - 12}" x2="${cx - 7}" y2="${cy + 12}" stroke="#F5C518" stroke-width="2"/>` +
         `<line x1="${cx + 7}" y1="${cy - 12}" x2="${cx + 7}" y2="${cy + 12}" stroke="#F5C518" stroke-width="2"/>`;

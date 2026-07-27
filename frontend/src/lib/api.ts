@@ -1731,6 +1731,7 @@ export async function deleteOefeningDatabankItem(id: string): Promise<void> {
 
 export type DrawingElementType =
   | 'player' | 'cone' | 'joker' | 'goal' | 'ball' | 'ladder' | 'flag'
+  | 'hoop' | 'wall' | 'marker' | 'coach'
   | 'arrow-pass' | 'arrow-dribble' | 'arrow-run' | 'text';
 
 export type PlayerColor = 'red' | 'blue' | 'white' | 'grey';
@@ -1743,6 +1744,8 @@ export interface DrawingElement {
   x2?: number; y2?: number; // eindpunt, enkel voor pijlen
   label?: string;           // spelernummer of tekstinhoud
   color?: string;           // PlayerColor voor 'player', ConeColor voor 'cone'
+  rotation?: number;        // graden, rond het eigen middelpunt (niet gebruikt bij pijlen)
+  scale?: number;           // schaalfactor rond het eigen middelpunt, standaard 1 (niet gebruikt bij pijlen)
 }
 
 export const PLAYER_COLORS: { value: PlayerColor; label: string; hex: string }[] = [

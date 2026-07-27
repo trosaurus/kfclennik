@@ -465,7 +465,11 @@ export default function Matchday() {
         .map(s => attendances.find(a => a.id === s.attendance.id)?.player.id)
         .filter(Boolean) as string[]
     );
-    return allPlayers.filter(p => !onFieldIds.has(p.id));
+    // Alleen spelers die voor deze wedstrijd geselecteerd zijn komen in aanmerking
+    // als invaller — niet de volledige ploegkern.
+    return attendances
+      .filter(a => a.selected === 'true' && !onFieldIds.has(a.player.id))
+      .map(a => a.player);
   }
 
   // ── Period countdown ───────────────────────────────────────────────────────
@@ -493,6 +497,9 @@ export default function Matchday() {
   const playerStates = buildPlayerStates();
   const onField = playerStates.filter(ps => ps.onField);
   const onBench = playerStates.filter(ps => !ps.onField);
+  // De kwart-opstelling mag enkel kiezen uit spelers die al voor deze wedstrijd
+  // geselecteerd zijn (Wedstrijden → Selectie) — niet de volledige ploegkern.
+  const squadPlayers = allPlayers.filter(p => attendances.some(a => a.player.id === p.id && a.selected === 'true'));
   const m = match;
   // Format must follow the match's OWN team (relevant for admins viewing matches
   // across teams) — not the logged-in trainer's team, which may differ or be absent.
@@ -606,7 +613,7 @@ export default function Matchday() {
       {isPlanned && (
         <PeriodLineupSelector
           matchId={m!.id}
-          allPlayers={allPlayers}
+          allPlayers={squadPlayers}
           attendances={attendances}
           fieldAssignments={fieldAssignments}
           onPreAssign={handlePreAssign}
@@ -1404,7 +1411,8 @@ function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignmen
             {allPlayers.length === 0 && (
               <div className="empty-state" style={{ padding: '32px 16px' }}>
                 <div className="empty-icon">👥</div>
-                Geen actieve spelers
+                Nog geen spelers geselecteerd voor deze wedstrijd.<br />
+                Ga naar Wedstrijden → Selectie om spelers toe te voegen.
               </div>
             )}
           </div>

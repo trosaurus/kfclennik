@@ -80,6 +80,14 @@
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 4px 14px; font-family: var(--font-heading); font-size: 14px; font-weight: 700;
 }
+/* De tekentool zelf mag hier de volledige beschikbare ruimte innemen i.p.v. de
+   kleine vaste breedte die geldt voor de compacte previews elders (kaarten, formulieren) */
+.te-draw-modal .dc-wrap { flex: 1; min-height: 0; }
+.te-draw-modal .dc-canvas-container {
+  flex: 1; min-height: 0; width: auto; max-width: 100%;
+  display: flex; align-items: center; justify-content: center;
+}
+.te-draw-modal .dc-svg { width: auto; height: 100%; max-width: 100%; }
 
 @media (max-width: 600px) {
   .te-header-actions { width: 100%; }
