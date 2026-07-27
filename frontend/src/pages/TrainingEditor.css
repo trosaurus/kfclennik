@@ -93,6 +93,8 @@
 .te-gen-fase-tabs .sb-toggle { flex: 1; }
 .te-gen-hint { font-size: 13px; color: var(--text-dim); background: var(--bg-elevated); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 12px; line-height: 1.5; }
 .te-gen-list { display: flex; flex-direction: column; gap: 10px; max-height: 46vh; overflow-y: auto; margin-bottom: 4px; }
+.te-gen-manual-title { font-size: 13px; font-weight: 600; color: var(--white); margin: 16px 0 10px; }
+.te-claude-prompt { font-size: 12px; font-family: var(--font-mono, monospace); line-height: 1.5; resize: vertical; }
 .te-gen-card { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; }
 .te-gen-card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
 .te-gen-card-name { font-size: 14px; font-weight: 700; }

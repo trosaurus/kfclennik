@@ -55,6 +55,13 @@ export const lists: Lists = {
           { label: 'Inactief', value: 'false' },
         ],
       }),
+
+      // ── Trainersmanual (PDF, per ploeg) — bestand op lokale schijf, tekst hier
+      // geëxtraheerd zodat oefeningen-generatie op maat van deze ploeg kan matchen ──
+      manualFileName:   text({ defaultValue: '' }),
+      manualUploadedAt: timestamp({}),
+      manualText:       text({ ui: { displayMode: 'textarea' } }),
+
       trainers: relationship({ ref: 'Trainer.team', many: true }),
       players: relationship({ ref: 'Player.team', many: true }),
       matches: relationship({ ref: 'Match.team', many: true }),

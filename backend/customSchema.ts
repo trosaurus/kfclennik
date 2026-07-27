@@ -6,6 +6,7 @@
 import { GraphQLSchema } from 'graphql';
 import { mergeSchemas } from '@graphql-tools/schema';
 import { exportTrainingPptx, ExportTraining } from './lib/exportTrainingPptx';
+import { saveTeamManual, deleteTeamManual } from './lib/manualUpload';
 
 const TRAINING_QUERY = `
   id titel date jaarplanLabel
@@ -28,10 +29,34 @@ export function extendGraphqlSchema(schema: GraphQLSchema): GraphQLSchema {
     typeDefs: `
       type Mutation {
         exportTrainingPptx(id: ID!): String
+        uploadTeamManual(teamId: ID!, filename: String!, contentBase64: String!): Team
+        removeTeamManual(teamId: ID!): Team
       }
     `,
     resolvers: {
       Mutation: {
+        uploadTeamManual: async (
+          _root: unknown,
+          { teamId, filename, contentBase64 }: { teamId: string; filename: string; contentBase64: string },
+          context: any
+        ) => {
+          const { text, uploadedAt } = await saveTeamManual(teamId, contentBase64);
+          // context.db (i.s.o. context.query) geeft de rauwe Prisma-waarden terug
+          // (een echt Date-object voor manualUploadedAt) i.p.v. via een interne
+          // GraphQL-uitvoering te gaan, waar de DateTime-scalar een Date-instantie
+          // verwacht bij het serialiseren van de respons.
+          return context.db.Team.updateOne({
+            where: { id: teamId },
+            data: { manualFileName: filename, manualUploadedAt: uploadedAt, manualText: text },
+          });
+        },
+        removeTeamManual: async (_root: unknown, { teamId }: { teamId: string }, context: any) => {
+          deleteTeamManual(teamId);
+          return context.db.Team.updateOne({
+            where: { id: teamId },
+            data: { manualFileName: '', manualUploadedAt: null, manualText: '' },
+          });
+        },
         exportTrainingPptx: async (_root: unknown, { id }: { id: string }, context: any) => {
           const training = await context.query.Training.findOne({ where: { id }, query: TRAINING_QUERY });
           if (!training) throw new Error('Training niet gevonden');

@@ -163,6 +163,9 @@ type Team {
   category: String
   club: String
   active: String
+  manualFileName: String
+  manualUploadedAt: DateTime
+  manualText: String
   trainers(where: TrainerWhereInput! = {}, orderBy: [TrainerOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TrainerWhereUniqueInput): [Trainer!]
   trainersCount(where: TrainerWhereInput! = {}): Int
   players(where: PlayerWhereInput! = {}, orderBy: [PlayerOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PlayerWhereUniqueInput): [Player!]
@@ -172,6 +175,8 @@ type Team {
   trainings(where: TrainingWhereInput! = {}, orderBy: [TrainingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TrainingWhereUniqueInput): [Training!]
   trainingsCount(where: TrainingWhereInput! = {}): Int
 }
+
+scalar DateTime @specifiedBy(url: "https://datatracker.ietf.org/doc/html/rfc3339#section-5.6")
 
 input TeamWhereUniqueInput {
   id: ID
@@ -186,10 +191,24 @@ input TeamWhereInput {
   category: StringFilter
   club: StringFilter
   active: StringNullableFilter
+  manualFileName: StringFilter
+  manualUploadedAt: DateTimeNullableFilter
+  manualText: StringFilter
   trainers: TrainerManyRelationFilter
   players: PlayerManyRelationFilter
   matches: MatchManyRelationFilter
   trainings: TrainingManyRelationFilter
+}
+
+input DateTimeNullableFilter {
+  equals: DateTime
+  in: [DateTime!]
+  notIn: [DateTime!]
+  lt: DateTime
+  lte: DateTime
+  gt: DateTime
+  gte: DateTime
+  not: DateTimeNullableFilter
 }
 
 input TrainerManyRelationFilter {
@@ -216,6 +235,9 @@ input TeamOrderByInput {
   category: OrderDirection
   club: OrderDirection
   active: OrderDirection
+  manualFileName: OrderDirection
+  manualUploadedAt: OrderDirection
+  manualText: OrderDirection
 }
 
 input TeamUpdateInput {
@@ -223,6 +245,9 @@ input TeamUpdateInput {
   category: String
   club: String
   active: String
+  manualFileName: String
+  manualUploadedAt: DateTime
+  manualText: String
   trainers: TrainerRelateToManyForUpdateInput
   players: PlayerRelateToManyForUpdateInput
   matches: MatchRelateToManyForUpdateInput
@@ -260,6 +285,9 @@ input TeamCreateInput {
   category: String
   club: String
   active: String
+  manualFileName: String
+  manualUploadedAt: DateTime
+  manualText: String
   trainers: TrainerRelateToManyForCreateInput
   players: PlayerRelateToManyForCreateInput
   matches: MatchRelateToManyForCreateInput
@@ -438,8 +466,6 @@ type Match {
   evaluationsCount(where: EvaluationWhereInput! = {}): Int
 }
 
-scalar DateTime @specifiedBy(url: "https://datatracker.ietf.org/doc/html/rfc3339#section-5.6")
-
 input MatchWhereUniqueInput {
   id: ID
 }
@@ -475,17 +501,6 @@ input DateTimeFilter {
   gt: DateTime
   gte: DateTime
   not: DateTimeFilter
-}
-
-input DateTimeNullableFilter {
-  equals: DateTime
-  in: [DateTime!]
-  notIn: [DateTime!]
-  lt: DateTime
-  lte: DateTime
-  gt: DateTime
-  gte: DateTime
-  not: DateTimeNullableFilter
 }
 
 input PeriodManyRelationFilter {
@@ -1513,6 +1528,8 @@ type Mutation {
   authenticateTrainerWithPassword(email: String!, password: String!): TrainerAuthenticationWithPasswordResult
   createInitialTrainer(data: CreateInitialTrainerInput!): TrainerAuthenticationWithPasswordSuccess!
   exportTrainingPptx(id: ID!): String
+  uploadTeamManual(teamId: ID!, filename: String!, contentBase64: String!): Team
+  removeTeamManual(teamId: ID!): Team
 }
 
 union TrainerAuthenticationWithPasswordResult = TrainerAuthenticationWithPasswordSuccess | TrainerAuthenticationWithPasswordFailure

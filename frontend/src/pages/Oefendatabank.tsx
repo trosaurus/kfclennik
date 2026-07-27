@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTeam } from '../lib/TeamContext';
 import {
   getOefeningDatabank, createOefeningDatabankItem, updateOefeningDatabankItem, deleteOefeningDatabankItem,
+  getTeamManual, uploadTeamManual, removeTeamManual, TeamManual,
   OefeningDatabankItem, OefeningCategorie, Doelgroep, DOELGROEP_LEEFTIJDEN, ExerciseFase, EXERCISE_FASE_LABELS, parseDrawingScene,
 } from '../lib/api';
 import DrawingCanvas from '../components/DrawingCanvas';
@@ -42,10 +43,17 @@ function ageRank(doelgroep: string | null): number {
 }
 
 export default function Oefendatabank() {
-  const { trainer } = useTeam();
+  const { trainer, teamId } = useTeam();
   const [items, setItems] = useState<OefeningDatabankItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // ── Trainersmanual van de eigen ploeg ────────────────────────────────────────
+  const [manual, setManual] = useState<TeamManual | null>(null);
+  const [manualLoading, setManualLoading] = useState(true);
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualError, setManualError] = useState('');
+  const [manualConfirmDelete, setManualConfirmDelete] = useState(false);
 
   const [expandedId, setExpandedId] = useState<string | null>(null); // 'new' of item.id
   const [draft, setDraft] = useState<DraftForm>(emptyDraft());
@@ -59,10 +67,38 @@ export default function Oefendatabank() {
   const [search, setSearch] = useState('');
 
   useEffect(() => { load(); }, []);
+  useEffect(() => { loadManual(); }, [teamId]);
 
   async function load() {
     setLoading(true);
     try { setItems(await getOefeningDatabank()); } finally { setLoading(false); }
+  }
+
+  async function loadManual() {
+    if (!teamId) { setManual(null); setManualLoading(false); return; }
+    setManualLoading(true);
+    try { setManual(await getTeamManual(teamId)); } finally { setManualLoading(false); }
+  }
+
+  async function handleManualFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // zodat hetzelfde bestand opnieuw gekozen kan worden
+    if (!file || !teamId) return;
+    setManualBusy(true); setManualError('');
+    try {
+      await uploadTeamManual(teamId, file);
+      await loadManual();
+    } catch (err) {
+      setManualError(err instanceof Error ? err.message : 'Upload mislukt');
+    } finally { setManualBusy(false); }
+  }
+
+  async function handleManualRemove() {
+    if (!teamId) return;
+    setManualConfirmDelete(false);
+    setManualBusy(true);
+    try { await removeTeamManual(teamId); await loadManual(); }
+    finally { setManualBusy(false); }
   }
 
   function openNew() {
@@ -129,6 +165,41 @@ export default function Oefendatabank() {
       </div>
 
       {error && <div className="adm-error">⚠ {error}</div>}
+
+      {teamId && (
+        <div className="card od-manual-card">
+          <div className="od-manual-head">
+            <div>
+              <div className="od-manual-title">📄 Trainersmanual van je ploeg</div>
+              <p className="od-manual-desc">Wordt gebruikt bij het genereren van oefeningen voor deze ploeg.</p>
+            </div>
+            <div className="od-manual-actions">
+              <label className="btn btn-outline btn-sm od-manual-upload-btn">
+                {manualBusy ? 'Bezig...' : manual?.manualFileName ? 'Vervangen' : 'Upload PDF'}
+                <input type="file" accept="application/pdf" onChange={handleManualFile} disabled={manualBusy} />
+              </label>
+              {manual?.manualFileName && (
+                <button className="btn btn-outline btn-sm" onClick={() => setManualConfirmDelete(true)} disabled={manualBusy}>
+                  Verwijderen
+                </button>
+              )}
+            </div>
+          </div>
+          {manualError && <div className="adm-error">⚠ {manualError}</div>}
+          {!manualLoading && (
+            manual?.manualFileName ? (
+              <div className="od-manual-status">
+                📎 {manual.manualFileName}
+                {manual.manualUploadedAt ? ` — geüpload op ${new Date(manual.manualUploadedAt).toLocaleDateString('nl-BE')}` : ''}
+              </div>
+            ) : (
+              <div className="od-manual-status od-manual-empty">
+                Nog geen manual geüpload — de generator gebruikt dan enkel de standaardbibliotheek.
+              </div>
+            )
+          )}
+        </div>
+      )}
 
       <div className="od-filters">
         <select className="input-field" value={filterFase} onChange={e => setFilterFase(e.target.value as ExerciseFase | '')}>
@@ -212,6 +283,22 @@ export default function Oefendatabank() {
               <button className="btn btn-outline" onClick={() => setConfirmDelete(null)}>Annuleer</button>
               <button className="btn btn-primary" style={{ background: 'var(--red-dark)' }}
                 onClick={() => handleDelete(confirmDelete)}>Verwijderen</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {manualConfirmDelete && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setManualConfirmDelete(false)}>
+          <div className="modal">
+            <div className="modal-title">Manual verwijderen?</div>
+            <p style={{ color: 'var(--text-mid)', marginBottom: 24, lineHeight: 1.6 }}>
+              <strong style={{ color: 'var(--white)' }}>{manual?.manualFileName}</strong> wordt van de server verwijderd.
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={() => setManualConfirmDelete(false)}>Annuleer</button>
+              <button className="btn btn-primary" style={{ background: 'var(--red-dark)' }}
+                onClick={handleManualRemove}>Verwijderen</button>
             </div>
           </div>
         </div>

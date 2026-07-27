@@ -26,15 +26,18 @@ model Trainer {
 }
 
 model Team {
-  id        String     @id @default(cuid())
-  name      String     @default("")
-  category  String
-  club      String     @default("")
-  active    String?    @default("true")
-  trainers  Trainer[]  @relation("Trainer_team")
-  players   Player[]   @relation("Player_team")
-  matches   Match[]    @relation("Match_team")
-  trainings Training[] @relation("Training_team")
+  id               String     @id @default(cuid())
+  name             String     @default("")
+  category         String
+  club             String     @default("")
+  active           String?    @default("true")
+  manualFileName   String     @default("")
+  manualUploadedAt DateTime?
+  manualText       String     @default("")
+  trainers         Trainer[]  @relation("Trainer_team")
+  players          Player[]   @relation("Player_team")
+  matches          Match[]    @relation("Match_team")
+  trainings        Training[] @relation("Training_team")
 }
 
 model Player {

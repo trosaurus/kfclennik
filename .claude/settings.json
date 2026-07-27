@@ -29,11 +29,17 @@
       "Bash(npx --package typescript tsc --noEmit -p tsconfig.json)",
       "Bash(xargs grep -l \"extendGraphqlSchema\")",
       "Bash(node -e \"const k = require\\('@keystone-6/core'\\); console.log\\(Object.keys\\(k\\)\\);\")",
-      "Bash(rm -rf /tmp/tpl_inspect /tmp/automizer_test)"
+      "Bash(rm -rf /tmp/tpl_inspect /tmp/automizer_test)",
+      "Bash(git diff *)",
+      "Bash(npx -y typescript --noEmit -p .)",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
+      "Bash(node \"C:\\\\Users\\\\tomde\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-tomde-kfc-lennik\\\\f9a3728a-95ec-41c2-9750-a4daf6283e58\\\\scratchpad\\\\test_parse.js\")",
+      "Bash(rm -f \"/c/Users/tomde/AppData/Local/Temp/claude/c--Users-tomde-kfc-lennik/f9a3728a-95ec-41c2-9750-a4daf6283e58/scratchpad/test_parse.js\")"
     ],
     "additionalDirectories": [
       "\\tmp",
-      "C:\\Users\\tomde\\Downloads"
+      "C:\\Users\\tomde\\Downloads",
+      "C:\\Users\\tomde\\AppData\\Local\\Temp\\claude\\c--Users-tomde-kfc-lennik\\f9a3728a-95ec-41c2-9750-a4daf6283e58\\scratchpad"
     ]
   }
 }

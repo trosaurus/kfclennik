@@ -6,9 +6,12 @@ import {
   Training, Exercise, ExerciseFase, EXERCISE_FASE_LABELS,
   wedstrijdvormPercentage, parseDrawingScene, exportTrainingToPptx,
   getOefeningDatabank, createOefeningDatabankItem, OefeningDatabankItem, OefeningCategorie, Doelgroep, DOELGROEP_LEEFTIJDEN,
+  getTeamManual,
 } from '../lib/api';
 import { getJaarplanWeekForDate, getCategoryBracket, formatJaarplanLabel } from '../lib/jaarplan';
 import { suggestExercises, LibraryExercise, KRACHTIGE_LEEROMGEVING_PRINCIPES } from '../lib/oefeningenbibliotheek';
+import { extractManualSuggestions } from '../lib/manualOefeningen';
+import { buildOefeningPrompt, parseClaudeResponse, ParsedClaudeExercise } from '../lib/claudePrompt';
 import DrawingCanvas from '../components/DrawingCanvas';
 import './TrainingEditor.css';
 import './Oefendatabank.css'; // hergebruikt .od-card-teamprincipe voor de databank-picker
@@ -32,6 +35,22 @@ function exerciseFromLibrary(lib: LibraryExercise): LocalExercise {
     id: `new-${uid()}`, isNew: true, order: 0, fase: lib.fase, naam: lib.naam, duurMinuten: lib.duurMinuten,
     organisatieSpelers: lib.organisatieSpelers, organisatieAfmetingen: lib.organisatieAfmetingen, organisatieMateriaal: lib.organisatieMateriaal,
     beschrijving: lib.beschrijving, drawingData: JSON.stringify(lib.scene), coachingPunten: lib.coachingPunten, maximaalActief: lib.maximaalActief, fun: lib.fun,
+  };
+}
+
+function exerciseFromManualText(fase: ExerciseFase, text: string): LocalExercise {
+  return {
+    id: `new-${uid()}`, isNew: true, order: 0, fase, naam: '', duurMinuten: 10,
+    organisatieSpelers: '', organisatieAfmetingen: '', organisatieMateriaal: '',
+    beschrijving: text, drawingData: '', coachingPunten: '', maximaalActief: '', fun: '',
+  };
+}
+
+function exerciseFromClaudeResponse(fase: ExerciseFase, p: ParsedClaudeExercise): LocalExercise {
+  return {
+    id: `new-${uid()}`, isNew: true, order: 0, fase, naam: p.naam, duurMinuten: p.duurMinuten,
+    organisatieSpelers: p.organisatieSpelers, organisatieAfmetingen: p.organisatieAfmetingen, organisatieMateriaal: p.organisatieMateriaal,
+    beschrijving: p.beschrijving, drawingData: '', coachingPunten: p.coachingPunten, maximaalActief: p.maximaalActief, fun: p.fun,
   };
 }
 
@@ -79,6 +98,9 @@ export default function TrainingEditor() {
   const [genModalOpen, setGenModalOpen] = useState(false);
   const [genFase, setGenFase] = useState<ExerciseFase>('opwarming');
   const [genOffset, setGenOffset] = useState(0);
+  const [manualText, setManualText] = useState('');
+  const [promptCopied, setPromptCopied] = useState(false);
+  const [claudeResponse, setClaudeResponse] = useState('');
 
   const [dbItems, setDbItems] = useState<OefeningDatabankItem[]>([]);
   const [dbLoaded, setDbLoaded] = useState(false);
@@ -116,6 +138,9 @@ export default function TrainingEditor() {
       });
       setExercises(t.exercises);
       setDeletedIds([]);
+      if (t.team?.id) {
+        getTeamManual(t.team.id).then(m => setManualText(m.manualText || '')).catch(() => {});
+      }
     } finally { setLoading(false); }
   }
 
@@ -138,12 +163,33 @@ export default function TrainingEditor() {
   }
 
   function openGenerator(fase: ExerciseFase) {
-    setGenFase(fase); setGenOffset(0); setGenModalOpen(true);
+    setGenFase(fase); setGenOffset(0); setClaudeResponse(''); setGenModalOpen(true);
   }
   function useSuggestion(lib: LibraryExercise) {
     const ex = exerciseFromLibrary(lib);
     setExercises(list => [...list, ex]);
     setExpandedId(ex.id);
+    setGenModalOpen(false);
+  }
+  function useManualSuggestion(text: string) {
+    const ex = exerciseFromManualText(genFase, text);
+    setExercises(list => [...list, ex]);
+    setExpandedId(ex.id);
+    setGenModalOpen(false);
+  }
+  async function handleCopyPrompt(prompt: string) {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 2000);
+    } catch { /* clipboard niet beschikbaar — trainer kan zelf selecteren en kopiëren */ }
+  }
+  function useClaudeResponse() {
+    const parsed = parseClaudeResponse(claudeResponse);
+    const ex = exerciseFromClaudeResponse(genFase, parsed);
+    setExercises(list => [...list, ex]);
+    setExpandedId(ex.id);
+    setClaudeResponse('');
     setGenModalOpen(false);
   }
   async function openDbModal() {
@@ -267,6 +313,12 @@ export default function TrainingEditor() {
   const genContext = { hoofdmoment: form.hoofdmoment, spelfase: form.spelfase, teamprincipe: form.teamprincipe, spelprincipe: form.spelprincipe, basisvaardigheid: form.basisvaardigheid };
   const genHasContext = Object.values(genContext).some(v => v.trim());
   const genSuggestions = suggestExercises(genFase, genContext, genOffset, 3);
+  const manualSuggestions = extractManualSuggestions(manualText, genFase, genContext, genOffset, 3);
+  const claudePrompt = buildOefeningPrompt({
+    fase: genFase, doelgroep: category ?? undefined, hasManual: !!manualText.trim(),
+    hoofdmoment: form.hoofdmoment, spelfase: form.spelfase,
+    teamprincipe: form.teamprincipe, spelprincipe: form.spelprincipe, basisvaardigheid: form.basisvaardigheid,
+  });
 
   const dbFiltered = dbItems
     .filter(it =>
@@ -679,6 +731,46 @@ export default function TrainingEditor() {
                 ))}
               </div>
             )}
+
+            {manualText.trim() && (
+              <>
+                <div className="te-gen-manual-title">📄 Uit jouw manual</div>
+                {manualSuggestions.length === 0 ? (
+                  <div className="te-gen-hint">Geen passende fragmenten gevonden in je manual voor deze fase.</div>
+                ) : (
+                  <div className="te-gen-list">
+                    {manualSuggestions.map((s, i) => (
+                      <div key={i} className="te-gen-card">
+                        <div className="te-gen-card-desc">{s.text}</div>
+                        <button className="btn btn-primary btn-sm" onClick={() => useManualSuggestion(s.text)}>Gebruik deze tekst</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="te-gen-manual-title">🤖 Genereer met Claude</div>
+            <p className="te-gen-hint">
+              Kopieer deze prompt naar je eigen Claude-project (bv. met je trainersmanual als projectkennis),
+              en plak het antwoord hieronder terug om het rechtstreeks als oefening te importeren.
+            </p>
+            <textarea className="input-field te-claude-prompt" rows={6} readOnly value={claudePrompt} onClick={e => (e.target as HTMLTextAreaElement).select()} />
+            <div className="modal-actions" style={{ marginTop: 8 }}>
+              <button className="btn btn-outline btn-sm" onClick={() => handleCopyPrompt(claudePrompt)}>
+                {promptCopied ? '✓ Gekopieerd' : '📋 Kopieer prompt'}
+              </button>
+              <a className="btn btn-outline btn-sm" href="https://claude.ai/" target="_blank" rel="noopener noreferrer">Open Claude ↗</a>
+            </div>
+
+            <label className="input-label" style={{ marginTop: 14, display: 'block' }}>Plak hier het antwoord van Claude</label>
+            <textarea className="input-field te-claude-prompt" rows={6} value={claudeResponse} onChange={e => setClaudeResponse(e.target.value)}
+              placeholder={'Naam: ...\nDuur (minuten): ...\nBeschrijving: ...'} />
+            <div className="modal-actions" style={{ marginTop: 8 }}>
+              <button className="btn btn-primary btn-sm" disabled={!claudeResponse.trim()} onClick={useClaudeResponse}>
+                📥 Importeer als oefening
+              </button>
+            </div>
 
             <div className="modal-actions">
               <button className="btn btn-outline btn-sm" onClick={() => setGenOffset(o => o + 3)}>🔄 Andere voorstellen</button>

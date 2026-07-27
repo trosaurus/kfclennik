@@ -39,6 +39,9 @@ export default withAuth(
     },
     graphql: {
       playground: true,
+      // Standaard limiet van body-parser (100kb) is te klein voor een
+      // base64-gecodeerde manual-PDF (uploadTeamManual/customSchema.ts).
+      bodyParser: { limit: '30mb' },
     },
   })
 );

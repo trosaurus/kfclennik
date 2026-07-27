@@ -18,3 +18,13 @@
 
 .od-form { padding: 4px 16px 16px; border-top: 1px solid var(--border-soft); }
 .od-form.card { padding: 18px 20px; border-top: none; margin-bottom: 16px; }
+
+.od-manual-card { padding: 16px 20px; margin-bottom: 16px; }
+.od-manual-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.od-manual-title { font-size: 14px; font-weight: 600; color: var(--white); }
+.od-manual-desc { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.od-manual-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.od-manual-upload-btn { cursor: pointer; }
+.od-manual-upload-btn input[type="file"] { display: none; }
+.od-manual-status { font-size: 13px; color: var(--text-mid); margin-top: 12px; }
+.od-manual-empty { color: var(--text-dim); font-style: italic; }

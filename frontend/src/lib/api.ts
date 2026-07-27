@@ -137,6 +137,47 @@ export async function deleteTeam(id: string): Promise<void> {
   await gql(`mutation { deleteTeam(where: { id: "${id}" }) { id } }`);
 }
 
+// ── Trainersmanual (per ploeg) ──────────────────────────────────────────────────
+
+export interface TeamManual {
+  id: string;
+  manualFileName: string;
+  manualUploadedAt: string | null;
+  manualText: string;
+}
+
+export async function getTeamManual(teamId: string): Promise<TeamManual> {
+  const data = await gql(
+    `query GetTeamManual($id: ID!) { team(where: { id: $id }) { id manualFileName manualUploadedAt manualText } }`,
+    { id: teamId }
+  );
+  return data.team;
+}
+
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const CHUNK = 0x8000; // voorkomt stack-overflow bij apply() op grote bestanden
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+export async function uploadTeamManual(teamId: string, file: File): Promise<void> {
+  const contentBase64 = arrayBufferToBase64(await file.arrayBuffer());
+  await gql(
+    `mutation UploadTeamManual($teamId: ID!, $filename: String!, $contentBase64: String!) {
+       uploadTeamManual(teamId: $teamId, filename: $filename, contentBase64: $contentBase64) { id }
+     }`,
+    { teamId, filename: file.name, contentBase64 }
+  );
+}
+
+export async function removeTeamManual(teamId: string): Promise<void> {
+  await gql(`mutation RemoveTeamManual($teamId: ID!) { removeTeamManual(teamId: $teamId) { id } }`, { teamId });
+}
+
 // ── Trainers ───────────────────────────────────────────────────────────────────
 
 export interface TrainerRecord {

@@ -13,9 +13,13 @@
     "@keystone-6/core": "^5.0.0",
     "@prisma/client": "4.16.2",
     "graphql": "^16.14.2",
+    "pdf-parse": "^1.1.1",
     "pptx-automizer": "^0.8.2",
     "prisma": "4.16.2",
     "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@types/pdf-parse": "^1.1.4"
   },
   "engines": {
     "node": "18.x"
