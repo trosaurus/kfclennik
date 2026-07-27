@@ -49,14 +49,13 @@ export default function SpelerProfiel() {
     : [];
   const positionTotal = positionEntries.reduce((acc, [, sec]) => acc + sec, 0);
 
+  // roleBreakdown komt uit getSeasonStats, waar elke wedstrijd al vertaald is via haar
+  // eigen team-formaat (posRole hierboven gebruikt enkel de huidige ploeg-categorie en
+  // klopt dus niet als iemand ooit in een ander formaat speelde — roleBreakdown wel).
   const roleTotals = useMemo(() => {
-    const totals: Record<string, number> = {};
-    positionEntries.forEach(([key, sec]) => {
-      const role = posRole[key] ?? 'onbekend';
-      totals[role] = (totals[role] || 0) + sec;
-    });
-    return Object.entries(totals).sort((a, b) => b[1] - a[1]);
-  }, [positionEntries, posRole]);
+    if (!s) return [];
+    return Object.entries(s.roleBreakdown).sort((a, b) => b[1] - a[1]);
+  }, [s]);
 
   const avgScore = s && s.evaluations.length > 0
     ? s.evaluations.reduce((a, e) => a + e.score, 0) / s.evaluations.length

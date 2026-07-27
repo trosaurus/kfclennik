@@ -180,7 +180,14 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   function setBackground(bg: DrawingBackground) {
     // Een preset kiezen vervangt de geïmporteerde veldtekening (indien aanwezig)
     // door het vector-veld — bewuste, onomkeerbare keuze zoals "opnieuw beginnen".
+    if (scene.backgroundImage && !confirm('De geïmporteerde tekening vervangen door het vector-veld? De PDF-afbeelding gaat verloren, je geplaatste objecten blijven behouden.')) return;
     commit({ ...scene, background: bg, backgroundImage: undefined });
+  }
+
+  function removeImportedBackground() {
+    if (!scene.backgroundImage) return;
+    if (!confirm('Geïmporteerde tekening verwijderen en vervangen door de tekentool? Dit kan niet ongedaan gemaakt worden — de PDF-afbeelding gaat verloren, je geplaatste objecten blijven behouden.')) return;
+    commit({ ...scene, backgroundImage: undefined });
   }
 
   // ── Pointer handlers ─────────────────────────────────────────────────────
@@ -396,7 +403,14 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
 
       {!readOnly && (
         <div className="dc-bg-toolbar">
-          {scene.backgroundImage && <span className="dc-bg-imported">Geïmporteerde tekening</span>}
+          {scene.backgroundImage && (
+            <div className="dc-bg-imported-group">
+              <span className="dc-bg-imported">Geïmporteerde tekening (PDF)</span>
+              <button className="dc-bg-remove-btn" onClick={removeImportedBackground} title="Verwijder de geïmporteerde tekening en gebruik de tekentool">
+                ✕ Verwijder &amp; gebruik tekentool
+              </button>
+            </div>
+          )}
           {(['grid', 'half', 'full'] as DrawingBackground[]).map(bg => (
             <button key={bg} className={`dc-bg-btn ${!scene.backgroundImage && scene.background === bg ? 'active' : ''}`} onClick={() => setBackground(bg)}>
               {bg === 'grid' ? 'Grid' : bg === 'half' ? 'Half veld' : 'Vol veld'}

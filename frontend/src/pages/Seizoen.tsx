@@ -3,12 +3,17 @@ import { useTeam } from '../lib/TeamContext';
 import { getSeasonStats, SeasonPlayerStats, formatDuration, POSITION_LABELS, THEME_CATEGORY_LABELS } from '../lib/api';
 import './Seizoen.css';
 
+const ROLE_ORDER = ['keeper', 'defender', 'midfielder', 'forward'] as const;
+const ROLE_LABELS: Record<string, string> = {
+  keeper: 'Doelman', defender: 'Verdediger', midfielder: 'Middenvelder', forward: 'Aanvaller',
+};
+
 export default function Seizoen() {
   const [stats, setStats]       = useState<SeasonPlayerStats[]>([]);
-  const { teamId } = useTeam();
+  const { teamId }              = useTeam();
   const [loading, setLoading]   = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [view, setView]         = useState<'players' | 'matrix'>('players');
+  const [view, setView]         = useState<'players' | 'matrix' | 'grafieken'>('players');
 
   useEffect(() => { load(); }, []);
 
@@ -49,6 +54,9 @@ export default function Seizoen() {
           </button>
           <button className={`sb-toggle ${view === 'matrix' ? 'active' : ''}`} onClick={() => setView('matrix')}>
             📊 Matrix
+          </button>
+          <button className={`sb-toggle ${view === 'grafieken' ? 'active' : ''}`} onClick={() => setView('grafieken')}>
+            📈 Grafieken
           </button>
         </div>
       </div>
@@ -163,7 +171,7 @@ export default function Seizoen() {
           })}
         </div>
 
-      ) : (
+      ) : view === 'matrix' ? (
 
         // ── MATRIX VIEW ─────────────────────────────────────────────────────
         <div className="sz-matrix-wrap card">
@@ -227,6 +235,124 @@ export default function Seizoen() {
           </div>
         </div>
 
+      ) : (
+
+        // ── GRAFIEKEN VIEW ──────────────────────────────────────────────────
+        <div className="sz-charts">
+          <div className="sz-charts-grid">
+            <RankedBarChart
+              title="Doelpunten per speler"
+              icon="⚽"
+              emptyMessage="Nog geen doelpunten geregistreerd"
+              rows={stats
+                .filter(s => s.totalGoals > 0)
+                .sort((a, b) => b.totalGoals - a.totalGoals)
+                .map(s => ({ id: s.player.id, number: s.player.number, name: s.player.name, value: s.totalGoals }))}
+              formatValue={v => String(v)}
+            />
+            <RankedBarChart
+              title="Totale speeltijd per speler"
+              icon="⏱"
+              emptyMessage="Nog geen speeltijd geregistreerd"
+              rows={stats
+                .filter(s => s.totalSeconds > 0)
+                .map(s => ({ id: s.player.id, number: s.player.number, name: s.player.name, value: s.totalSeconds }))}
+              formatValue={formatDuration}
+            />
+          </div>
+          <PositionRoleChart stats={stats} />
+        </div>
+
+      )}
+    </div>
+  );
+}
+
+// ── RankedBarChart: enkele-reeks ranglijst (doelpunten / speeltijd) ──────────
+
+interface RankedBarRow { id: string; number: number | null; name: string; value: number }
+
+function RankedBarChart({ title, icon, rows, formatValue, emptyMessage }: {
+  title: string; icon: string; rows: RankedBarRow[];
+  formatValue: (v: number) => string; emptyMessage: string;
+}) {
+  const max = rows.length > 0 ? Math.max(...rows.map(r => r.value)) : 1;
+  return (
+    <div className="card sz-chart-card">
+      <div className="sz-breakdown-title">{icon} {title}</div>
+      {rows.length === 0 ? (
+        <div className="sz-chart-empty">{emptyMessage}</div>
+      ) : (
+        <div className="sz-chart-rows">
+          {rows.map((r, i) => (
+            <div key={r.id} className="sz-chart-row">
+              <span className="sz-rank">#{i + 1}</span>
+              <span className="sz-chart-label" title={r.name}>{r.number ? `#${r.number} ` : ''}{r.name}</span>
+              <div className="sz-bar-wrap sz-chart-bar-wrap">
+                <div className="sz-bar-fill" style={{ width: `${max > 0 ? (r.value / max) * 100 : 0}%` }} />
+              </div>
+              <span className="sz-chart-value">{formatValue(r.value)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── PositionRoleChart: gestapelde balk per speler, verdeeld over de 4 rollen ──
+
+function PositionRoleChart({ stats }: { stats: SeasonPlayerStats[] }) {
+  // roleBreakdown wordt per wedstrijd al correct vertaald (elke match kan een ander
+  // teamformaat/categorie hebben — zie getSeasonStats), dus hier enkel uitlezen.
+  const rows = stats
+    .map(s => {
+      const roleTotals = { keeper: 0, defender: 0, midfielder: 0, forward: 0, ...s.roleBreakdown };
+      const total = ROLE_ORDER.reduce((acc, role) => acc + (roleTotals[role] || 0), 0);
+      return { player: s.player, roleTotals, total };
+    })
+    .filter(r => r.total > 0)
+    .sort((a, b) => b.total - a.total);
+
+  return (
+    <div className="card sz-chart-card">
+      <div className="sz-chart-card-header">
+        <div className="sz-breakdown-title" style={{ marginBottom: 0 }}>📍 Speeltijd per positie</div>
+        <div className="sz-chart-legend">
+          {ROLE_ORDER.map(role => (
+            <span key={role} className="sz-chart-legend-item">
+              <span className="sz-chart-legend-dot" style={{ background: `var(--chart-role-${role})` }} />
+              {ROLE_LABELS[role]}
+            </span>
+          ))}
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <div className="sz-chart-empty">Geen positiedata beschikbaar — speeltijd zonder toegewezen veldpositie telt hier niet mee.</div>
+      ) : (
+        <div className="sz-chart-rows">
+          {rows.map(r => (
+            <div key={r.player.id} className="sz-chart-row sz-chart-row-stacked">
+              <span className="sz-chart-label" title={r.player.name}>{r.player.number ? `#${r.player.number} ` : ''}{r.player.name}</span>
+              <div className="sz-stack-bar-wrap">
+                {ROLE_ORDER.filter(role => r.roleTotals[role] > 0).map(role => {
+                  const pct = (r.roleTotals[role] / r.total) * 100;
+                  return (
+                    <div
+                      key={role}
+                      className="sz-stack-seg"
+                      style={{ width: `${pct}%`, background: `var(--chart-role-${role})` }}
+                      title={`${ROLE_LABELS[role]}: ${formatDuration(r.roleTotals[role])} (${pct.toFixed(0)}%)`}
+                    >
+                      {pct >= 12 && <span className="sz-stack-seg-label">{pct.toFixed(0)}%</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              <span className="sz-chart-value">{formatDuration(r.total)}</span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

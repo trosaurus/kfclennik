@@ -5,12 +5,13 @@ import {
   getMatches, createMatch, updateMatch, deleteMatch,
   getPlayers, getAttendancesForMatch, setAttendance,
   getPlayTimeSessionsForMatch, PlayTimeSession,
-  getWeekThemes, getEvaluationsForMatch, setEvaluation,
+  getWeekThemes, createWeekTheme, getEvaluationsForMatch, setEvaluation,
   getTeams, Team,
   exportMatchesCSV, importMatchesCSV,
   Match, Player, Attendance, WeekTheme, Evaluation,
   POSITION_LABELS, POSITION_FULL, THEME_CATEGORY_LABELS,
 } from '../lib/api';
+import { getJaarplanWeekForDate, formatJaarplanLabel } from '../lib/jaarplan';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import './WedstrijdBeheer.css';
@@ -115,6 +116,37 @@ export default function WedstrijdBeheer() {
     const fresh = await getMatches(teamId ?? undefined);
     setMatches(fresh);
     setSelectedMatch(fresh.find(m => m.id === selectedMatch.id) ?? selectedMatch);
+  }
+
+  // Stelt het weekthema voor op basis van de datum van DEZE wedstrijd en het jaarplan
+  // van de ploeg waar de wedstrijd zelf bij hoort (match.team) — niet de ploeg die de
+  // trainer toevallig net geselecteerd heeft, want dat kan afwijken (bv. bij meerdere ploegen).
+  async function applyJaarplanTheme() {
+    if (!selectedMatch) return;
+    const jw = getJaarplanWeekForDate(new Date(selectedMatch.date));
+    if (!jw) {
+      alert('Geen jaarplan-data gevonden voor de datum van deze wedstrijd (bv. buiten het seizoen of tijdens de kerstvakantie).');
+      return;
+    }
+    if (!jw.teamprincipe) {
+      alert(`${formatJaarplanLabel(jw)} is een neutrale week zonder vast teamprincipe — kies zelf een thema.`);
+      return;
+    }
+    const suggestedCategory = jw.fase === 'BALBEZIT' ? 'B+' : jw.fase === 'BALVERLIES' ? 'B-' : 'B+';
+
+    let theme = weekThemes.find(t => t.title.trim().toLowerCase() === jw.teamprincipe.trim().toLowerCase());
+    if (!theme) {
+      const teamLabel = selectedMatch.team?.category ?? 'deze ploeg';
+      const create = confirm(
+        `Jaarplan (${formatJaarplanLabel(jw)}, ${teamLabel}):\n` +
+        `Teamprincipe: ${jw.teamprincipe}\nSpelprincipe: ${jw.spelprincipe}\n\n` +
+        `Er bestaat nog geen weekthema met deze titel. Nieuw weekthema aanmaken en koppelen aan deze wedstrijd?`
+      );
+      if (!create) return;
+      theme = await createWeekTheme({ title: jw.teamprincipe, category: suggestedCategory, description: jw.spelprincipe });
+      setWeekThemes(prev => [...prev, theme!]);
+    }
+    await handleSetMatchTheme(theme.id);
   }
 
   async function handleSetScore(playerId: string, score: number) {
@@ -422,6 +454,9 @@ export default function WedstrijdBeheer() {
   // ─────────────────────────────────────────────────────────────────────────
   const m = selectedMatch!;
   const sm = STATUS_META[m.status] ?? STATUS_META.planned;
+  // Jaarplan-week op basis van de datum van DEZE wedstrijd (niet "vandaag") — gebruikt
+  // in de Evaluatie-tab om een weekthema voor te stellen uit het jaarplan.
+  const jaarplanWeek = getJaarplanWeekForDate(new Date(m.date));
 
   return (
     <div className="page">
@@ -549,25 +584,41 @@ export default function WedstrijdBeheer() {
             <div>
               <div className="wb-eval-title">Weekthema</div>
               <div className="wb-eval-hint">Kies het thema waarop spelers voor deze wedstrijd gequoteerd worden.</div>
-            </div>
-            <select
-              className="input-field wb-eval-theme-select"
-              value={m.weekTheme?.id ?? ''}
-              onChange={e => handleSetMatchTheme(e.target.value)}
-            >
-              <option value="">— Geen thema gekozen —</option>
-              {/* Toon ook een reeds gekoppeld thema dat intussen inactief is gezet */}
-              {m.weekTheme && !weekThemes.some(t => t.id === m.weekTheme!.id) && (
-                <option value={m.weekTheme.id}>
-                  [{THEME_CATEGORY_LABELS[m.weekTheme.category] ?? m.weekTheme.category}] {m.weekTheme.title} (inactief)
-                </option>
+              {jaarplanWeek && (
+                <div className="wb-eval-jaarplan-hint">
+                  📅 Jaarplan ({formatJaarplanLabel(jaarplanWeek)}
+                  {m.team?.category ? ` · ${m.team.category}` : ''}){jaarplanWeek.teamprincipe && <>: <strong>{jaarplanWeek.teamprincipe}</strong></>}
+                </div>
               )}
-              {weekThemes.map(t => (
-                <option key={t.id} value={t.id}>
-                  [{THEME_CATEGORY_LABELS[t.category] ?? t.category}] {t.title}
-                </option>
-              ))}
-            </select>
+            </div>
+            <div className="wb-eval-theme-controls">
+              <select
+                className="input-field wb-eval-theme-select"
+                value={m.weekTheme?.id ?? ''}
+                onChange={e => handleSetMatchTheme(e.target.value)}
+              >
+                <option value="">— Geen thema gekozen —</option>
+                {/* Toon ook een reeds gekoppeld thema dat intussen inactief is gezet */}
+                {m.weekTheme && !weekThemes.some(t => t.id === m.weekTheme!.id) && (
+                  <option value={m.weekTheme.id}>
+                    [{THEME_CATEGORY_LABELS[m.weekTheme.category] ?? m.weekTheme.category}] {m.weekTheme.title} (inactief)
+                  </option>
+                )}
+                {weekThemes.map(t => (
+                  <option key={t.id} value={t.id}>
+                    [{THEME_CATEGORY_LABELS[t.category] ?? t.category}] {t.title}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={applyJaarplanTheme}
+                disabled={!jaarplanWeek || !jaarplanWeek.teamprincipe}
+                title="Stel het weekthema voor op basis van het jaarplan van de ploeg van deze wedstrijd, voor de datum van deze wedstrijd"
+              >
+                📅 Uit jaarplan
+              </button>
+            </div>
           </div>
 
           {evalLoading ? (

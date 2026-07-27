@@ -1,3 +1,5 @@
+import { getPositionsForCategory } from './teamConfig';
+
 const GQL_URL = (import.meta.env.VITE_API_URL ?? '') + '/api/graphql';
 
 async function gql(query: string, variables?: Record<string, unknown>) {
@@ -746,6 +748,8 @@ export interface SeasonPlayerStats {
   periodBreakdown: Record<number, number>; // period 1-4 → seconds
   goalsByPeriod: Record<number, number>;   // period 1-4 → goals
   positionBreakdown: Record<string, number>; // fieldPosition key ('K','9',...) → seconds
+  roleBreakdown: Record<string, number>;     // rol ('keeper'|'defender'|'midfielder'|'forward') → seconds,
+                                              // vertaald per wedstrijd via het team-formaat van díe match
   matchBreakdown: Array<{
     matchId: string;
     opponent: string;
@@ -771,12 +775,29 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
     : `where: { status: { equals: "finished" } }`;
   const matchData = await gql(`query {
     matches(${where}, take: 1000, orderBy: { date: asc }) {
-      id opponent date scoreHome scoreAway
+      id opponent date scoreHome scoreAway team { category }
     }
   }`);
-  const matches: Array<{ id: string; opponent: string; date: string; scoreHome: number; scoreAway: number }> = matchData.matches;
+  const matches: Array<{ id: string; opponent: string; date: string; scoreHome: number; scoreAway: number; team: { category: string } | null }> = matchData.matches;
 
   if (matches.length === 0) return [];
+
+  // Elke wedstrijd vertaalt fieldPosition-sleutels ('9','11',...) naar een rol via het
+  // team-formaat van díe specifieke match — dezelfde sleutel betekent iets anders per
+  // formaat (bv. '11' is aanvaller in 11v11 maar middenvelder in 8v8), dus dit mag nooit
+  // op één ambient categorie voor het hele seizoen worden gebaseerd.
+  const posRoleCache = new Map<string, Record<string, string>>();
+  function posRoleForCategory(category: string): Record<string, string> {
+    let map = posRoleCache.get(category);
+    if (!map) {
+      map = {};
+      getPositionsForCategory(category).forEach(p => { map![p.key] = p.role; });
+      posRoleCache.set(category, map);
+    }
+    return map;
+  }
+  const matchPosRole = new Map<string, Record<string, string>>();
+  matches.forEach(m => matchPosRole.set(m.id, posRoleForCategory(m.team?.category ?? '')));
 
   const playersWhere = teamId ? `, where: { team: { id: { equals: "${teamId}" } } }` : '';
   const players = await gql(`query {
@@ -814,6 +835,7 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
     const periodBreakdown: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
     const goalsByPeriod: Record<number, number>   = { 1: 0, 2: 0, 3: 0, 4: 0 };
     const positionBreakdown: Record<string, number> = {};
+    const roleBreakdown: Record<string, number> = {};
     const matchBreakdown: SeasonPlayerStats['matchBreakdown'] = [];
 
     for (const m of matches) {
@@ -832,6 +854,7 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
       totalSeconds += matchSec;
       totalGoals += matchGoals;
 
+      const posRole = matchPosRole.get(m.id) ?? {};
       const periods: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
       for (const s of matchSessions) {
         const p = s.period ?? 1;
@@ -839,6 +862,8 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
         periodBreakdown[p] = (periodBreakdown[p] || 0) + (s.durationSeconds || 0);
         if (s.fieldPosition) {
           positionBreakdown[s.fieldPosition] = (positionBreakdown[s.fieldPosition] || 0) + (s.durationSeconds || 0);
+          const role = posRole[s.fieldPosition];
+          if (role) roleBreakdown[role] = (roleBreakdown[role] || 0) + (s.durationSeconds || 0);
         }
       }
       for (const g of matchGoalsList) {
@@ -863,7 +888,7 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
     }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     if (totalSeconds > 0 || totalGoals > 0 || evaluations.length > 0) {
-      statsMap.set(player.id, { player, totalSeconds, matchCount, totalGoals, periodBreakdown, goalsByPeriod, positionBreakdown, matchBreakdown, evaluations });
+      statsMap.set(player.id, { player, totalSeconds, matchCount, totalGoals, periodBreakdown, goalsByPeriod, positionBreakdown, roleBreakdown, matchBreakdown, evaluations });
     }
   }
 

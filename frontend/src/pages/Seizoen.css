@@ -99,6 +99,50 @@
   flex-shrink: 0;
 }
 
+/* ── Grafieken view ── */
+.sz-charts { display: flex; flex-direction: column; gap: 16px; }
+.sz-charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 800px) { .sz-charts-grid { grid-template-columns: 1fr; } }
+
+.sz-chart-card { padding: 16px 18px; }
+.sz-chart-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.sz-chart-card .sz-breakdown-title { margin-bottom: 14px; }
+.sz-chart-card-header .sz-breakdown-title { margin-bottom: 0; }
+.sz-chart-empty { color: var(--text-dim); font-size: 13px; padding: 8px 0; }
+
+.sz-chart-rows { display: flex; flex-direction: column; gap: 10px; }
+.sz-chart-row { display: flex; align-items: center; gap: 10px; }
+.sz-chart-label {
+  flex: 1 1 120px; min-width: 0; font-size: 13px; font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sz-chart-bar-wrap { flex: 2 1 140px; }
+.sz-chart-value {
+  font-family: var(--font-display); font-size: 16px; color: var(--white);
+  letter-spacing: 0.5px; flex-shrink: 0; min-width: 44px; text-align: right;
+}
+
+/* Legend: kleur-bolletje + tekst blijft altijd in tekstkleur, nooit in de serie-kleur */
+.sz-chart-legend { display: flex; gap: 12px; flex-wrap: wrap; }
+.sz-chart-legend-item {
+  display: flex; align-items: center; gap: 6px;
+  font-family: var(--font-heading); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-mid);
+}
+.sz-chart-legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+/* Gestapelde balk per speler (speeltijd per positie) */
+.sz-chart-row-stacked .sz-chart-label { flex: 1 1 140px; }
+.sz-stack-bar-wrap {
+  flex: 2 1 160px; display: flex; gap: 2px; height: 20px;
+  border-radius: 4px; overflow: hidden; background: var(--bg-elevated);
+}
+.sz-stack-seg { height: 100%; display: flex; align-items: center; justify-content: center; min-width: 2px; }
+.sz-stack-seg-label {
+  font-family: var(--font-heading); font-size: 10px; font-weight: 700;
+  color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.55); letter-spacing: 0.3px;
+}
+
 /* ── Evaluation badge & breakdown ── */
 .sz-eval-badge {
   font-family: var(--font-heading); font-size: 12px; font-weight: 700;

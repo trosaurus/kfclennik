@@ -22,6 +22,12 @@
   --green-bg:   rgba(34,197,94,0.15);
   --yellow:     #F5C518;
 
+  /* Categorische grafiek-kleuren voor speelposities (validated palette, slots 1-4) */
+  --chart-role-keeper:     #3987e5;
+  --chart-role-defender:   #d95926;
+  --chart-role-midfielder: #199e70;
+  --chart-role-forward:    #c98500;
+
   --font-display: 'Bebas Neue', sans-serif;
   --font-heading: 'Barlow Condensed', sans-serif;
   --font-body:    'Barlow', sans-serif;
@@ -50,6 +56,11 @@
 
   --shadow:     0 4px 20px rgba(0,0,0,0.12);
   --shadow-red: 0 4px 24px rgba(204,26,26,0.2);
+
+  --chart-role-keeper:     #2a78d6;
+  --chart-role-defender:   #eb6834;
+  --chart-role-midfielder: #1baf7a;
+  --chart-role-forward:    #eda100;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
