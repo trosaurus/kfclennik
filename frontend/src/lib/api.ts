@@ -1681,6 +1681,22 @@ export type OefeningCategorie = 'B+' | 'B-';
 export const DOELGROEP_LEEFTIJDEN = ['U6', 'U7', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U15', 'U17'] as const;
 export type Doelgroep = typeof DOELGROEP_LEEFTIJDEN[number];
 
+// Zelfde waarden/volgorde als het select-veld OefeningDatabank.spelprincipe in backend/schema.ts.
+export const SPELPRINCIPE_OPTIONS = [
+  { value: 'diagonale_verticale_passing',          label: 'Diagonale en verticale passing' },
+  { value: 'hoge_intensiteit_1v1_doordekken',       label: 'Hoge intensiteit / 1 op 1 doordekken (durf/lef)' },
+  { value: 'centrum_sluiten',                       label: 'Centrum sluiten' },
+  { value: 'infiltraties_met_zonder_bal',           label: 'Infiltraties met/zonder bal' },
+  { value: 'overtal_uitspelen_zelfde_kant',         label: 'Overtal uitspelen (zelfde kant)' },
+  { value: 'spel_verleggen_andere_kant',             label: 'Spel verleggen (richting andere kant)' },
+  { value: 'assistzone_bereiken',                   label: 'Assistzone bereiken (doellijn halen)' },
+  { value: 'positiekeuze_voor_doel',                label: 'Positiekeuze voor doel' },
+  { value: '1v1_duel_winnen_voorzet_verhinderen',   label: '1 vs 1 duel winnen (contact) om voorzet te verhinderen' },
+  { value: 'defensieve_t_bezetting_voor_doel',      label: 'Defensieve (T) bezetting voor doel' },
+] as const;
+export type Spelprincipe = typeof SPELPRINCIPE_OPTIONS[number]['value'];
+export const SPELPRINCIPE_LABELS: Record<string, string> = Object.fromEntries(SPELPRINCIPE_OPTIONS.map(o => [o.value, o.label]));
+
 export interface OefeningDatabankItem {
   id: string;
   naam: string;
@@ -1688,6 +1704,7 @@ export interface OefeningDatabankItem {
   categorie: OefeningCategorie | null;
   doelgroep: Doelgroep | null;
   teamprincipe: string;
+  spelprincipe: Spelprincipe | null;
   duurMinuten: number;
   organisatieSpelers: string;
   organisatieAfmetingen: string;
@@ -1702,7 +1719,7 @@ export interface OefeningDatabankItem {
 }
 
 const OEFENING_FIELDS = `
-  id naam fase categorie doelgroep teamprincipe duurMinuten
+  id naam fase categorie doelgroep teamprincipe spelprincipe duurMinuten
   organisatieSpelers organisatieAfmetingen organisatieMateriaal
   beschrijving drawingData coachingPunten maximaalActief fun
   createdBy { id name } createdAt
@@ -1716,7 +1733,7 @@ export async function getOefeningDatabank(): Promise<OefeningDatabankItem[]> {
 }
 
 export async function createOefeningDatabankItem(input: {
-  naam: string; fase: ExerciseFase; categorie?: OefeningCategorie; doelgroep?: Doelgroep; teamprincipe?: string; duurMinuten: number;
+  naam: string; fase: ExerciseFase; categorie?: OefeningCategorie; doelgroep?: Doelgroep; teamprincipe?: string; spelprincipe?: Spelprincipe; duurMinuten: number;
   organisatieSpelers?: string; organisatieAfmetingen?: string; organisatieMateriaal?: string;
   beschrijving?: string; drawingData?: string; coachingPunten?: string; maximaalActief?: string; fun?: string;
   trainerId?: string;
@@ -1730,6 +1747,7 @@ export async function createOefeningDatabankItem(input: {
   };
   if (input.categorie) itemData.categorie = input.categorie;
   if (input.doelgroep) itemData.doelgroep = input.doelgroep;
+  if (input.spelprincipe) itemData.spelprincipe = input.spelprincipe;
   if (input.trainerId) itemData.createdBy = { connect: { id: input.trainerId } };
   const data = await gql(
     `mutation CreateOefening($data: OefeningDatabankCreateInput!) { createOefeningDatabank(data: $data) { ${OEFENING_FIELDS} } }`,
@@ -1791,12 +1809,23 @@ export const CONE_COLORS: { value: ConeColor; label: string; hex: string }[] = [
 
 export type DrawingBackground = 'grid' | 'half' | 'full';
 
+/** Eén stap in een bewegingsanimatie — enkel posities die afwijken van de
+ * basisplaatsing van het element zijn nodig; ontbrekende elementen vallen
+ * terug op hun basis-positie (bv. net toegevoegd na deze stap). */
+export interface AnimationFrame {
+  id: string;
+  label?: string;
+  positions: Record<string, { x: number; y: number; x2?: number; y2?: number }>;
+}
+
 export interface DrawingScene {
   background: DrawingBackground;
   elements: DrawingElement[];
   /** Data-URI van de originele veldtekening (bv. bij PDF-import) — getoond als
    * achtergrond i.p.v. het vector-veld, tot de trainer een preset-achtergrond kiest. */
   backgroundImage?: string;
+  /** Optionele bewegingsanimatie (wie loopt waarheen, waar gaat de bal naartoe) — afwezig/leeg = statische tekening. */
+  animation?: { frames: AnimationFrame[] };
 }
 
 export function parseDrawingScene(raw: string): DrawingScene {

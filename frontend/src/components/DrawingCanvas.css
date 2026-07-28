@@ -45,6 +45,25 @@
 }
 .dc-swatch.active { border-color: white; box-shadow: 0 0 0 2px var(--red); }
 
+.dc-anim-toolbar {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 6px;
+}
+.dc-anim-frames { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.dc-anim-frame {
+  width: 30px; height: 30px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 2px solid var(--border); border-radius: 50%;
+  font-family: var(--font-heading); font-size: 12px; font-weight: 700;
+  color: var(--text-dim); cursor: pointer; transition: all .12s;
+}
+.dc-anim-frame:hover { color: var(--text); border-color: var(--text-dim); }
+.dc-anim-frame.active { background: var(--red); border-color: var(--red); color: white; }
+.dc-anim-hint {
+  font-size: 11px; color: var(--text-dim); padding: 0 2px; margin-top: -4px;
+}
+
 .dc-canvas-container {
   width: 100%; max-width: 420px; margin: 0 auto;
   border-radius: var(--radius-lg); overflow: hidden;

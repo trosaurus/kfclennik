@@ -5,7 +5,7 @@ import {
   getTraining, updateTraining, createExercise, updateExercise, deleteExercise,
   Training, Exercise, ExerciseFase, EXERCISE_FASE_LABELS,
   wedstrijdvormPercentage, parseDrawingScene, exportTrainingToPptx,
-  getOefeningDatabank, createOefeningDatabankItem, OefeningDatabankItem, OefeningCategorie, Doelgroep, DOELGROEP_LEEFTIJDEN,
+  getOefeningDatabank, createOefeningDatabankItem, OefeningDatabankItem, OefeningCategorie, Doelgroep, DOELGROEP_LEEFTIJDEN, SPELPRINCIPE_LABELS,
   getTeamManual,
 } from '../lib/api';
 import { getJaarplanWeekForDate, getCategoryBracket, formatJaarplanLabel } from '../lib/jaarplan';
@@ -825,11 +825,12 @@ export default function TrainingEditor() {
                       <span className="te-gen-card-name">{it.naam}</span>
                       <span className="te-gen-card-duur">{it.duurMinuten}min</span>
                     </div>
-                    {(it.categorie || it.doelgroep || it.teamprincipe) && (
+                    {(it.categorie || it.doelgroep || it.teamprincipe || it.spelprincipe) && (
                       <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
                         {it.categorie && <span className={`tag ${it.categorie === 'B+' ? 'tag-green' : 'tag-black'}`}>{it.categorie}</span>}
                         {it.doelgroep && <span className="tag tag-black">{it.doelgroep}</span>}
                         {it.teamprincipe && <span className="od-card-teamprincipe">{it.teamprincipe}</span>}
+                        {it.spelprincipe && <span className="od-card-teamprincipe">{SPELPRINCIPE_LABELS[it.spelprincipe]}</span>}
                       </div>
                     )}
                     <div className="te-gen-card-desc">{it.beschrijving}</div>

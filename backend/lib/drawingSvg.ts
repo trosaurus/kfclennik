@@ -29,6 +29,10 @@ export interface DrawingScene {
   background: DrawingBackground;
   elements: DrawingElement[];
   backgroundImage?: string;
+  // Optionele bewegingsanimatie (frontend-only interactie) — de PPTX/PNG-export
+  // toont altijd enkel de basisplaatsing van de elementen, dus dit veld wordt
+  // hier bewust genegeerd (alleen aanwezig voor type-consistentie met api.ts).
+  animation?: { frames: Array<{ id: string; label?: string; positions: Record<string, { x: number; y: number; x2?: number; y2?: number }> }> };
 }
 
 const PLAYER_HEX: Record<string, string> = {
@@ -121,7 +125,7 @@ function renderShape(el: DrawingElement, cx: number, cy: number): string {
     case 'goal':
       return `<rect x="${cx - 14}" y="${cy - 6}" width="28" height="12" fill="none" stroke="white" stroke-width="2"/>`;
     case 'ball':
-      return `<circle cx="${cx}" cy="${cy}" r="6" fill="white" stroke="rgba(0,0,0,0.5)" stroke-width="1"/>`;
+      return renderBallShape(cx, cy);
     case 'hoop':
       return `<ellipse cx="${cx}" cy="${cy}" rx="13" ry="6" fill="none" stroke="#F5C518" stroke-width="3"/>`;
     case 'wall': {
@@ -146,6 +150,41 @@ function renderShape(el: DrawingElement, cx: number, cy: number): string {
       return `<text x="${cx}" y="${cy}" text-anchor="middle" font-size="13" font-family="sans-serif" font-weight="700"
         fill="white" stroke="rgba(0,0,0,0.6)" stroke-width="3" paint-order="stroke">${esc(el.label ?? '')}</text>`;
   }
+}
+
+// Zelfde opbouw als frontend/src/components/DrawingCanvas.tsx's renderBallShape —
+// witte bal met een klassiek zwart pentagon/hexagon-patroon (centrale pentagon +
+// 5 naar buiten wijzende hexagon-"punten" die bijna tot de rand reiken).
+function renderBallShape(cx: number, cy: number): string {
+  const r = 6;
+  const toXY = (angleDeg: number, radius: number) => {
+    const a = angleDeg * Math.PI / 180;
+    return { x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius };
+  };
+  const Rc = r * 0.34;
+  const Rout = r * 0.62;
+  const Rtip = r * 0.97;
+  const centerAngles = [0, 1, 2, 3, 4].map(i => -90 + i * 72);
+  const centerPts = centerAngles.map(a => toXY(a, Rc));
+  const petals = [0, 1, 2, 3, 4].map(i => {
+    const bis = centerAngles[i] + 36;
+    const pts = [
+      centerPts[i],
+      toXY(bis - 23, Rout),
+      toXY(bis - 11, Rtip),
+      toXY(bis + 11, Rtip),
+      toXY(bis + 23, Rout),
+      centerPts[(i + 1) % 5],
+    ];
+    return pts.map(p => `${p.x},${p.y}`).join(' ');
+  });
+  const seam = '#eaeaea';
+  let out = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="#fefefe" stroke="#141414" stroke-width="${r * 0.16}"/>`;
+  for (const pts of petals) {
+    out += `<polygon points="${pts}" fill="#141414" stroke="${seam}" stroke-width="${r * 0.05}" stroke-linejoin="round"/>`;
+  }
+  out += `<polygon points="${centerPts.map(p => `${p.x},${p.y}`).join(' ')}" fill="#141414" stroke="${seam}" stroke-width="${r * 0.05}" stroke-linejoin="round"/>`;
+  return out;
 }
 
 export const DRAWING_PORTRAIT = { w: 350, h: 460 };

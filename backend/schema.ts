@@ -350,6 +350,20 @@ export const lists: Lists = {
         ],
       }),
       teamprincipe: text({ defaultValue: '' }),          // vrije tekst, matcht jaarplan-vocabularium
+      spelprincipe: select({
+        options: [
+          { label: 'Diagonale en verticale passing',                              value: 'diagonale_verticale_passing' },
+          { label: 'Hoge intensiteit / 1 op 1 doordekken (durf/lef)',              value: 'hoge_intensiteit_1v1_doordekken' },
+          { label: 'Centrum sluiten',                                             value: 'centrum_sluiten' },
+          { label: 'Infiltraties met/zonder bal',                                 value: 'infiltraties_met_zonder_bal' },
+          { label: 'Overtal uitspelen (zelfde kant)',                             value: 'overtal_uitspelen_zelfde_kant' },
+          { label: 'Spel verleggen (richting andere kant)',                       value: 'spel_verleggen_andere_kant' },
+          { label: 'Assistzone bereiken (doellijn halen)',                        value: 'assistzone_bereiken' },
+          { label: 'Positiekeuze voor doel',                                      value: 'positiekeuze_voor_doel' },
+          { label: '1 vs 1 duel winnen (contact) om voorzet te verhinderen',       value: '1v1_duel_winnen_voorzet_verhinderen' },
+          { label: 'Defensieve (T) bezetting voor doel',                          value: 'defensieve_t_bezetting_voor_doel' },
+        ],
+      }),
       duurMinuten:  integer({ defaultValue: 10 }),
 
       organisatieSpelers:    text({ defaultValue: '' }),

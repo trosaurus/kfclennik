@@ -212,6 +212,7 @@ model OefeningDatabank {
   categorie             String?
   doelgroep             String?
   teamprincipe          String    @default("")
+  spelprincipe          String?
   duurMinuten           Int?      @default(10)
   organisatieSpelers    String    @default("")
   organisatieAfmetingen String    @default("")

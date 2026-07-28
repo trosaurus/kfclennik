@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  DrawingScene, DrawingElement, DrawingElementType, DrawingBackground,
+  DrawingScene, DrawingElement, DrawingElementType, DrawingBackground, AnimationFrame,
   PlayerColor, ConeColor, PLAYER_COLORS, CONE_COLORS,
 } from '../lib/api';
 import './DrawingCanvas.css';
@@ -86,6 +86,114 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   const pasteOffsetRef = useRef(0);
   const [hasClipboard, setHasClipboard] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // ── Animatie (stappen tonen waar spelers/bal naartoe bewegen) ──────────────
+  const frames = scene.animation?.frames ?? [];
+  const [animMode, setAnimMode] = useState(false);
+  const [activeFrameIdx, setActiveFrameIdx] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [playPositions, setPlayPositions] = useState<Record<string, { x: number; y: number; x2?: number; y2?: number }> | null>(null);
+  const stopRequestedRef = useRef(false);
+
+  // Geeft de "zichtbare" positie van een element terug: tijdens het afspelen de
+  // geïnterpoleerde positie, tijdens het bewerken van een animatiestap de positie
+  // die voor díe stap is opgeslagen, anders gewoon de basisplaatsing van het element.
+  function effectivePosition(el: DrawingElement): { x: number; y: number; x2?: number; y2?: number } {
+    if (playing && playPositions?.[el.id]) {
+      const p = playPositions[el.id];
+      return { x: p.x, y: p.y, x2: p.x2 ?? el.x2, y2: p.y2 ?? el.y2 };
+    }
+    if (animMode && !playing) {
+      const p = frames[activeFrameIdx]?.positions[el.id];
+      if (p) return { x: p.x, y: p.y, x2: p.x2, y2: p.y2 };
+    }
+    return { x: el.x, y: el.y, x2: el.x2, y2: el.y2 };
+  }
+
+  function snapshotCurrentPositions(): AnimationFrame['positions'] {
+    const result: AnimationFrame['positions'] = {};
+    for (const el of scene.elements) {
+      const pos = effectivePosition(el);
+      result[el.id] = { x: pos.x, y: pos.y, x2: pos.x2, y2: pos.y2 };
+    }
+    return result;
+  }
+
+  function startAnimating() {
+    if (frames.length === 0) {
+      const frame: AnimationFrame = { id: uid(), label: 'Start', positions: snapshotCurrentPositions() };
+      commit({ ...scene, animation: { frames: [frame] } });
+    }
+    setAnimMode(true);
+    setActiveFrameIdx(0);
+  }
+
+  function addFrame() {
+    const newFrame: AnimationFrame = { id: uid(), label: `Stap ${frames.length + 1}`, positions: snapshotCurrentPositions() };
+    const newFrames = [...frames, newFrame];
+    commit({ ...scene, animation: { frames: newFrames } });
+    setActiveFrameIdx(newFrames.length - 1);
+  }
+
+  function deleteFrame(idx: number) {
+    if (frames.length <= 1) {
+      if (!confirm('Animatie volledig verwijderen?')) return;
+      commit({ ...scene, animation: undefined });
+      setAnimMode(false);
+      setActiveFrameIdx(0);
+      return;
+    }
+    const newFrames = frames.filter((_, i) => i !== idx);
+    commit({ ...scene, animation: { frames: newFrames } });
+    setActiveFrameIdx(i => Math.max(0, Math.min(i, newFrames.length - 1)));
+  }
+
+  function stopAnimation() {
+    stopRequestedRef.current = true;
+  }
+
+  async function playAnimation() {
+    if (frames.length < 2 || playing) return;
+    stopRequestedRef.current = false;
+    setPlaying(true);
+    const allIds = scene.elements.map(el => el.id);
+    function fullPositions(frame: AnimationFrame): Record<string, { x: number; y: number; x2?: number; y2?: number }> {
+      const result: Record<string, { x: number; y: number; x2?: number; y2?: number }> = {};
+      for (const el of scene.elements) {
+        result[el.id] = frame.positions[el.id] ?? { x: el.x, y: el.y, x2: el.x2, y2: el.y2 };
+      }
+      return result;
+    }
+    for (let i = 0; i < frames.length - 1 && !stopRequestedRef.current; i++) {
+      const from = fullPositions(frames[i]);
+      const to = fullPositions(frames[i + 1]);
+      const duration = 900;
+      const start = performance.now();
+      await new Promise<void>(resolve => {
+        function tick(now: number) {
+          if (stopRequestedRef.current) { resolve(); return; }
+          const t = Math.min(1, (now - start) / duration);
+          const positions: Record<string, { x: number; y: number; x2?: number; y2?: number }> = {};
+          for (const id of allIds) {
+            const f = from[id], tt = to[id];
+            positions[id] = {
+              x: f.x + (tt.x - f.x) * t, y: f.y + (tt.y - f.y) * t,
+              x2: f.x2 !== undefined && tt.x2 !== undefined ? f.x2 + (tt.x2 - f.x2) * t : tt.x2 ?? f.x2,
+              y2: f.y2 !== undefined && tt.y2 !== undefined ? f.y2 + (tt.y2 - f.y2) * t : tt.y2 ?? f.y2,
+            };
+          }
+          setPlayPositions(positions);
+          if (t < 1) requestAnimationFrame(tick); else resolve();
+        }
+        requestAnimationFrame(tick);
+      });
+      if (stopRequestedRef.current) break;
+      await new Promise(r => setTimeout(r, 450)); // even "hold" aan elke stap
+    }
+    stopRequestedRef.current = false;
+    setPlaying(false);
+    setPlayPositions(null);
+  }
 
   function toSvgCoords(e: { clientX: number; clientY: number }): { x: number; y: number } {
     const svg = svgRef.current;
@@ -260,7 +368,7 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
 
   // ── Pointer handlers ─────────────────────────────────────────────────────
   function onCanvasPointerDown(e: React.PointerEvent<SVGSVGElement>) {
-    if (readOnly) return;
+    if (readOnly || playing) return;
     (e.target as Element).setPointerCapture?.(e.pointerId);
     const { x, y } = toSvgCoords(e);
 
@@ -305,10 +413,11 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
       const { id } = rotateDragRef.current;
       const el = scene.elements.find(el => el.id === id);
       if (!el) return;
+      const centerPos = effectivePosition(el);
       // Hoek in pixel-ruimte berekenen (i.p.v. de 0-100 percentage-ruimte) zodat
       // de rotatie visueel klopt, ook als het veld niet vierkant is (W !== H).
       const px = (x / 100) * W, py = (y / 100) * H;
-      const ecx = (el.x / 100) * W, ecy = (el.y / 100) * H;
+      const ecx = (centerPos.x / 100) * W, ecy = (centerPos.y / 100) * H;
       let deg = Math.atan2(py - ecy, px - ecx) * 180 / Math.PI + 90;
       deg = ((deg % 360) + 360) % 360;
       // Magnetisch vastklikken rond elke 15°, zodat rechte hoeken makkelijk te raken zijn.
@@ -323,8 +432,9 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
       const { id, startScale, startDist } = resizeDragRef.current;
       const el = scene.elements.find(el => el.id === id);
       if (!el || startDist === 0) return;
+      const centerPos = effectivePosition(el);
       const px = (x / 100) * W, py = (y / 100) * H;
-      const ecx = (el.x / 100) * W, ecy = (el.y / 100) * H;
+      const ecx = (centerPos.x / 100) * W, ecy = (centerPos.y / 100) * H;
       const dist = Math.hypot(px - ecx, py - ecy);
       let scale = startScale * (dist / startDist);
       scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
@@ -340,12 +450,26 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
       const el = scene.elements.find(el => el.id === id);
       if (!el) return;
       const nx = x - dx, ny = y - dy;
-      const shiftX = nx - el.x, shiftY = ny - el.y;
-      const updated = scene.elements.map(item => item.id === id
-        ? { ...item, x: nx, y: ny, x2: item.x2 !== undefined ? item.x2 + shiftX : undefined, y2: item.y2 !== undefined ? item.y2 + shiftY : undefined }
-        : item
-      );
-      onChange?.({ ...scene, elements: updated });
+      if (animMode) {
+        // In animatiemodus verplaatst slepen enkel de positie binnen de actieve
+        // stap — de basisplaatsing van het element blijft ongewijzigd.
+        const curPos = effectivePosition(el);
+        const shiftX = nx - curPos.x, shiftY = ny - curPos.y;
+        const newPos = {
+          x: nx, y: ny,
+          x2: curPos.x2 !== undefined ? curPos.x2 + shiftX : undefined,
+          y2: curPos.y2 !== undefined ? curPos.y2 + shiftY : undefined,
+        };
+        const newFrames = frames.map((f, i) => i === activeFrameIdx ? { ...f, positions: { ...f.positions, [id]: newPos } } : f);
+        onChange?.({ ...scene, animation: { frames: newFrames } });
+      } else {
+        const shiftX = nx - el.x, shiftY = ny - el.y;
+        const updated = scene.elements.map(item => item.id === id
+          ? { ...item, x: nx, y: ny, x2: item.x2 !== undefined ? item.x2 + shiftX : undefined, y2: item.y2 !== undefined ? item.y2 + shiftY : undefined }
+          : item
+        );
+        onChange?.({ ...scene, elements: updated });
+      }
     }
   }
 
@@ -398,7 +522,7 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   }
 
   function onElementPointerDown(e: React.PointerEvent, el: DrawingElement) {
-    if (readOnly) return;
+    if (readOnly || playing) return;
     e.stopPropagation();
     if (tool !== 'select') return;
     (e.target as Element).setPointerCapture?.(e.pointerId);
@@ -409,7 +533,7 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   }
 
   function onRotateHandlePointerDown(e: React.PointerEvent, el: DrawingElement) {
-    if (readOnly || tool !== 'select') return;
+    if (readOnly || playing || tool !== 'select') return;
     e.stopPropagation();
     (e.target as Element).setPointerCapture?.(e.pointerId);
     rotateDragRef.current = { id: el.id };
@@ -418,7 +542,7 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   }
 
   function onResizeHandlePointerDown(e: React.PointerEvent, el: DrawingElement) {
-    if (readOnly || tool !== 'select') return;
+    if (readOnly || playing || tool !== 'select') return;
     e.stopPropagation();
     (e.target as Element).setPointerCapture?.(e.pointerId);
     const { x, y } = toSvgCoords(e);
@@ -489,6 +613,49 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
         </div>
       )}
 
+      {/* Animatie: opbouwen (enkel bewerkbaar) en afspelen (ook in read-only preview) */}
+      {!readOnly && (
+        <div className="dc-anim-toolbar">
+          {!animMode ? (
+            <button className="btn btn-outline btn-sm" onClick={startAnimating}>
+              🎬 {frames.length > 1 ? `Animatie bewerken (${frames.length} stappen)` : 'Animatie maken'}
+            </button>
+          ) : (
+            <>
+              <button className="dc-tool" title="Animatie sluiten" onClick={() => setAnimMode(false)}>✕</button>
+              <div className="dc-anim-frames">
+                {frames.map((f, i) => (
+                  <button key={f.id} className={`dc-anim-frame ${i === activeFrameIdx ? 'active' : ''}`}
+                    title={f.label} onClick={() => setActiveFrameIdx(i)}>
+                    {i + 1}
+                  </button>
+                ))}
+                <button className="dc-tool" title="Nieuwe stap toevoegen" onClick={addFrame}>+</button>
+              </div>
+              <button className="dc-tool" title="Deze stap verwijderen" onClick={() => deleteFrame(activeFrameIdx)}>🗑</button>
+              <span className="dc-sep" />
+              {!playing ? (
+                <button className="btn btn-primary btn-sm" onClick={playAnimation} disabled={frames.length < 2}>▶ Afspelen</button>
+              ) : (
+                <button className="btn btn-outline btn-sm" onClick={stopAnimation}>⏹ Stop</button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {!readOnly && animMode && (
+        <div className="dc-anim-hint">Sleep spelers/bal naar hun positie voor deze stap. Elke stap = een moment in de oefening.</div>
+      )}
+      {readOnly && frames.length >= 2 && (
+        <div className="dc-anim-toolbar">
+          {!playing ? (
+            <button className="btn btn-primary btn-sm" onClick={playAnimation}>▶ Animatie afspelen</button>
+          ) : (
+            <button className="btn btn-outline btn-sm" onClick={stopAnimation}>⏹ Stop</button>
+          )}
+        </div>
+      )}
+
       <div className="dc-canvas-container">
         <svg
           ref={svgRef}
@@ -510,10 +677,15 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
             ? <image href={scene.backgroundImage} x="0" y="0" width={W} height={H} preserveAspectRatio="xMidYMid slice" />
             : renderBackground(scene.background, W, H)}
 
-          {scene.elements.map(el => renderElement(
-            el, el.id === selectedId, e => onElementPointerDown(e, el), W, H,
-            tool === 'select', e => onRotateHandlePointerDown(e, el), e => onResizeHandlePointerDown(e, el),
-          ))}
+          {scene.elements.map(el => {
+            const pos = effectivePosition(el);
+            const displayEl = (pos.x === el.x && pos.y === el.y && pos.x2 === el.x2 && pos.y2 === el.y2)
+              ? el : { ...el, x: pos.x, y: pos.y, x2: pos.x2, y2: pos.y2 };
+            return renderElement(
+              displayEl, el.id === selectedId, e => onElementPointerDown(e, displayEl), W, H,
+              tool === 'select' && !playing, e => onRotateHandlePointerDown(e, displayEl), e => onResizeHandlePointerDown(e, displayEl),
+            );
+          })}
 
           {draftArrow && renderArrow({ id: 'draft', type: tool as DrawingElementType, x: draftArrow.x, y: draftArrow.y, x2: draftArrow.x2, y2: draftArrow.y2 }, false, W, H)}
         </svg>
@@ -644,7 +816,7 @@ function renderShape(el: DrawingElement, cx: number, cy: number) {
     return <rect x={cx-14} y={cy-6} width="28" height="12" fill="none" stroke="white" strokeWidth="2" />;
   }
   if (el.type === 'ball') {
-    return <circle cx={cx} cy={cy} r="6" fill="white" stroke="rgba(0,0,0,0.5)" strokeWidth="1" />;
+    return renderBallShape(cx, cy);
   }
   if (el.type === 'hoop') {
     return <ellipse cx={cx} cy={cy} rx="13" ry="6" fill="none" stroke="#F5C518" strokeWidth="3" />;
@@ -686,6 +858,44 @@ function renderShape(el: DrawingElement, cx: number, cy: number) {
       fill="white" stroke="rgba(0,0,0,0.6)" strokeWidth="3" paintOrder="stroke">
       {el.label}
     </text>
+  );
+}
+
+// Herkenbaar voetbal-icoontje: witte bal met een klassiek zwart pentagon/hexagon-
+// patroon (centrale pentagon + 5 naar buiten wijzende hexagon-"punten" die bijna
+// tot de rand reiken) — zelfde stijl als het klassieke platte voetbal-icoon.
+function renderBallShape(cx: number, cy: number) {
+  const r = 6;
+  const toXY = (angleDeg: number, radius: number) => {
+    const a = angleDeg * Math.PI / 180;
+    return { x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius };
+  };
+  const Rc = r * 0.34;    // centrale pentagon
+  const Rout = r * 0.62;  // "schouders" van elke zwarte punt
+  const Rtip = r * 0.97;  // reikt bijna tot de rand
+  const centerAngles = [0, 1, 2, 3, 4].map(i => -90 + i * 72);
+  const centerPts = centerAngles.map(a => toXY(a, Rc));
+  const petals = [0, 1, 2, 3, 4].map(i => {
+    const bis = centerAngles[i] + 36; // bissectrice van deze pentagon-rand, naar buiten
+    const pts = [
+      centerPts[i],
+      toXY(bis - 23, Rout),
+      toXY(bis - 11, Rtip),
+      toXY(bis + 11, Rtip),
+      toXY(bis + 23, Rout),
+      centerPts[(i + 1) % 5],
+    ];
+    return pts.map(p => `${p.x},${p.y}`).join(' ');
+  });
+  const seam = '#eaeaea';
+  return (
+    <>
+      <circle cx={cx} cy={cy} r={r} fill="#fefefe" stroke="#141414" strokeWidth={r * 0.16} />
+      {petals.map((pts, i) => (
+        <polygon key={i} points={pts} fill="#141414" stroke={seam} strokeWidth={r * 0.05} strokeLinejoin="round" />
+      ))}
+      <polygon points={centerPts.map(p => `${p.x},${p.y}`).join(' ')} fill="#141414" stroke={seam} strokeWidth={r * 0.05} strokeLinejoin="round" />
+    </>
   );
 }
 

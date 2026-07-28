@@ -4,6 +4,7 @@ import {
   getOefeningDatabank, createOefeningDatabankItem, updateOefeningDatabankItem, deleteOefeningDatabankItem,
   getTeamManual, uploadTeamManual, removeTeamManual, TeamManual,
   OefeningDatabankItem, OefeningCategorie, Doelgroep, DOELGROEP_LEEFTIJDEN, ExerciseFase, EXERCISE_FASE_LABELS, parseDrawingScene,
+  Spelprincipe, SPELPRINCIPE_OPTIONS, SPELPRINCIPE_LABELS,
 } from '../lib/api';
 import DrawingCanvas from '../components/DrawingCanvas';
 import './TrainingEditor.css'; // hergebruikt de oefening-kaart-stijlen (te-organisatie, te-ex-drawing, ...)
@@ -16,21 +17,21 @@ const CATEGORIE_LABELS: Record<OefeningCategorie, string> = {
 };
 
 interface DraftForm {
-  naam: string; fase: ExerciseFase; categorie: OefeningCategorie | ''; doelgroep: Doelgroep | ''; teamprincipe: string; duurMinuten: number;
+  naam: string; fase: ExerciseFase; categorie: OefeningCategorie | ''; doelgroep: Doelgroep | ''; teamprincipe: string; spelprincipe: Spelprincipe | ''; duurMinuten: number;
   organisatieSpelers: string; organisatieAfmetingen: string; organisatieMateriaal: string;
   beschrijving: string; drawingData: string; coachingPunten: string; maximaalActief: string; fun: string;
 }
 
 function emptyDraft(): DraftForm {
   return {
-    naam: '', fase: 'opwarming', categorie: '', doelgroep: '', teamprincipe: '', duurMinuten: 10,
+    naam: '', fase: 'opwarming', categorie: '', doelgroep: '', teamprincipe: '', spelprincipe: '', duurMinuten: 10,
     organisatieSpelers: '', organisatieAfmetingen: '', organisatieMateriaal: '',
     beschrijving: '', drawingData: '', coachingPunten: '', maximaalActief: '', fun: '',
   };
 }
 function draftFromItem(it: OefeningDatabankItem): DraftForm {
   return {
-    naam: it.naam, fase: it.fase, categorie: it.categorie ?? '', doelgroep: it.doelgroep ?? '', teamprincipe: it.teamprincipe, duurMinuten: it.duurMinuten,
+    naam: it.naam, fase: it.fase, categorie: it.categorie ?? '', doelgroep: it.doelgroep ?? '', teamprincipe: it.teamprincipe, spelprincipe: it.spelprincipe ?? '', duurMinuten: it.duurMinuten,
     organisatieSpelers: it.organisatieSpelers, organisatieAfmetingen: it.organisatieAfmetingen, organisatieMateriaal: it.organisatieMateriaal,
     beschrijving: it.beschrijving, drawingData: it.drawingData, coachingPunten: it.coachingPunten, maximaalActief: it.maximaalActief, fun: it.fun,
   };
@@ -65,6 +66,15 @@ export default function Oefendatabank() {
   const [filterCategorie, setFilterCategorie] = useState<OefeningCategorie | ''>('');
   const [filterDoelgroep, setFilterDoelgroep] = useState<Doelgroep | ''>('');
   const [search, setSearch] = useState('');
+  const [collapsedFases, setCollapsedFases] = useState<Set<ExerciseFase>>(new Set());
+
+  function toggleFaseCollapsed(fase: ExerciseFase) {
+    setCollapsedFases(prev => {
+      const next = new Set(prev);
+      if (next.has(fase)) next.delete(fase); else next.add(fase);
+      return next;
+    });
+  }
 
   useEffect(() => { load(); }, []);
   useEffect(() => { loadManual(); }, [teamId]);
@@ -122,10 +132,13 @@ export default function Oefendatabank() {
         organisatieSpelers: draft.organisatieSpelers, organisatieAfmetingen: draft.organisatieAfmetingen,
         organisatieMateriaal: draft.organisatieMateriaal, beschrijving: draft.beschrijving, drawingData: draft.drawingData,
         coachingPunten: draft.coachingPunten, maximaalActief: draft.maximaalActief, fun: draft.fun,
-        categorie: draft.categorie || null, doelgroep: draft.doelgroep || null,
+        categorie: draft.categorie || null, doelgroep: draft.doelgroep || null, spelprincipe: draft.spelprincipe || null,
       };
       if (expandedId === 'new') {
-        await createOefeningDatabankItem({ ...payload, categorie: draft.categorie || undefined, doelgroep: draft.doelgroep || undefined, trainerId: trainer?.id });
+        await createOefeningDatabankItem({
+          ...payload, categorie: draft.categorie || undefined, doelgroep: draft.doelgroep || undefined,
+          spelprincipe: draft.spelprincipe || undefined, trainerId: trainer?.id,
+        });
       } else if (expandedId) {
         await updateOefeningDatabankItem(expandedId, payload);
       }
@@ -151,6 +164,49 @@ export default function Oefendatabank() {
       (!search.trim() || it.naam.toLowerCase().includes(search.trim().toLowerCase()) || it.teamprincipe.toLowerCase().includes(search.trim().toLowerCase()))
     )
     .sort((a, b) => ageRank(a.doelgroep) - ageRank(b.doelgroep) || a.naam.localeCompare(b.naam));
+
+  // Zonder onderdeel-filter groeperen we per trainingsonderdeel — dat maakt een
+  // club-brede, mogelijk lange lijst veel makkelijker te doorzoeken met het oog.
+  const groups = !filterFase
+    ? FASE_ORDER.map(f => ({ fase: f, items: filtered.filter(it => it.fase === f) })).filter(g => g.items.length > 0)
+    : [];
+
+  const filtersActive = !!(filterFase || filterCategorie || filterDoelgroep || search.trim());
+  function resetFilters() {
+    setFilterFase(''); setFilterCategorie(''); setFilterDoelgroep(''); setSearch('');
+  }
+
+  function renderCard(it: OefeningDatabankItem) {
+    const isOpen = expandedId === it.id;
+    return (
+      <div key={it.id} className="card od-card">
+        <button className="od-card-header" onClick={() => isOpen ? closeExpand() : openEdit(it)}>
+          <span className={`tag te-fase-tag te-fase-${it.fase}`}>{EXERCISE_FASE_LABELS[it.fase]}</span>
+          {it.categorie && (
+            <span className={`tag ${it.categorie === 'B+' ? 'tag-green' : 'tag-black'}`}>{it.categorie}</span>
+          )}
+          {it.doelgroep && <span className="tag tag-black">{it.doelgroep}</span>}
+          <span className="od-card-name">{it.naam}</span>
+          {(it.teamprincipe || it.spelprincipe) && (
+            <span className="od-card-teamprincipe">
+              {it.teamprincipe}
+              {it.teamprincipe && it.spelprincipe ? ' · ' : ''}
+              {it.spelprincipe ? SPELPRINCIPE_LABELS[it.spelprincipe] : ''}
+            </span>
+          )}
+          <span className="od-card-duur">{it.duurMinuten}min</span>
+          <span className="te-chevron">{isOpen ? '▲' : '▼'}</span>
+        </button>
+        {isOpen && (
+          <OefeningCard
+            draft={draft} setDraft={setDraft} saving={saving}
+            onSave={handleSaveDraft} onCancel={closeExpand} onOpenDrawing={() => setDrawingOpen(true)}
+            onDelete={() => setConfirmDelete(it)}
+          />
+        )}
+      </div>
+    );
+  }
 
   if (loading) return <div className="page"><div className="loading-spinner">Oefendatabank laden...</div></div>;
 
@@ -201,21 +257,41 @@ export default function Oefendatabank() {
         </div>
       )}
 
-      <div className="od-filters">
-        <select className="input-field" value={filterFase} onChange={e => setFilterFase(e.target.value as ExerciseFase | '')}>
-          <option value="">Alle onderdelen</option>
-          {FASE_ORDER.map(f => <option key={f} value={f}>{EXERCISE_FASE_LABELS[f]}</option>)}
-        </select>
-        <select className="input-field" value={filterCategorie} onChange={e => setFilterCategorie(e.target.value as OefeningCategorie | '')}>
-          <option value="">Alle categorieën</option>
-          <option value="B+">Bal+ (aanvallend)</option>
-          <option value="B-">Bal- (verdedigend)</option>
-        </select>
-        <select className="input-field" value={filterDoelgroep} onChange={e => setFilterDoelgroep(e.target.value as Doelgroep | '')}>
-          <option value="">Alle doelgroepen</option>
-          {DOELGROEP_LEEFTIJDEN.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
-        <input className="input-field" placeholder="Zoek op naam of teamprincipe..." value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="od-filters card">
+        <div className="od-filters-row">
+          <div className="form-group">
+            <label className="input-label">Onderdeel</label>
+            <select className="input-field" value={filterFase} onChange={e => setFilterFase(e.target.value as ExerciseFase | '')}>
+              <option value="">Alle onderdelen</option>
+              {FASE_ORDER.map(f => <option key={f} value={f}>{EXERCISE_FASE_LABELS[f]}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="input-label">Categorie</label>
+            <select className="input-field" value={filterCategorie} onChange={e => setFilterCategorie(e.target.value as OefeningCategorie | '')}>
+              <option value="">Alle categorieën</option>
+              <option value="B+">Bal+ (aanvallend)</option>
+              <option value="B-">Bal- (verdedigend)</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="input-label">Doelgroep</label>
+            <select className="input-field" value={filterDoelgroep} onChange={e => setFilterDoelgroep(e.target.value as Doelgroep | '')}>
+              <option value="">Alle doelgroepen</option>
+              {DOELGROEP_LEEFTIJDEN.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          <div className="form-group od-filter-search">
+            <label className="input-label">Zoeken</label>
+            <input className="input-field" placeholder="Zoek op naam of teamprincipe..." value={search} onChange={e => setSearch(e.target.value)} />
+          </div>
+        </div>
+        <div className="od-filters-footer">
+          <span className="od-result-count">
+            {filtersActive ? `${filtered.length} van ${items.length}` : items.length} oefening{(filtersActive ? filtered.length : items.length) !== 1 ? 'en' : ''}
+          </span>
+          {filtersActive && <button className="btn btn-ghost btn-sm" onClick={resetFilters}>✕ Wis filters</button>}
+        </div>
       </div>
 
       {expandedId === 'new' && (
@@ -227,33 +303,29 @@ export default function Oefendatabank() {
 
       {filtered.length === 0 && expandedId !== 'new' ? (
         <div className="empty-state"><div className="empty-icon">📚</div>Geen oefeningen gevonden</div>
-      ) : (
-        <div className="od-list">
-          {filtered.map(it => {
-            const isOpen = expandedId === it.id;
+      ) : groups.length > 0 ? (
+        <div className="od-groups">
+          {groups.map(g => {
+            const isCollapsed = collapsedFases.has(g.fase);
             return (
-              <div key={it.id} className="card od-card">
-                <button className="od-card-header" onClick={() => isOpen ? closeExpand() : openEdit(it)}>
-                  <span className={`tag te-fase-tag te-fase-${it.fase}`}>{EXERCISE_FASE_LABELS[it.fase]}</span>
-                  {it.categorie && (
-                    <span className={`tag ${it.categorie === 'B+' ? 'tag-green' : 'tag-black'}`}>{it.categorie}</span>
-                  )}
-                  {it.doelgroep && <span className="tag tag-black">{it.doelgroep}</span>}
-                  <span className="od-card-name">{it.naam}</span>
-                  {it.teamprincipe && <span className="od-card-teamprincipe">{it.teamprincipe}</span>}
-                  <span className="od-card-duur">{it.duurMinuten}min</span>
-                  <span className="te-chevron">{isOpen ? '▲' : '▼'}</span>
+              <div key={g.fase} className="od-group">
+                <button className={`od-group-header te-fase-${g.fase}`} onClick={() => toggleFaseCollapsed(g.fase)}>
+                  <span className="od-group-title">{EXERCISE_FASE_LABELS[g.fase]}</span>
+                  <span className="od-group-count">{g.items.length}</span>
+                  <span className="od-group-chevron">{isCollapsed ? '▼' : '▲'}</span>
                 </button>
-                {isOpen && (
-                  <OefeningCard
-                    draft={draft} setDraft={setDraft} saving={saving}
-                    onSave={handleSaveDraft} onCancel={closeExpand} onOpenDrawing={() => setDrawingOpen(true)}
-                    onDelete={() => setConfirmDelete(it)}
-                  />
+                {!isCollapsed && (
+                  <div className="od-list">
+                    {g.items.map(it => renderCard(it))}
+                  </div>
                 )}
               </div>
             );
           })}
+        </div>
+      ) : (
+        <div className="od-list">
+          {filtered.map(it => renderCard(it))}
         </div>
       )}
 
@@ -350,10 +422,19 @@ function OefeningCard({ isNew, draft, setDraft, saving, onSave, onCancel, onOpen
         </div>
       </div>
 
-      <div className="form-group">
-        <label className="input-label">Teamprincipe</label>
-        <input className="input-field" value={draft.teamprincipe} onChange={e => setDraft(d => ({ ...d, teamprincipe: e.target.value }))}
-          placeholder="bv. Opbouw via de doelman" />
+      <div className="form-row">
+        <div className="form-group">
+          <label className="input-label">Teamprincipe</label>
+          <input className="input-field" value={draft.teamprincipe} onChange={e => setDraft(d => ({ ...d, teamprincipe: e.target.value }))}
+            placeholder="bv. Opbouw via de doelman" />
+        </div>
+        <div className="form-group">
+          <label className="input-label">Spelprincipe</label>
+          <select className="input-field" value={draft.spelprincipe} onChange={e => setDraft(d => ({ ...d, spelprincipe: e.target.value as Spelprincipe | '' }))}>
+            <option value="">— geen —</option>
+            {SPELPRINCIPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="te-organisatie">

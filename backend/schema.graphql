@@ -1233,6 +1233,7 @@ type OefeningDatabank {
   categorie: String
   doelgroep: String
   teamprincipe: String
+  spelprincipe: String
   duurMinuten: Int
   organisatieSpelers: String
   organisatieAfmetingen: String
@@ -1260,6 +1261,7 @@ input OefeningDatabankWhereInput {
   categorie: StringNullableFilter
   doelgroep: StringNullableFilter
   teamprincipe: StringFilter
+  spelprincipe: StringNullableFilter
   duurMinuten: IntNullableFilter
   organisatieSpelers: StringFilter
   organisatieAfmetingen: StringFilter
@@ -1280,6 +1282,7 @@ input OefeningDatabankOrderByInput {
   categorie: OrderDirection
   doelgroep: OrderDirection
   teamprincipe: OrderDirection
+  spelprincipe: OrderDirection
   duurMinuten: OrderDirection
   organisatieSpelers: OrderDirection
   organisatieAfmetingen: OrderDirection
@@ -1298,6 +1301,7 @@ input OefeningDatabankUpdateInput {
   categorie: String
   doelgroep: String
   teamprincipe: String
+  spelprincipe: String
   duurMinuten: Int
   organisatieSpelers: String
   organisatieAfmetingen: String
@@ -1322,6 +1326,7 @@ input OefeningDatabankCreateInput {
   categorie: String
   doelgroep: String
   teamprincipe: String
+  spelprincipe: String
   duurMinuten: Int
   organisatieSpelers: String
   organisatieAfmetingen: String
