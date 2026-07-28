@@ -524,6 +524,11 @@ export default function Matchday() {
   const curPeriod  = m!.currentPeriod;
   const remaining  = periodRemainingSeconds();
   const elapsed    = periodElapsedSeconds();
+  // scoreHome/scoreAway zijn de letterlijke thuis-/uitploeg-kolommen (zo schrijft
+  // addGoal ze ook weg, o.b.v. match.location) — voor weergave naast "KFC Lennik"
+  // moeten we altijd ONS cijfer tonen, niet zomaar scoreHome.
+  const ownScore = m!.location === 'home' ? m!.scoreHome : m!.scoreAway;
+  const oppScore = m!.location === 'home' ? m!.scoreAway : m!.scoreHome;
 
   return (
     <div className="page md-page">
@@ -550,9 +555,9 @@ export default function Matchday() {
         <div className="md-banner-right">
           {/* Total score */}
           <div className="md-total-score" onClick={() => !isPlanned && setScoreModal(true)}>
-            <span className="md-score-num">{m!.scoreHome}</span>
+            <span className="md-score-num">{ownScore}</span>
             <span className="md-score-dash">–</span>
-            <span className="md-score-num">{m!.scoreAway}</span>
+            <span className="md-score-num">{oppScore}</span>
           </div>
 
           {/* Period controls */}
@@ -606,6 +611,8 @@ export default function Matchday() {
           fmtTime={fmtTime}
           onScoreEdit={savePeriodScore}
           isFinished={isFinished}
+          location={m!.location}
+          opponent={m!.opponent}
         />
       )}
 
@@ -718,7 +725,7 @@ export default function Matchday() {
 
       {/* ── FINISHED: summary ── */}
       {isFinished && (
-        <MatchSummary playerStates={playerStates} sessions={sessions} periods={periods} goals={goals} />
+        <MatchSummary playerStates={playerStates} sessions={sessions} periods={periods} goals={goals} location={m!.location} />
       )}
 
       {/* ── POSITIE SPEELTIJDEN (afgelopen wedstrijd) ── */}
@@ -776,37 +783,48 @@ export default function Matchday() {
 
 // ── PeriodTracker ─────────────────────────────────────────────────────────────
 
-function PeriodTracker({ currentPeriod, periodStatus, periods, elapsed, remaining, fmtTime, onScoreEdit, isFinished }: {
+function PeriodTracker({ currentPeriod, periodStatus, periods, elapsed, remaining, fmtTime, onScoreEdit, isFinished, location, opponent }: {
   currentPeriod: number; periodStatus: string; periods: Period[];
   elapsed: number; remaining: number; fmtTime: (s: number) => string;
   onScoreEdit: (id: string, h: number, a: number) => void; isFinished: boolean;
+  location: string; opponent: string;
 }) {
   const [editId, setEditId]     = useState<string | null>(null);
   const [editHome, setEditHome] = useState(0);
   const [editAway, setEditAway] = useState(0);
+  // scoreHome/scoreAway blijven de letterlijke thuis-/uitploeg-kolommen — welke
+  // daarvan "ons" is hangt af van match.location (zie ook addGoal in lib/api.ts
+  // en ownScore/oppScore in het bovenliggende component).
+  const ownIsHome = location === 'home';
 
   function openEdit(p: Period) { setEditId(p.id); setEditHome(p.scoreHome); setEditAway(p.scoreAway); }
 
   function ScoreBtns({ p, home, away }: { p: Period; home: number; away: number }) {
+    const ownVal = ownIsHome ? home : away;
+    const oppVal = ownIsHome ? away : home;
+    const bumpOwn = (delta: number) => ownIsHome
+      ? onScoreEdit(p.id, Math.max(0, home + delta), away)
+      : onScoreEdit(p.id, home, Math.max(0, away + delta));
+    const bumpOpp = (delta: number) => ownIsHome
+      ? onScoreEdit(p.id, home, Math.max(0, away + delta))
+      : onScoreEdit(p.id, Math.max(0, home + delta), away);
     return (
       <div className="md-score-btns">
-        {/* Thuis */}
         <div className="md-score-team">
-          <span className="md-score-team-label">Thuis</span>
+          <span className="md-score-team-label">KFC Lennik</span>
           <div className="md-score-ctrl">
-            <button className="md-score-btn md-score-minus" onClick={() => onScoreEdit(p.id, Math.max(0, home - 1), away)}>−</button>
-            <span className="md-score-val">{home}</span>
-            <button className="md-score-btn md-score-plus" onClick={() => onScoreEdit(p.id, home + 1, away)}>+</button>
+            <button className="md-score-btn md-score-minus" onClick={() => bumpOwn(-1)}>−</button>
+            <span className="md-score-val">{ownVal}</span>
+            <button className="md-score-btn md-score-plus" onClick={() => bumpOwn(1)}>+</button>
           </div>
         </div>
         <span className="md-score-vsep">–</span>
-        {/* Uit */}
         <div className="md-score-team">
-          <span className="md-score-team-label">Uit</span>
+          <span className="md-score-team-label">{opponent}</span>
           <div className="md-score-ctrl">
-            <button className="md-score-btn md-score-minus" onClick={() => onScoreEdit(p.id, home, Math.max(0, away - 1))}>−</button>
-            <span className="md-score-val">{away}</span>
-            <button className="md-score-btn md-score-plus" onClick={() => onScoreEdit(p.id, home, away + 1)}>+</button>
+            <button className="md-score-btn md-score-minus" onClick={() => bumpOpp(-1)}>−</button>
+            <span className="md-score-val">{oppVal}</span>
+            <button className="md-score-btn md-score-plus" onClick={() => bumpOpp(1)}>+</button>
           </div>
         </div>
       </div>
@@ -836,11 +854,15 @@ function PeriodTracker({ currentPeriod, periodStatus, periods, elapsed, remainin
               {(isDone || isActive) && p ? (
                 editId === p.id ? (
                   <div className="md-period-score-edit">
-                    <input type="number" min={0} className="input-field md-score-inp" value={editHome}
-                      onChange={e => setEditHome(+e.target.value)} />
+                    <input type="number" min={0} className="input-field md-score-inp"
+                      value={ownIsHome ? editHome : editAway}
+                      onChange={e => (ownIsHome ? setEditHome : setEditAway)(+e.target.value)}
+                      title="KFC Lennik" />
                     <span className="md-score-sep">–</span>
-                    <input type="number" min={0} className="input-field md-score-inp" value={editAway}
-                      onChange={e => setEditAway(+e.target.value)} />
+                    <input type="number" min={0} className="input-field md-score-inp"
+                      value={ownIsHome ? editAway : editHome}
+                      onChange={e => (ownIsHome ? setEditAway : setEditHome)(+e.target.value)}
+                      title={opponent} />
                     <button className="btn btn-primary btn-sm" onClick={() => { onScoreEdit(p.id, editHome, editAway); setEditId(null); }}>✓</button>
                     <button className="btn btn-outline btn-sm" onClick={() => setEditId(null)}>✕</button>
                   </div>
@@ -933,11 +955,15 @@ function PlayerRow({ ps, isPlaying, busy, onToggle, onSub, periodSec, playerGoal
 
 // ── MatchSummary ──────────────────────────────────────────────────────────────
 
-function MatchSummary({ playerStates, sessions, periods, goals }: {
-  playerStates: PlayerState[]; sessions: PlayTimeSession[]; periods: Period[]; goals: Goal[];
+function MatchSummary({ playerStates, sessions, periods, goals, location }: {
+  playerStates: PlayerState[]; sessions: PlayTimeSession[]; periods: Period[]; goals: Goal[]; location: string;
 }) {
-  const totalHome = periods.reduce((s, p) => s + (p.scoreHome || 0), 0);
-  const totalAway = periods.reduce((s, p) => s + (p.scoreAway || 0), 0);
+  // p.scoreHome/scoreAway zijn de letterlijke thuis-/uitploeg-kolommen — welke
+  // daarvan "ons" is hangt af van match.location (zie ook addGoal in lib/api.ts).
+  const ownField = location === 'home' ? 'scoreHome' : 'scoreAway';
+  const oppField = location === 'home' ? 'scoreAway' : 'scoreHome';
+  const totalOwn = periods.reduce((s, p) => s + (p[ownField] || 0), 0);
+  const totalOpp = periods.reduce((s, p) => s + (p[oppField] || 0), 0);
 
   return (
     <div className="md-finished">
@@ -945,7 +971,7 @@ function MatchSummary({ playerStates, sessions, periods, goals }: {
       <div className="md-summary-score-card card" style={{ marginBottom: 20 }}>
         <div className="md-summary-score-header">
           <span>Eindstand</span>
-          <span className="md-summary-final">{totalHome} – {totalAway}</span>
+          <span className="md-summary-final">{totalOwn} – {totalOpp}</span>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table className="data-table">
@@ -959,13 +985,13 @@ function MatchSummary({ playerStates, sessions, periods, goals }: {
             <tbody>
               <tr>
                 <td style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 13, letterSpacing: 1, whiteSpace: 'nowrap' }}>KFC Lennik</td>
-                {periods.map(p => <td key={p.id} style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--red)', textAlign: 'center' }}>{p.scoreHome}</td>)}
-                <td style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--red)', textAlign: 'center' }}>{totalHome}</td>
+                {periods.map(p => <td key={p.id} style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--red)', textAlign: 'center' }}>{p[ownField]}</td>)}
+                <td style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--red)', textAlign: 'center' }}>{totalOwn}</td>
               </tr>
               <tr>
                 <td style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 13, letterSpacing: 1, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>Tegenstander</td>
-                {periods.map(p => <td key={p.id} style={{ fontFamily: 'var(--font-display)', fontSize: 22, textAlign: 'center' }}>{p.scoreAway}</td>)}
-                <td style={{ fontFamily: 'var(--font-display)', fontSize: 26, textAlign: 'center' }}>{totalAway}</td>
+                {periods.map(p => <td key={p.id} style={{ fontFamily: 'var(--font-display)', fontSize: 22, textAlign: 'center' }}>{p[oppField]}</td>)}
+                <td style={{ fontFamily: 'var(--font-display)', fontSize: 26, textAlign: 'center' }}>{totalOpp}</td>
               </tr>
             </tbody>
           </table>
@@ -1060,13 +1086,19 @@ function PlayerSummaryTable({ playerStates, sessions, periods, goals = [], title
 
 // ── ScoreModal ────────────────────────────────────────────────────────────────
 
-function ScoreModal({ match: _match, periods, onSave, onClose }: {
+function ScoreModal({ match, periods, onSave, onClose }: {
   match: Match; periods: Period[];
   onSave: (id: string, h: number, a: number) => void; onClose: () => void;
 }) {
   const [scores, setScores] = useState<Record<string, { home: number; away: number }>>(
     Object.fromEntries(periods.map(p => [p.id, { home: p.scoreHome, away: p.scoreAway }]))
   );
+  // scoreHome/scoreAway in de data zijn de letterlijke thuis-/uitploeg-kolommen —
+  // toon "KFC Lennik" hier altijd links, ongeacht welk letterlijk veld dat is,
+  // zodat de volgorde overeenkomt met de banner erboven (zie ownScore/oppScore).
+  const ownIsHome = match.location === 'home';
+  const ownKey: 'home' | 'away' = ownIsHome ? 'home' : 'away';
+  const oppKey: 'home' | 'away' = ownIsHome ? 'away' : 'home';
 
   async function handleSave() {
     for (const [id, sc] of Object.entries(scores)) {
@@ -1079,17 +1111,22 @@ function ScoreModal({ match: _match, periods, onSave, onClose }: {
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal-title">Score per kwart</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 4, fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+          <span style={{ width: 60, textAlign: 'center' }}>KFC Lennik</span>
+          <span style={{ width: 16 }} />
+          <span style={{ width: 60, textAlign: 'center' }}>{match.opponent}</span>
+        </div>
         {periods.map(p => (
           <div key={p.id} className="form-group">
             <label className="input-label">Kwart {p.periodNumber}</label>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input type="number" min={0} className="input-field" style={{ width: 60, textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 22 }}
-                value={scores[p.id]?.home ?? 0}
-                onChange={e => setScores(s => ({ ...s, [p.id]: { ...s[p.id], home: +e.target.value } }))} />
+                value={scores[p.id]?.[ownKey] ?? 0}
+                onChange={e => setScores(s => ({ ...s, [p.id]: { ...s[p.id], [ownKey]: +e.target.value } }))} />
               <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text-dim)' }}>–</span>
               <input type="number" min={0} className="input-field" style={{ width: 60, textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 22 }}
-                value={scores[p.id]?.away ?? 0}
-                onChange={e => setScores(s => ({ ...s, [p.id]: { ...s[p.id], away: +e.target.value } }))} />
+                value={scores[p.id]?.[oppKey] ?? 0}
+                onChange={e => setScores(s => ({ ...s, [p.id]: { ...s[p.id], [oppKey]: +e.target.value } }))} />
             </div>
           </div>
         ))}
