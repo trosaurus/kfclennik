@@ -85,6 +85,7 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   const clipboardRef = useRef<Omit<DrawingElement, 'id'> | null>(null);
   const pasteOffsetRef = useRef(0);
   const [hasClipboard, setHasClipboard] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   function toSvgCoords(e: { clientX: number; clientY: number }): { x: number; y: number } {
     const svg = svgRef.current;
@@ -175,6 +176,73 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
+  });
+
+  // ── Afbeelding invoegen (bestand of systeem-klembord) ──────────────────────
+  async function insertImageFile(file: File) {
+    if (readOnly || !file.type.startsWith('image/')) return;
+    const MAX_DIM = 1000, DISPLAY_LONG_SIDE = 110;
+    const dataUri: string = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => reject(new Error('Kon afbeelding niet laden'));
+      im.src = dataUri;
+    });
+    // Grote foto's downschalen/hercomprimeren vóór opslag als data-URI, zoals ook
+    // gebeurt bij PDF-import — anders groeit drawingData onnodig groot.
+    const longest = Math.max(img.naturalWidth, img.naturalHeight);
+    let src = dataUri;
+    if (longest > MAX_DIM) {
+      const factor = MAX_DIM / longest;
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.naturalWidth * factor);
+      canvas.height = Math.round(img.naturalHeight * factor);
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        src = canvas.toDataURL('image/jpeg', 0.85);
+      }
+    }
+    const displayFactor = DISPLAY_LONG_SIDE / longest;
+    const id = uid();
+    addElement({ id, type: 'image', x: 50, y: 50, src, width: img.naturalWidth * displayFactor, height: img.naturalHeight * displayFactor });
+    setSelectedId(id);
+    setTool('select');
+  }
+
+  function handleImagePicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) insertImageFile(file).catch(() => alert('Kon deze afbeelding niet invoegen.'));
+  }
+
+  // Toestaan om een afbeelding vanuit het systeemklembord te plakken (bv. een
+  // screenshot) — los van de interne Ctrl+V hierboven, die alleen gekopieerde
+  // tekentool-objecten plakt.
+  useEffect(() => {
+    if (readOnly) return;
+    function onPaste(e: ClipboardEvent) {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            e.preventDefault();
+            insertImageFile(file).catch(() => alert('Kon deze afbeelding niet plakken.'));
+          }
+          return;
+        }
+      }
+    }
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
   });
 
   function setBackground(bg: DrawingBackground) {
@@ -372,6 +440,8 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
           {ARROW_TOOLS.map(t => (
             <button key={t.tool} className={`dc-tool ${tool === t.tool ? 'active' : ''}`} title={t.title} onClick={() => setTool(t.tool)}>{t.icon}</button>
           ))}
+          <button className="dc-tool" title="Afbeelding invoegen (of plak met Ctrl+V)" onClick={() => imageInputRef.current?.click()}>🖼️</button>
+          <input ref={imageInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImagePicked} />
           <span className="dc-sep" />
           <button className="dc-tool" title="Kopieer geselecteerd (Ctrl+C)" disabled={!selectedId} onClick={copySelected}>⧉</button>
           <button className="dc-tool" title="Plak (Ctrl+V)" disabled={!hasClipboard} onClick={pasteClipboard}>📋</button>
@@ -517,11 +587,18 @@ function renderElement(
   const transform = (rotation || scale !== 1)
     ? `translate(${cx} ${cy}) rotate(${rotation}) scale(${scale}) translate(${-cx} ${-cy})`
     : undefined;
-  // De selectiering schaalt mee (ze toont de werkelijke omvang van het object),
-  // maar blijft buiten de rotatie — een cirkel heeft toch geen oriëntatie.
-  const ring = selected ? <circle cx={cx} cy={cy} r={18 * scale} fill="none" stroke="white" strokeWidth="1.5" strokeDasharray="3 2" /> : null;
-  const rotateHandle = (selected && showHandles && onRotateStart) ? renderRotateHandle(cx, cy, rotation, scale, onRotateStart) : null;
-  const resizeHandle = (selected && showHandles && onResizeStart) ? renderResizeHandle(cx, cy, rotation, scale, onResizeStart) : null;
+  // Iconen zijn ~cirkelvormig (vaste straal 18); een afbeelding heeft een eigen
+  // rechthoekige omvang — de handle-afstand en de selectiering volgen die omvang.
+  const isImage = el.type === 'image';
+  const imgW = el.width ?? 80, imgH = el.height ?? 80;
+  const handleBaseR = isImage ? Math.hypot(imgW, imgH) / 2 : 18;
+  const ring = selected
+    ? (isImage
+        ? <rect x={cx - imgW / 2} y={cy - imgH / 2} width={imgW} height={imgH} fill="none" stroke="white" strokeWidth="1.5" strokeDasharray="3 2" transform={transform} />
+        : <circle cx={cx} cy={cy} r={18 * scale} fill="none" stroke="white" strokeWidth="1.5" strokeDasharray="3 2" />)
+    : null;
+  const rotateHandle = (selected && showHandles && onRotateStart) ? renderRotateHandle(cx, cy, rotation, scale, handleBaseR, onRotateStart) : null;
+  const resizeHandle = (selected && showHandles && onResizeStart) ? renderResizeHandle(cx, cy, rotation, scale, handleBaseR, onResizeStart) : null;
 
   return (
     <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
@@ -599,6 +676,10 @@ function renderShape(el: DrawingElement, cx: number, cy: number) {
       </>
     );
   }
+  if (el.type === 'image') {
+    const w = el.width ?? 80, h = el.height ?? 80;
+    return el.src ? <image href={el.src} x={cx - w / 2} y={cy - h / 2} width={w} height={h} preserveAspectRatio="xMidYMid meet" /> : null;
+  }
   // text
   return (
     <text x={cx} y={cy} textAnchor="middle" fontSize="13" fontFamily="'Barlow Condensed',sans-serif" fontWeight={700}
@@ -608,8 +689,8 @@ function renderShape(el: DrawingElement, cx: number, cy: number) {
   );
 }
 
-function renderRotateHandle(cx: number, cy: number, rotation: number, scale: number, onPointerDown: (e: React.PointerEvent) => void) {
-  const innerR = 18 * scale, outerR = innerR + 12;
+function renderRotateHandle(cx: number, cy: number, rotation: number, scale: number, baseR: number, onPointerDown: (e: React.PointerEvent) => void) {
+  const innerR = baseR * scale, outerR = innerR + 12;
   const rad = (rotation - 90) * Math.PI / 180;
   const hx = cx + outerR * Math.cos(rad), hy = cy + outerR * Math.sin(rad);
   const ix = cx + innerR * Math.cos(rad), iy = cy + innerR * Math.sin(rad);
@@ -622,9 +703,9 @@ function renderRotateHandle(cx: number, cy: number, rotation: number, scale: num
   );
 }
 
-function renderResizeHandle(cx: number, cy: number, rotation: number, scale: number, onPointerDown: (e: React.PointerEvent) => void) {
+function renderResizeHandle(cx: number, cy: number, rotation: number, scale: number, baseR: number, onPointerDown: (e: React.PointerEvent) => void) {
   // Tegenoverliggende hoek t.o.v. de rotatie-handle, zodat ze nooit overlappen.
-  const innerR = 18 * scale, outerR = innerR + 12;
+  const innerR = baseR * scale, outerR = innerR + 12;
   const rad = (rotation + 90) * Math.PI / 180;
   const hx = cx + outerR * Math.cos(rad), hy = cy + outerR * Math.sin(rad);
   const ix = cx + innerR * Math.cos(rad), iy = cy + innerR * Math.sin(rad);

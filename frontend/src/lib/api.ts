@@ -1756,7 +1756,7 @@ export async function deleteOefeningDatabankItem(id: string): Promise<void> {
 
 export type DrawingElementType =
   | 'player' | 'cone' | 'joker' | 'goal' | 'ball' | 'ladder' | 'flag'
-  | 'hoop' | 'wall' | 'marker' | 'coach'
+  | 'hoop' | 'wall' | 'marker' | 'coach' | 'image'
   | 'arrow-pass' | 'arrow-dribble' | 'arrow-run' | 'text';
 
 export type PlayerColor = 'red' | 'blue' | 'white' | 'grey';
@@ -1771,6 +1771,9 @@ export interface DrawingElement {
   color?: string;           // PlayerColor voor 'player', ConeColor voor 'cone'
   rotation?: number;        // graden, rond het eigen middelpunt (niet gebruikt bij pijlen)
   scale?: number;           // schaalfactor rond het eigen middelpunt, standaard 1 (niet gebruikt bij pijlen)
+  src?: string;             // data-URI, enkel voor 'image'
+  width?: number;           // basisbreedte in viewBox-eenheden bij scale 1, enkel voor 'image'
+  height?: number;          // basishoogte in viewBox-eenheden bij scale 1, enkel voor 'image'
 }
 
 export const PLAYER_COLORS: { value: PlayerColor; label: string; hex: string }[] = [

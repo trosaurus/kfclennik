@@ -6,7 +6,7 @@
 
 export type DrawingElementType =
   | 'player' | 'cone' | 'joker' | 'goal' | 'ball' | 'ladder' | 'flag'
-  | 'hoop' | 'wall' | 'marker' | 'coach'
+  | 'hoop' | 'wall' | 'marker' | 'coach' | 'image'
   | 'arrow-pass' | 'arrow-dribble' | 'arrow-run' | 'text';
 
 export interface DrawingElement {
@@ -18,6 +18,9 @@ export interface DrawingElement {
   color?: string;
   rotation?: number;
   scale?: number;
+  src?: string;
+  width?: number;
+  height?: number;
 }
 
 export type DrawingBackground = 'grid' | 'half' | 'full';
@@ -135,6 +138,10 @@ function renderShape(el: DrawingElement, cx: number, cy: number): string {
     case 'flag':
       return `<line x1="${cx}" y1="${cy - 12}" x2="${cx}" y2="${cy + 12}" stroke="white" stroke-width="1.5"/>` +
         `<path d="M ${cx} ${cy - 12} L ${cx + 12} ${cy - 8} L ${cx} ${cy - 4} Z" fill="#CC1A1A"/>`;
+    case 'image': {
+      const w = el.width ?? 80, h = el.height ?? 80;
+      return el.src ? `<image href="${el.src}" x="${cx - w / 2}" y="${cy - h / 2}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid meet"/>` : '';
+    }
     default: // text
       return `<text x="${cx}" y="${cy}" text-anchor="middle" font-size="13" font-family="sans-serif" font-weight="700"
         fill="white" stroke="rgba(0,0,0,0.6)" stroke-width="3" paint-order="stroke">${esc(el.label ?? '')}</text>`;
