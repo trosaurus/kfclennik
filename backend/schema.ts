@@ -302,6 +302,9 @@ export const lists: Lists = {
       focusPunten:   text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
       jaarplanLabel: text({ defaultValue: '' }),                // bv. "Cyclus 3 · Week 2 · Balbezit"
 
+      // Gekozen trainingsopbouw (id uit frontend/src/lib/trainingsschema.ts, bv. "balbezit-1")
+      trainingsschema: text({ defaultValue: '' }),
+
       // ── "REFLECTIE • 360° EVALUATIE NA ELKE TRAINING" (template pagina 6) ──
       evalBehouden:            text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
       evalWijzigen:            text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),

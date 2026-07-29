@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import { getJaarplanWeekForDate, getCategoryBracket, formatJaarplanLabel } from '../lib/jaarplan';
 import { suggestExercises, LibraryExercise, KRACHTIGE_LEEROMGEVING_PRINCIPES } from '../lib/oefeningenbibliotheek';
+import { TRAININGSSCHEMAS, TRAININGSSCHEMA_GROEP_LABELS, TrainingsschemaGroep, getTrainingsschema } from '../lib/trainingsschema';
 import { extractManualSuggestions } from '../lib/manualOefeningen';
 import { buildOefeningPrompt, parseClaudeResponse, ParsedClaudeExercise } from '../lib/claudePrompt';
 import DrawingCanvas from '../components/DrawingCanvas';
@@ -71,7 +72,7 @@ const EMPTY_FORM = {
   speluitdagingWie: '', speluitdagingWat: '', speluitdagingWaar: '', speluitdagingWanneer: '',
   coachingswoorden: '', materiaal: '',
   actiefAanpak: '', funAanpak: '', individueleAandacht: '',
-  teamprincipe: '', spelprincipe: '', focusPunten: '', jaarplanLabel: '',
+  teamprincipe: '', spelprincipe: '', focusPunten: '', jaarplanLabel: '', trainingsschema: '',
   evalBehouden: '', evalWijzigen: '', evalWarenActief: '', evalHaddenFun: '', evalBijgeleerd: '', evalIndividueleAandacht: '',
 };
 
@@ -105,10 +106,13 @@ export default function TrainingEditor() {
   const [dbItems, setDbItems] = useState<OefeningDatabankItem[]>([]);
   const [dbLoaded, setDbLoaded] = useState(false);
   const [dbModalOpen, setDbModalOpen] = useState(false);
+  const [dbImportFor, setDbImportFor] = useState<string | null>(null);
   const [dbFase, setDbFase] = useState<ExerciseFase>('opwarming');
   const [dbCategorie, setDbCategorie] = useState<OefeningCategorie | ''>('');
   const [dbDoelgroep, setDbDoelgroep] = useState<Doelgroep | ''>('');
   const [dbSearch, setDbSearch] = useState('');
+
+  const [schemaGroep, setSchemaGroep] = useState<TrainingsschemaGroep>('BALBEZIT');
 
   const [saveToDbFor, setSaveToDbFor] = useState<string | null>(null);
   const [saveToDbCategorie, setSaveToDbCategorie] = useState<OefeningCategorie | ''>('');
@@ -133,6 +137,7 @@ export default function TrainingEditor() {
         coachingswoorden: t.coachingswoorden, materiaal: t.materiaal,
         actiefAanpak: t.actiefAanpak, funAanpak: t.funAanpak, individueleAandacht: t.individueleAandacht,
         teamprincipe: t.teamprincipe, spelprincipe: t.spelprincipe, focusPunten: t.focusPunten, jaarplanLabel: t.jaarplanLabel,
+        trainingsschema: t.trainingsschema,
         evalBehouden: t.evalBehouden, evalWijzigen: t.evalWijzigen, evalWarenActief: t.evalWarenActief,
         evalHaddenFun: t.evalHaddenFun, evalBijgeleerd: t.evalBijgeleerd, evalIndividueleAandacht: t.evalIndividueleAandacht,
       });
@@ -154,6 +159,26 @@ export default function TrainingEditor() {
       spelfase: jw.spelfase, teamprincipe: jw.teamprincipe, spelprincipe: jw.spelprincipe,
       focusPunten: jw.basics[bracket] ?? '', jaarplanLabel: formatJaarplanLabel(jw),
     }));
+  }
+
+  function applyTrainingsschema(schemaId: string) {
+    setForm(f => ({ ...f, trainingsschema: schemaId }));
+  }
+
+  function vulOefeningenInVanuitSchema() {
+    const schema = getTrainingsschema(form.trainingsschema);
+    if (!schema) return;
+    const leeg: Record<'opwarming' | 'tussenvorm' | 'wedstrijdvorm', string> = {
+      opwarming: schema.opwarming, tussenvorm: schema.tussenvorm, wedstrijdvorm: schema.wedstrijdvorm,
+    };
+    const toAdd = (Object.keys(leeg) as Array<keyof typeof leeg>)
+      .filter(fase => !exercises.some(e => e.fase === fase))
+      .map(fase => ({ ...newExercise(fase), naam: leeg[fase] }));
+    if (toAdd.length === 0) {
+      alert('Er staan al oefeningen in opwarming, tussenvorm en wedstrijdvorm — verwijder er eerst een als je die wil laten invullen vanuit het schema.');
+      return;
+    }
+    setExercises(list => [...list, ...toAdd]);
   }
 
   function addExercise(fase: ExerciseFase) {
@@ -192,7 +217,9 @@ export default function TrainingEditor() {
     setClaudeResponse('');
     setGenModalOpen(false);
   }
-  async function openDbModal() {
+  async function openDbModal(importFor?: LocalExercise) {
+    setDbImportFor(importFor?.id ?? null);
+    setDbFase(importFor?.fase ?? 'opwarming');
     setDbModalOpen(true);
     if (!dbLoaded) {
       try { setDbItems(await getOefeningDatabank()); setDbLoaded(true); }
@@ -200,10 +227,21 @@ export default function TrainingEditor() {
     }
   }
   function useDbItem(it: OefeningDatabankItem) {
-    const ex = exerciseFromDatabank(it);
-    setExercises(list => [...list, ex]);
-    setExpandedId(ex.id);
+    if (dbImportFor) {
+      updateLocal(dbImportFor, {
+        naam: it.naam, duurMinuten: it.duurMinuten,
+        organisatieSpelers: it.organisatieSpelers, organisatieAfmetingen: it.organisatieAfmetingen, organisatieMateriaal: it.organisatieMateriaal,
+        beschrijving: it.beschrijving, drawingData: it.drawingData,
+        coachingPunten: it.coachingPunten, maximaalActief: it.maximaalActief, fun: it.fun,
+      });
+      setExpandedId(dbImportFor);
+    } else {
+      const ex = exerciseFromDatabank(it);
+      setExercises(list => [...list, ex]);
+      setExpandedId(ex.id);
+    }
     setDbModalOpen(false);
+    setDbImportFor(null);
   }
 
   function openSaveToDb(ex: LocalExercise) {
@@ -240,6 +278,13 @@ export default function TrainingEditor() {
     setExercises(list => list.filter(e => e.id !== exId));
     if (!exId.startsWith('new-')) setDeletedIds(ids => [...ids, exId]);
   }
+  function duplicateExercise(exId: string) {
+    const idx = exercises.findIndex(e => e.id === exId);
+    if (idx === -1) return;
+    const copy: LocalExercise = { ...exercises[idx], id: `new-${uid()}`, isNew: true };
+    setExercises(list => [...list.slice(0, idx + 1), copy, ...list.slice(idx + 1)]);
+    setExpandedId(copy.id);
+  }
   function moveExercise(exId: string, dir: -1 | 1) {
     setExercises(list => {
       const idx = list.findIndex(e => e.id === exId);
@@ -265,6 +310,7 @@ export default function TrainingEditor() {
         coachingswoorden: form.coachingswoorden, materiaal: form.materiaal,
         actiefAanpak: form.actiefAanpak, funAanpak: form.funAanpak, individueleAandacht: form.individueleAandacht,
         teamprincipe: form.teamprincipe, spelprincipe: form.spelprincipe, focusPunten: form.focusPunten, jaarplanLabel: form.jaarplanLabel,
+        trainingsschema: form.trainingsschema,
         evalBehouden: form.evalBehouden, evalWijzigen: form.evalWijzigen, evalWarenActief: form.evalWarenActief,
         evalHaddenFun: form.evalHaddenFun, evalBijgeleerd: form.evalBijgeleerd, evalIndividueleAandacht: form.evalIndividueleAandacht,
       });
@@ -333,6 +379,7 @@ export default function TrainingEditor() {
       return ai - bi || a.naam.localeCompare(b.naam);
     });
   const saveToDbExercise = exercises.find(e => e.id === saveToDbFor) ?? null;
+  const dbImportForExercise = exercises.find(e => e.id === dbImportFor) ?? null;
 
   return (
     <div className="page">
@@ -515,6 +562,41 @@ export default function TrainingEditor() {
         </div>
       </div>
 
+      {/* ── Trainingsopbouw · trainingsschema ── */}
+      <div className="card te-block">
+        <div className="te-block-title-row">
+          <div className="te-block-title">Trainingsopbouw <span className="te-extra-badge">extra</span></div>
+          {form.trainingsschema && (
+            <button className="btn btn-outline btn-sm" onClick={vulOefeningenInVanuitSchema}>
+              ↺ Vul oefeningen in a.d.h.v. schema
+            </button>
+          )}
+        </div>
+        <p className="te-gen-desc">
+          Kies een vaste combinatie opwarming → tussenvorm → wedstrijdvorm uit het trainingsschema als basis voor deze training.
+        </p>
+        <div className="te-schema-groep-tabs">
+          {(Object.keys(TRAININGSSCHEMA_GROEP_LABELS) as TrainingsschemaGroep[]).map(g => (
+            <button key={g} className={`sb-toggle ${schemaGroep === g ? 'active' : ''}`} onClick={() => setSchemaGroep(g)}>
+              {TRAININGSSCHEMA_GROEP_LABELS[g]}
+            </button>
+          ))}
+        </div>
+        <div className="te-schema-list">
+          {TRAININGSSCHEMAS.filter(s => s.groep === schemaGroep).map(s => (
+            <button
+              key={s.id}
+              className={`te-schema-card ${form.trainingsschema === s.id ? 'active' : ''}`}
+              onClick={() => applyTrainingsschema(s.id)}
+            >
+              <div className="te-schema-row"><span className="tag te-fase-tag te-fase-opwarming">Opw</span>{s.opwarming}</div>
+              <div className="te-schema-row"><span className="tag te-fase-tag te-fase-tussenvorm">Tuss</span>{s.tussenvorm}</div>
+              <div className="te-schema-row"><span className="tag te-fase-tag te-fase-wedstrijdvorm">Wed</span>{s.wedstrijdvorm}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* ── 50%-check ── */}
       <div className="card te-block">
         <div className="te-block-title-row">
@@ -541,7 +623,7 @@ export default function TrainingEditor() {
             {FASE_ORDER.map(f => (
               <button key={f} className="btn btn-outline btn-sm" onClick={() => addExercise(f)}>+ {EXERCISE_FASE_LABELS[f]}</button>
             ))}
-            <button className="btn btn-outline btn-sm" onClick={openDbModal}>📚 Kies uit databank</button>
+            <button className="btn btn-outline btn-sm" onClick={() => openDbModal()}>📚 Kies uit databank</button>
             <button className="btn btn-primary btn-sm" onClick={() => openGenerator('opwarming')}>✨ Genereer oefening</button>
           </div>
         </div>
@@ -628,6 +710,8 @@ export default function TrainingEditor() {
                     <div className="te-reorder-btns">
                       <button className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => moveExercise(ex.id, -1)}>▲ Omhoog</button>
                       <button className="btn btn-ghost btn-sm" disabled={i === exercises.length - 1} onClick={() => moveExercise(ex.id, 1)}>▼ Omlaag</button>
+                      <button className="btn btn-outline btn-sm" onClick={() => duplicateExercise(ex.id)}>📄 Dupliceer oefening</button>
+                      <button className="btn btn-outline btn-sm" onClick={() => openDbModal(ex)}>📚 Importeer uit databank</button>
                       <button className="btn btn-outline btn-sm" onClick={() => openSaveToDb(ex)}>💾 Bewaar in databank</button>
                     </div>
                     <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => removeExercise(ex.id)}>🗑️ Verwijderen</button>
@@ -782,10 +866,16 @@ export default function TrainingEditor() {
 
       {/* ── Kies-uit-databank modal ── */}
       {dbModalOpen && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setDbModalOpen(false)}>
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && (setDbModalOpen(false), setDbImportFor(null))}>
           <div className="modal te-gen-modal">
-            <div className="modal-title">📚 Kies uit oefendatabank</div>
-            <p className="te-gen-desc">Herbruikbare oefeningen die trainers eerder in de oefendatabank bewaarden.</p>
+            <div className="modal-title">
+              📚 {dbImportForExercise ? `Importeer in "${dbImportForExercise.naam || 'oefening'}"` : 'Kies uit oefendatabank'}
+            </div>
+            <p className="te-gen-desc">
+              {dbImportForExercise
+                ? 'Vul deze oefening volledig aan met een oefening uit de oefendatabank — alle velden (organisatie, beschrijving, tekening, coaching) worden overschreven.'
+                : 'Herbruikbare oefeningen die trainers eerder in de oefendatabank bewaarden.'}
+            </p>
 
             <div className="te-gen-fase-tabs">
               {FASE_ORDER.map(f => (
@@ -837,14 +927,16 @@ export default function TrainingEditor() {
                     <div className="te-gen-card-drawing">
                       <DrawingCanvas scene={parseDrawingScene(it.drawingData)} readOnly />
                     </div>
-                    <button className="btn btn-primary btn-sm" onClick={() => useDbItem(it)}>Gebruik deze oefening</button>
+                    <button className="btn btn-primary btn-sm" onClick={() => useDbItem(it)}>
+                      {dbImportForExercise ? 'Importeer deze oefening' : 'Gebruik deze oefening'}
+                    </button>
                   </div>
                 ))}
               </div>
             )}
 
             <div className="modal-actions">
-              <button className="btn btn-outline" onClick={() => setDbModalOpen(false)}>Sluiten</button>
+              <button className="btn btn-outline" onClick={() => { setDbModalOpen(false); setDbImportFor(null); }}>Sluiten</button>
             </div>
           </div>
         </div>

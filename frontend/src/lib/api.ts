@@ -1065,7 +1065,7 @@ export interface FullDataExport {
     speluitdagingWie: string; speluitdagingWat: string; speluitdagingWaar: string; speluitdagingWanneer: string;
     coachingswoorden: string; materiaal: string;
     actiefAanpak: string; funAanpak: string; individueleAandacht: string;
-    teamprincipe: string; spelprincipe: string; focusPunten: string; jaarplanLabel: string;
+    teamprincipe: string; spelprincipe: string; focusPunten: string; jaarplanLabel: string; trainingsschema: string;
     evalBehouden: string; evalWijzigen: string; evalWarenActief: string; evalHaddenFun: string; evalBijgeleerd: string; evalIndividueleAandacht: string;
   }>;
   exercises: Array<{
@@ -1103,7 +1103,7 @@ export async function exportAllData(): Promise<FullDataExport> {
       speluitdagingWie speluitdagingWat speluitdagingWaar speluitdagingWanneer
       coachingswoorden materiaal
       actiefAanpak funAanpak individueleAandacht
-      teamprincipe spelprincipe focusPunten jaarplanLabel
+      teamprincipe spelprincipe focusPunten jaarplanLabel trainingsschema
       evalBehouden evalWijzigen evalWarenActief evalHaddenFun evalBijgeleerd evalIndividueleAandacht
       trainer { id } team { id }
     }
@@ -1155,7 +1155,7 @@ export async function exportAllData(): Promise<FullDataExport> {
       speluitdagingWie: t.speluitdagingWie, speluitdagingWat: t.speluitdagingWat, speluitdagingWaar: t.speluitdagingWaar, speluitdagingWanneer: t.speluitdagingWanneer,
       coachingswoorden: t.coachingswoorden, materiaal: t.materiaal,
       actiefAanpak: t.actiefAanpak, funAanpak: t.funAanpak, individueleAandacht: t.individueleAandacht,
-      teamprincipe: t.teamprincipe, spelprincipe: t.spelprincipe, focusPunten: t.focusPunten, jaarplanLabel: t.jaarplanLabel,
+      teamprincipe: t.teamprincipe, spelprincipe: t.spelprincipe, focusPunten: t.focusPunten, jaarplanLabel: t.jaarplanLabel, trainingsschema: t.trainingsschema,
       evalBehouden: t.evalBehouden, evalWijzigen: t.evalWijzigen, evalWarenActief: t.evalWarenActief,
       evalHaddenFun: t.evalHaddenFun, evalBijgeleerd: t.evalBijgeleerd, evalIndividueleAandacht: t.evalIndividueleAandacht,
     })),
@@ -1311,7 +1311,7 @@ export async function importAllData(
       speluitdagingWie: t.speluitdagingWie, speluitdagingWat: t.speluitdagingWat, speluitdagingWaar: t.speluitdagingWaar, speluitdagingWanneer: t.speluitdagingWanneer,
       coachingswoorden: t.coachingswoorden, materiaal: t.materiaal,
       actiefAanpak: t.actiefAanpak, funAanpak: t.funAanpak, individueleAandacht: t.individueleAandacht,
-      teamprincipe: t.teamprincipe, spelprincipe: t.spelprincipe, focusPunten: t.focusPunten, jaarplanLabel: t.jaarplanLabel,
+      teamprincipe: t.teamprincipe, spelprincipe: t.spelprincipe, focusPunten: t.focusPunten, jaarplanLabel: t.jaarplanLabel, trainingsschema: t.trainingsschema ?? '',
       evalBehouden: t.evalBehouden, evalWijzigen: t.evalWijzigen, evalWarenActief: t.evalWarenActief,
       evalHaddenFun: t.evalHaddenFun, evalBijgeleerd: t.evalBijgeleerd, evalIndividueleAandacht: t.evalIndividueleAandacht,
     };
@@ -1534,6 +1534,7 @@ export interface Training {
   spelprincipe: string;
   focusPunten: string;
   jaarplanLabel: string;
+  trainingsschema: string;
 
   // "Reflectie · 360° evaluatie"
   evalBehouden: string;
@@ -1553,7 +1554,7 @@ const TRAINING_FIELDS = `
   speluitdagingWie speluitdagingWat speluitdagingWaar speluitdagingWanneer
   coachingswoorden materiaal
   actiefAanpak funAanpak individueleAandacht
-  teamprincipe spelprincipe focusPunten jaarplanLabel
+  teamprincipe spelprincipe focusPunten jaarplanLabel trainingsschema
   evalBehouden evalWijzigen evalWarenActief evalHaddenFun evalBijgeleerd evalIndividueleAandacht
 `;
 const EXERCISE_FIELDS = `

@@ -7,6 +7,7 @@ import {
 } from '../lib/api';
 import { parseTrainingPdf } from '../lib/pdfImport';
 import { getJaarplanWeekForDate, formatJaarplanLabel } from '../lib/jaarplan';
+import { getTrainingsschema, TRAININGSSCHEMA_GROEP_LABELS } from '../lib/trainingsschema';
 import './Trainingen.css';
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
@@ -24,6 +25,9 @@ export default function Trainingen() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Training | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'' | 'concept' | 'klaar' | 'afgewerkt'>('');
+  const [monthFilter, setMonthFilter] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { load(); }, []);
@@ -96,8 +100,44 @@ export default function Trainingen() {
     try { return new Date(iso).toLocaleDateString('nl-BE', { weekday: 'short', day: 'numeric', month: 'short' }); }
     catch { return ''; }
   }
+  function fmtMonth(iso: string) {
+    try {
+      const label = new Date(iso).toLocaleDateString('nl-BE', { month: 'long', year: 'numeric' });
+      return label.charAt(0).toUpperCase() + label.slice(1);
+    } catch { return ''; }
+  }
+  function monthKey(iso: string): string {
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
 
   if (loading) return <div className="page"><div className="loading-spinner">Trainingen laden...</div></div>;
+
+  const statusCounts = {
+    concept:   trainings.filter(t => t.status === 'concept').length,
+    klaar:     trainings.filter(t => t.status === 'klaar').length,
+    afgewerkt: trainings.filter(t => t.status === 'afgewerkt').length,
+  };
+  const monthOptions = Array.from(new Set(trainings.map(t => monthKey(t.date))))
+    .sort((a, b) => b.localeCompare(a))
+    .map(key => ({ key, label: fmtMonth(trainings.find(t => monthKey(t.date) === key)!.date) }));
+  const q = searchQuery.trim().toLowerCase();
+  const filtered = trainings.filter(t => {
+    if (statusFilter && t.status !== statusFilter) return false;
+    if (monthFilter && monthKey(t.date) !== monthFilter) return false;
+    if (!q) return true;
+    return [t.titel, t.teamprincipe, t.spelprincipe, t.trainer?.name, t.leeftijdscategorie]
+      .some(v => (v || '').toLowerCase().includes(q));
+  });
+  // Trainingen komen al gesorteerd op datum (desc) uit getTrainings — groepeer opeenvolgende
+  // items met dezelfde maand zodat lange lijsten overzichtelijker scrollen.
+  const groups: { label: string; items: Training[] }[] = [];
+  for (const t of filtered) {
+    const label = fmtMonth(t.date);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(t);
+    else groups.push({ label, items: [t] });
+  }
 
   return (
     <div className="page">
@@ -133,44 +173,86 @@ export default function Trainingen() {
           Nog geen trainingen voorbereid
         </div>
       ) : (
-        <div className="tr-list">
-          {trainings.map(t => {
-            const pct = wedstrijdvormPercentage(t.exercises);
-            const status = STATUS_META[t.status] ?? STATUS_META.concept;
-            const jw = getJaarplanWeekForDate(new Date(t.date));
-            return (
-              <div key={t.id} className="tr-card card">
-                <div className="tr-card-main" onClick={() => navigate(`/trainingen/${t.id}`)}>
-                  <div className="tr-card-date">
-                    <span className="tr-date-day">{fmtDate(t.date)}</span>
-                    {t.jaarplanLabel && <span className="tr-date-jaarplan">{t.jaarplanLabel}</span>}
-                    {!t.jaarplanLabel && jw && <span className="tr-date-jaarplan">{formatJaarplanLabel(jw)}</span>}
-                  </div>
-                  <div className="tr-card-body">
-                    <div className="tr-card-title">{t.titel || t.teamprincipe || 'Naamloze training'}</div>
-                    <div className="tr-card-meta">
-                      {t.exercises.length} oefening{t.exercises.length === 1 ? '' : 'en'} · {t.duurMinuten}min
-                      {t.trainer && <> · door {t.trainer.name}</>}
-                    </div>
-                  </div>
-                  <div className="tr-card-side">
-                    <span className={`tag ${status.cls}`}>{status.label}</span>
-                    {t.exercises.length > 0 && (
-                      <span className={`tr-pct-badge ${pct >= 50 ? 'ok' : 'warn'}`} title="Aandeel wedstrijdvorm">
-                        {pct.toFixed(0)}% wedstrijdvorm
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="tr-card-actions">
-                  <button className="btn btn-primary btn-sm" onClick={() => navigate(`/trainingen/${t.id}/modus`)}>▶ Trainingsmodus</button>
-                  <button className="btn btn-outline btn-sm" onClick={() => navigate(`/trainingen/${t.id}`)}>✏️ Bewerken</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(t)}>🗑️</button>
+        <>
+          <div className="tr-filters">
+            <input
+              className="input-field tr-search" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Zoek op titel, teamprincipe, spelprincipe of coach..."
+            />
+            <select className="input-field tr-month-select" value={monthFilter} onChange={e => setMonthFilter(e.target.value)}>
+              <option value="">Alle maanden</option>
+              {monthOptions.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+            </select>
+            <div className="sb-toggles tr-status-toggles">
+              <button className={`sb-toggle ${statusFilter === '' ? 'active' : ''}`} onClick={() => setStatusFilter('')}>Alle ({trainings.length})</button>
+              <button className={`sb-toggle ${statusFilter === 'concept' ? 'active' : ''}`} onClick={() => setStatusFilter('concept')}>Concept ({statusCounts.concept})</button>
+              <button className={`sb-toggle ${statusFilter === 'klaar' ? 'active' : ''}`} onClick={() => setStatusFilter('klaar')}>Klaar ({statusCounts.klaar})</button>
+              <button className={`sb-toggle ${statusFilter === 'afgewerkt' ? 'active' : ''}`} onClick={() => setStatusFilter('afgewerkt')}>Afgewerkt ({statusCounts.afgewerkt})</button>
+            </div>
+          </div>
+
+          {filtered.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">🔍</div>
+              Geen trainingen gevonden voor deze filter of zoekopdracht
+            </div>
+          ) : (
+            groups.map(group => (
+              <div key={group.label} className="tr-group">
+                <div className="tr-group-label">{group.label}</div>
+                <div className="tr-list">
+                  {group.items.map(t => {
+                    const pct = wedstrijdvormPercentage(t.exercises);
+                    const status = STATUS_META[t.status] ?? STATUS_META.concept;
+                    const jw = getJaarplanWeekForDate(new Date(t.date));
+                    const schema = t.trainingsschema ? getTrainingsschema(t.trainingsschema) : undefined;
+                    return (
+                      <div key={t.id} className="tr-card card">
+                        <div className="tr-card-main" onClick={() => navigate(`/trainingen/${t.id}`)}>
+                          <div className="tr-card-date">
+                            <span className="tr-date-day">{fmtDate(t.date)}</span>
+                            {t.jaarplanLabel && <span className="tr-date-jaarplan">{t.jaarplanLabel}</span>}
+                            {!t.jaarplanLabel && jw && <span className="tr-date-jaarplan">{formatJaarplanLabel(jw)}</span>}
+                          </div>
+                          <div className="tr-card-body">
+                            <div className="tr-card-title">{t.titel || t.teamprincipe || 'Naamloze training'}</div>
+                            <div className="tr-card-meta">
+                              {t.exercises.length} oefening{t.exercises.length === 1 ? '' : 'en'} · {t.duurMinuten}min
+                              {t.trainer && <> · door {t.trainer.name}</>}
+                            </div>
+                            {schema && (
+                              <div className="tr-schema-row" title={`Opw: ${schema.opwarming} → Tuss: ${schema.tussenvorm} → Wed: ${schema.wedstrijdvorm}`}>
+                                <span className={`tag ${schema.groep === 'BALBEZIT' ? 'tag-green' : 'tag-black'}`}>
+                                  {TRAININGSSCHEMA_GROEP_LABELS[schema.groep]}
+                                </span>
+                                <span className="tr-schema-text">
+                                  {schema.opwarming} → {schema.tussenvorm} → {schema.wedstrijdvorm}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="tr-card-side">
+                            <span className={`tag ${status.cls}`}>{status.label}</span>
+                            {t.exercises.length > 0 && (
+                              <span className={`tr-pct-badge ${pct >= 50 ? 'ok' : 'warn'}`} title="Aandeel wedstrijdvorm">
+                                {pct.toFixed(0)}% wedstrijdvorm
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="tr-card-actions">
+                          <button className="btn btn-primary btn-sm" onClick={() => navigate(`/trainingen/${t.id}/modus`)}>▶ Trainingsmodus</button>
+                          <button className="btn btn-outline btn-sm" onClick={() => navigate(`/trainingen/${t.id}`)}>✏️ Bewerken</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(t)}>🗑️</button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            );
-          })}
-        </div>
+            ))
+          )}
+        </>
       )}
 
       {confirmDelete && (

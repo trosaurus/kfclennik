@@ -193,6 +193,7 @@ model Training {
   spelprincipe            String     @default("")
   focusPunten             String     @default("")
   jaarplanLabel           String     @default("")
+  trainingsschema         String     @default("")
   evalBehouden            String     @default("")
   evalWijzigen            String     @default("")
   evalWarenActief         String     @default("")

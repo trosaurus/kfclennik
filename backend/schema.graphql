@@ -1024,6 +1024,7 @@ type Training {
   spelprincipe: String
   focusPunten: String
   jaarplanLabel: String
+  trainingsschema: String
   evalBehouden: String
   evalWijzigen: String
   evalWarenActief: String
@@ -1071,6 +1072,7 @@ input TrainingWhereInput {
   spelprincipe: StringFilter
   focusPunten: StringFilter
   jaarplanLabel: StringFilter
+  trainingsschema: StringFilter
   evalBehouden: StringFilter
   evalWijzigen: StringFilter
   evalWarenActief: StringFilter
@@ -1114,6 +1116,7 @@ input TrainingOrderByInput {
   spelprincipe: OrderDirection
   focusPunten: OrderDirection
   jaarplanLabel: OrderDirection
+  trainingsschema: OrderDirection
   evalBehouden: OrderDirection
   evalWijzigen: OrderDirection
   evalWarenActief: OrderDirection
@@ -1151,6 +1154,7 @@ input TrainingUpdateInput {
   spelprincipe: String
   focusPunten: String
   jaarplanLabel: String
+  trainingsschema: String
   evalBehouden: String
   evalWijzigen: String
   evalWarenActief: String
@@ -1207,6 +1211,7 @@ input TrainingCreateInput {
   spelprincipe: String
   focusPunten: String
   jaarplanLabel: String
+  trainingsschema: String
   evalBehouden: String
   evalWijzigen: String
   evalWarenActief: String
