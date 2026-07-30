@@ -1538,6 +1538,7 @@ type Mutation {
   authenticateTrainerWithPassword(email: String!, password: String!): TrainerAuthenticationWithPasswordResult
   createInitialTrainer(data: CreateInitialTrainerInput!): TrainerAuthenticationWithPasswordSuccess!
   exportTrainingPptx(id: ID!): String
+  exportExercisePptx(id: ID!): String
   uploadTeamManual(teamId: ID!, filename: String!, contentBase64: String!): Team
   removeTeamManual(teamId: ID!): Team
 }

@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTeam } from '../lib/TeamContext';
 import {
   getTraining, updateTraining, createExercise, updateExercise, deleteExercise,
   Training, Exercise, ExerciseFase, EXERCISE_FASE_LABELS,
-  wedstrijdvormPercentage, parseDrawingScene, exportTrainingToPptx,
+  wedstrijdvormPercentage, parseDrawingScene, exportTrainingToPptx, exportExerciseToPptx,
   getOefeningDatabank, createOefeningDatabankItem, OefeningDatabankItem, OefeningCategorie, Doelgroep, DOELGROEP_LEEFTIJDEN, SPELPRINCIPE_LABELS,
   getTeamManual,
 } from '../lib/api';
@@ -13,6 +13,7 @@ import { suggestExercises, LibraryExercise, KRACHTIGE_LEEROMGEVING_PRINCIPES } f
 import { TRAININGSSCHEMAS, TRAININGSSCHEMA_GROEP_LABELS, TrainingsschemaGroep, getTrainingsschema } from '../lib/trainingsschema';
 import { extractManualSuggestions } from '../lib/manualOefeningen';
 import { buildOefeningPrompt, parseClaudeResponse, ParsedClaudeExercise } from '../lib/claudePrompt';
+import { parseTrainingPdf, ParsedExercise } from '../lib/pdfImport';
 import DrawingCanvas from '../components/DrawingCanvas';
 import './TrainingEditor.css';
 import './Oefendatabank.css'; // hergebruikt .od-card-teamprincipe voor de databank-picker
@@ -63,6 +64,15 @@ function exerciseFromDatabank(it: OefeningDatabankItem): LocalExercise {
   };
 }
 
+function exerciseFromParsedPdf(p: ParsedExercise): LocalExercise {
+  const drawingData = p.drawingImage ? JSON.stringify({ background: 'grid', elements: [], backgroundImage: p.drawingImage }) : '';
+  return {
+    id: `new-${uid()}`, isNew: true, order: 0, fase: p.fase, naam: p.naam, duurMinuten: p.duurMinuten,
+    organisatieSpelers: p.organisatieSpelers, organisatieAfmetingen: p.organisatieAfmetingen, organisatieMateriaal: p.organisatieMateriaal,
+    beschrijving: p.beschrijving, drawingData, coachingPunten: p.coachingPunten, maximaalActief: p.maximaalActief, fun: p.fun,
+  };
+}
+
 const FASE_ORDER: ExerciseFase[] = ['opwarming', 'tussenvorm', 'wedstrijdvorm', 'cooling_down'];
 
 const EMPTY_FORM = {
@@ -85,6 +95,9 @@ export default function TrainingEditor() {
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingExerciseId, setExportingExerciseId] = useState<string | null>(null);
+  const [importingExercisePdf, setImportingExercisePdf] = useState(false);
+  const exerciseFileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError]       = useState('');
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -122,11 +135,11 @@ export default function TrainingEditor() {
 
   useEffect(() => { if (id) load(id); }, [id]);
 
-  async function load(trainingId: string) {
+  async function load(trainingId: string): Promise<Training | undefined> {
     setLoading(true);
     try {
       const t = await getTraining(trainingId);
-      if (!t) { setError('Training niet gevonden'); return; }
+      if (!t) { setError('Training niet gevonden'); return undefined; }
       setTraining(t);
       setForm({
         date: t.date.slice(0, 10), titel: t.titel, duurMinuten: t.duurMinuten, aantalSpelers: t.aantalSpelers, status: t.status,
@@ -146,6 +159,7 @@ export default function TrainingEditor() {
       if (t.team?.id) {
         getTeamManual(t.team.id).then(m => setManualText(m.manualText || '')).catch(() => {});
       }
+      return t;
     } finally { setLoading(false); }
   }
 
@@ -296,8 +310,8 @@ export default function TrainingEditor() {
     });
   }
 
-  async function handleSave() {
-    if (!training) return;
+  async function handleSave(): Promise<Training | undefined> {
+    if (!training) return undefined;
     setSaving(true); setError('');
     try {
       await updateTraining(training.id, {
@@ -329,9 +343,10 @@ export default function TrainingEditor() {
         else await updateExercise(ex.id, payload);
       }
 
-      await load(training.id);
+      return await load(training.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Opslaan mislukt');
+      return undefined;
     } finally { setSaving(false); }
   }
 
@@ -345,6 +360,44 @@ export default function TrainingEditor() {
     } catch (e) {
       setError(e instanceof Error ? e.message : 'PowerPoint-export mislukt');
     } finally { setExporting(false); }
+  }
+
+  async function handleExportExercise(ex: LocalExercise) {
+    if (!training) return;
+    setExportingExerciseId(ex.id);
+    setError('');
+    try {
+      // Een nog niet bewaarde oefening heeft geen echt id — sla eerst de hele
+      // training op (zelfde aanpak als de volledige PowerPoint-export), en
+      // zoek de bewaarde versie terug op haar positie in de lijst.
+      const idx = exercises.findIndex(e => e.id === ex.id);
+      const saved = await handleSave();
+      const savedEx = saved?.exercises[idx];
+      if (!savedEx) throw new Error('Oefening niet teruggevonden na opslaan');
+      const safeName = (ex.naam || 'oefening').replace(/[^\p{L}\p{N}\-_]+/gu, '_').slice(0, 60);
+      await exportExerciseToPptx(savedEx.id, `${safeName || 'oefening'}.pptx`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Oefening-export mislukt');
+    } finally { setExportingExerciseId(null); }
+  }
+
+  async function handleImportExercisePdf(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImportingExercisePdf(true); setError('');
+    try {
+      const parsed = await parseTrainingPdf(file);
+      if (parsed.exercises.length === 0) {
+        setError('Geen oefeningen gevonden in dit PDF-bestand.');
+        return;
+      }
+      const newExs = parsed.exercises.map(exerciseFromParsedPdf);
+      setExercises(list => [...list, ...newExs]);
+      setExpandedId(newExs[0].id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'PDF-import mislukt');
+    } finally { setImportingExercisePdf(false); }
   }
 
   const pct = wedstrijdvormPercentage(exercises);
@@ -624,6 +677,13 @@ export default function TrainingEditor() {
               <button key={f} className="btn btn-outline btn-sm" onClick={() => addExercise(f)}>+ {EXERCISE_FASE_LABELS[f]}</button>
             ))}
             <button className="btn btn-outline btn-sm" onClick={() => openDbModal()}>📚 Kies uit databank</button>
+            <input
+              ref={exerciseFileInputRef} type="file" accept="application/pdf"
+              style={{ display: 'none' }} onChange={handleImportExercisePdf}
+            />
+            <button className="btn btn-outline btn-sm" disabled={importingExercisePdf} onClick={() => exerciseFileInputRef.current?.click()}>
+              {importingExercisePdf ? 'Bezig met importeren...' : '📄 Importeer oefening uit PDF'}
+            </button>
             <button className="btn btn-primary btn-sm" onClick={() => openGenerator('opwarming')}>✨ Genereer oefening</button>
           </div>
         </div>
@@ -713,6 +773,9 @@ export default function TrainingEditor() {
                       <button className="btn btn-outline btn-sm" onClick={() => duplicateExercise(ex.id)}>📄 Dupliceer oefening</button>
                       <button className="btn btn-outline btn-sm" onClick={() => openDbModal(ex)}>📚 Importeer uit databank</button>
                       <button className="btn btn-outline btn-sm" onClick={() => openSaveToDb(ex)}>💾 Bewaar in databank</button>
+                      <button className="btn btn-outline btn-sm" disabled={exportingExerciseId === ex.id} onClick={() => handleExportExercise(ex)}>
+                        {exportingExerciseId === ex.id ? 'Exporteren...' : '📊 Exporteer oefening'}
+                      </button>
                     </div>
                     <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => removeExercise(ex.id)}>🗑️ Verwijderen</button>
                   </div>

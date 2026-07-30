@@ -5,8 +5,14 @@
 
 import { GraphQLSchema } from 'graphql';
 import { mergeSchemas } from '@graphql-tools/schema';
-import { exportTrainingPptx, ExportTraining } from './lib/exportTrainingPptx';
+import { exportTrainingPptx, exportExercisePptx, ExportTraining, ExportExercise } from './lib/exportTrainingPptx';
 import { saveTeamManual, deleteTeamManual } from './lib/manualUpload';
+
+const EXERCISE_QUERY = `
+  id fase naam duurMinuten
+  organisatieSpelers organisatieAfmetingen organisatieMateriaal
+  beschrijving coachingPunten maximaalActief fun drawingData
+`;
 
 const TRAINING_QUERY = `
   id titel date jaarplanLabel
@@ -29,6 +35,7 @@ export function extendGraphqlSchema(schema: GraphQLSchema): GraphQLSchema {
     typeDefs: `
       type Mutation {
         exportTrainingPptx(id: ID!): String
+        exportExercisePptx(id: ID!): String
         uploadTeamManual(teamId: ID!, filename: String!, contentBase64: String!): Team
         removeTeamManual(teamId: ID!): Team
       }
@@ -103,6 +110,27 @@ export function extendGraphqlSchema(schema: GraphQLSchema): GraphQLSchema {
           };
 
           const buffer = await exportTrainingPptx(data);
+          return buffer.toString('base64');
+        },
+        exportExercisePptx: async (_root: unknown, { id }: { id: string }, context: any) => {
+          const ex = await context.query.Exercise.findOne({ where: { id }, query: EXERCISE_QUERY });
+          if (!ex) throw new Error('Oefening niet gevonden');
+
+          const data: ExportExercise = {
+            fase: ex.fase ?? 'tussenvorm',
+            naam: ex.naam ?? '',
+            duurMinuten: ex.duurMinuten ?? 0,
+            organisatieSpelers: ex.organisatieSpelers ?? '',
+            organisatieAfmetingen: ex.organisatieAfmetingen ?? '',
+            organisatieMateriaal: ex.organisatieMateriaal ?? '',
+            beschrijving: ex.beschrijving ?? '',
+            coachingPunten: ex.coachingPunten ?? '',
+            maximaalActief: ex.maximaalActief ?? '',
+            fun: ex.fun ?? '',
+            drawingData: ex.drawingData ?? '',
+          };
+
+          const buffer = await exportExercisePptx(data);
           return buffer.toString('base64');
         },
       },

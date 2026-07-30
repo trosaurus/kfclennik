@@ -1429,6 +1429,221 @@ export async function importAllData(
   return { counts, errors, trainerCredentials };
 }
 
+// ── Losse export/import: Trainingen (afzonderlijk van de volledige data-export) ──
+// Voor admins die enkel trainingen + hun oefeningen willen backuppen/delen,
+// zonder de rest van de clubdata (ploegen, spelers, wedstrijden, ...) erbij.
+
+export interface TrainingenExport {
+  version: 1;
+  exportedAt: string;
+  trainings: Array<{
+    id: string; date: string; titel: string;
+    duurMinuten: number; aantalSpelers: string; status: string; createdAt: string | null;
+    coachNaam: string; tijdstip: string; leeftijdscategorie: string; niveau: string;
+    hoofdmoment: string; spelfase: string; basisvaardigheid: string;
+    speluitdagingWie: string; speluitdagingWat: string; speluitdagingWaar: string; speluitdagingWanneer: string;
+    coachingswoorden: string; materiaal: string;
+    actiefAanpak: string; funAanpak: string; individueleAandacht: string;
+    teamprincipe: string; spelprincipe: string; focusPunten: string; jaarplanLabel: string; trainingsschema: string;
+    evalBehouden: string; evalWijzigen: string; evalWarenActief: string; evalHaddenFun: string; evalBijgeleerd: string; evalIndividueleAandacht: string;
+    /** Louter informatief (ploegnaam op moment van export) — wordt bij import niet gekoppeld. */
+    teamNaam: string | null;
+  }>;
+  exercises: Array<{
+    id: string; trainingId: string | null; order: number; fase: string; naam: string; duurMinuten: number;
+    organisatieSpelers: string; organisatieAfmetingen: string; organisatieMateriaal: string;
+    beschrijving: string; drawingData: string; coachingPunten: string; maximaalActief: string; fun: string;
+  }>;
+}
+
+export async function exportTrainingenData(): Promise<TrainingenExport> {
+  const data = await gql(`query {
+    trainings(take: ${FULL_TAKE}) {
+      id date titel duurMinuten aantalSpelers status createdAt
+      coachNaam tijdstip leeftijdscategorie niveau
+      hoofdmoment spelfase basisvaardigheid
+      speluitdagingWie speluitdagingWat speluitdagingWaar speluitdagingWanneer
+      coachingswoorden materiaal
+      actiefAanpak funAanpak individueleAandacht
+      teamprincipe spelprincipe focusPunten jaarplanLabel trainingsschema
+      evalBehouden evalWijzigen evalWarenActief evalHaddenFun evalBijgeleerd evalIndividueleAandacht
+      team { name }
+    }
+    exercises(take: ${FULL_TAKE}) {
+      id order fase naam duurMinuten
+      organisatieSpelers organisatieAfmetingen organisatieMateriaal
+      beschrijving drawingData coachingPunten maximaalActief fun
+      training { id }
+    }
+  }`);
+
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    trainings: data.trainings.map((t: any) => ({
+      id: t.id, date: t.date, titel: t.titel,
+      duurMinuten: t.duurMinuten, aantalSpelers: t.aantalSpelers, status: t.status, createdAt: t.createdAt,
+      coachNaam: t.coachNaam, tijdstip: t.tijdstip, leeftijdscategorie: t.leeftijdscategorie, niveau: t.niveau,
+      hoofdmoment: t.hoofdmoment, spelfase: t.spelfase, basisvaardigheid: t.basisvaardigheid,
+      speluitdagingWie: t.speluitdagingWie, speluitdagingWat: t.speluitdagingWat, speluitdagingWaar: t.speluitdagingWaar, speluitdagingWanneer: t.speluitdagingWanneer,
+      coachingswoorden: t.coachingswoorden, materiaal: t.materiaal,
+      actiefAanpak: t.actiefAanpak, funAanpak: t.funAanpak, individueleAandacht: t.individueleAandacht,
+      teamprincipe: t.teamprincipe, spelprincipe: t.spelprincipe, focusPunten: t.focusPunten, jaarplanLabel: t.jaarplanLabel, trainingsschema: t.trainingsschema,
+      evalBehouden: t.evalBehouden, evalWijzigen: t.evalWijzigen, evalWarenActief: t.evalWarenActief,
+      evalHaddenFun: t.evalHaddenFun, evalBijgeleerd: t.evalBijgeleerd, evalIndividueleAandacht: t.evalIndividueleAandacht,
+      teamNaam: t.team?.name ?? null,
+    })),
+    exercises: data.exercises.map((ex: any) => ({
+      id: ex.id, trainingId: ex.training?.id ?? null, order: ex.order, fase: ex.fase, naam: ex.naam, duurMinuten: ex.duurMinuten,
+      organisatieSpelers: ex.organisatieSpelers, organisatieAfmetingen: ex.organisatieAfmetingen, organisatieMateriaal: ex.organisatieMateriaal,
+      beschrijving: ex.beschrijving, drawingData: ex.drawingData, coachingPunten: ex.coachingPunten, maximaalActief: ex.maximaalActief, fun: ex.fun,
+    })),
+  };
+}
+
+export function countTrainingenExport(data: TrainingenExport): Record<string, number> {
+  return { trainingen: data.trainings.length, exercises: data.exercises.length };
+}
+
+export async function parseTrainingenExportFile(file: File): Promise<TrainingenExport> {
+  const text = await file.text();
+  let json: any;
+  try { json = JSON.parse(text); } catch { throw new Error('Ongeldig JSON-bestand'); }
+  if (!Array.isArray(json.trainings) || !Array.isArray(json.exercises)) {
+    throw new Error('Dit lijkt geen trainingen-exportbestand te zijn');
+  }
+  return json as TrainingenExport;
+}
+
+/** Importeert trainingen + hun oefeningen. `teamId` (optioneel) koppelt alle
+ * geïmporteerde trainingen aan één gekozen ploeg — zonder dit blijven ze
+ * ongekoppeld (en dus onzichtbaar in het team-gefilterde trainingenoverzicht,
+ * tot een trainer/admin ze achteraf koppelt). */
+export async function importTrainingenData(
+  data: TrainingenExport, teamId: string | undefined, onProgress?: (p: ImportProgress) => void
+): Promise<ImportResult> {
+  const errors: string[] = [];
+  const trainingMap = new Map<string, string>();
+
+  async function step<T>(label: string, items: T[], fn: (item: T) => Promise<void>): Promise<number> {
+    let success = 0;
+    for (let i = 0; i < items.length; i++) {
+      try { await fn(items[i]); success++; }
+      catch (e) { errors.push(`${label} #${i + 1}: ${e instanceof Error ? e.message : 'onbekende fout'}`); }
+      onProgress?.({ label, done: i + 1, total: items.length });
+    }
+    return success;
+  }
+
+  const counts: Record<string, number> = {};
+
+  counts.trainingen = await step('Trainingen', data.trainings, async t => {
+    const input: Record<string, unknown> = {
+      date: t.date, titel: t.titel, duurMinuten: t.duurMinuten, aantalSpelers: t.aantalSpelers, status: t.status,
+      coachNaam: t.coachNaam, tijdstip: t.tijdstip, leeftijdscategorie: t.leeftijdscategorie, niveau: t.niveau,
+      hoofdmoment: t.hoofdmoment, spelfase: t.spelfase, basisvaardigheid: t.basisvaardigheid,
+      speluitdagingWie: t.speluitdagingWie, speluitdagingWat: t.speluitdagingWat, speluitdagingWaar: t.speluitdagingWaar, speluitdagingWanneer: t.speluitdagingWanneer,
+      coachingswoorden: t.coachingswoorden, materiaal: t.materiaal,
+      actiefAanpak: t.actiefAanpak, funAanpak: t.funAanpak, individueleAandacht: t.individueleAandacht,
+      teamprincipe: t.teamprincipe, spelprincipe: t.spelprincipe, focusPunten: t.focusPunten, jaarplanLabel: t.jaarplanLabel, trainingsschema: t.trainingsschema ?? '',
+      evalBehouden: t.evalBehouden, evalWijzigen: t.evalWijzigen, evalWarenActief: t.evalWarenActief,
+      evalHaddenFun: t.evalHaddenFun, evalBijgeleerd: t.evalBijgeleerd, evalIndividueleAandacht: t.evalIndividueleAandacht,
+    };
+    if (t.createdAt) input.createdAt = t.createdAt;
+    if (teamId) input.team = { connect: { id: teamId } };
+    const created = await gql(`mutation($data: TrainingCreateInput!) { createTraining(data: $data) { id } }`, { data: input });
+    trainingMap.set(t.id, created.createTraining.id);
+  });
+
+  counts.exercises = await step('Oefeningen (in trainingen)', data.exercises, async ex => {
+    const trainingId = ex.trainingId ? trainingMap.get(ex.trainingId) : undefined;
+    if (!trainingId) throw new Error('bijhorende training ontbreekt');
+    const input: Record<string, unknown> = {
+      training: { connect: { id: trainingId } }, order: ex.order, fase: ex.fase, naam: ex.naam, duurMinuten: ex.duurMinuten,
+      organisatieSpelers: ex.organisatieSpelers, organisatieAfmetingen: ex.organisatieAfmetingen, organisatieMateriaal: ex.organisatieMateriaal,
+      beschrijving: ex.beschrijving, drawingData: ex.drawingData, coachingPunten: ex.coachingPunten, maximaalActief: ex.maximaalActief, fun: ex.fun,
+    };
+    await gql(`mutation($data: ExerciseCreateInput!) { createExercise(data: $data) { id } }`, { data: input });
+  });
+
+  return { counts, errors, trainerCredentials: [] };
+}
+
+// ── Losse export/import: Oefendatabank (afzonderlijk van de volledige data-export) ──
+
+export interface OefendatabankExport {
+  version: 1;
+  exportedAt: string;
+  oefeningDatabank: Array<{
+    id: string; naam: string; fase: string; categorie: string | null; doelgroep: string | null;
+    teamprincipe: string; spelprincipe: string | null; duurMinuten: number;
+    organisatieSpelers: string; organisatieAfmetingen: string; organisatieMateriaal: string;
+    beschrijving: string; drawingData: string; coachingPunten: string; maximaalActief: string; fun: string;
+    createdAt: string | null;
+  }>;
+}
+
+export async function exportOefendatabankData(): Promise<OefendatabankExport> {
+  const data = await gql(`query {
+    oefeningDatabanks(take: ${FULL_TAKE}) {
+      id naam fase categorie doelgroep teamprincipe spelprincipe duurMinuten
+      organisatieSpelers organisatieAfmetingen organisatieMateriaal
+      beschrijving drawingData coachingPunten maximaalActief fun createdAt
+    }
+  }`);
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    oefeningDatabank: data.oefeningDatabanks,
+  };
+}
+
+export function countOefendatabankExport(data: OefendatabankExport): Record<string, number> {
+  return { oefeningen: data.oefeningDatabank.length };
+}
+
+export async function parseOefendatabankExportFile(file: File): Promise<OefendatabankExport> {
+  const text = await file.text();
+  let json: any;
+  try { json = JSON.parse(text); } catch { throw new Error('Ongeldig JSON-bestand'); }
+  if (!Array.isArray(json.oefeningDatabank)) {
+    throw new Error('Dit lijkt geen oefendatabank-exportbestand te zijn');
+  }
+  return json as OefendatabankExport;
+}
+
+export async function importOefendatabankData(
+  data: OefendatabankExport, onProgress?: (p: ImportProgress) => void
+): Promise<ImportResult> {
+  const errors: string[] = [];
+
+  async function step<T>(label: string, items: T[], fn: (item: T) => Promise<void>): Promise<number> {
+    let success = 0;
+    for (let i = 0; i < items.length; i++) {
+      try { await fn(items[i]); success++; }
+      catch (e) { errors.push(`${label} #${i + 1}: ${e instanceof Error ? e.message : 'onbekende fout'}`); }
+      onProgress?.({ label, done: i + 1, total: items.length });
+    }
+    return success;
+  }
+
+  const counts: Record<string, number> = {};
+  counts.oefeningen = await step('Oefendatabank', data.oefeningDatabank, async o => {
+    const input: Record<string, unknown> = {
+      naam: o.naam, fase: o.fase, teamprincipe: o.teamprincipe, duurMinuten: o.duurMinuten,
+      organisatieSpelers: o.organisatieSpelers, organisatieAfmetingen: o.organisatieAfmetingen, organisatieMateriaal: o.organisatieMateriaal,
+      beschrijving: o.beschrijving, drawingData: o.drawingData, coachingPunten: o.coachingPunten, maximaalActief: o.maximaalActief, fun: o.fun,
+    };
+    if (o.categorie) input.categorie = o.categorie;
+    if (o.doelgroep) input.doelgroep = o.doelgroep;
+    if (o.spelprincipe) input.spelprincipe = o.spelprincipe;
+    if (o.createdAt) input.createdAt = o.createdAt;
+    await gql(`mutation($data: OefeningDatabankCreateInput!) { createOefeningDatabank(data: $data) { id } }`, { data: input });
+  });
+
+  return { counts, errors, trainerCredentials: [] };
+}
+
 function parseCSV(text: string): string[][] {
   // Handles quoted fields with semicolon or comma delimiter
   const lines = text.replace(/\r/g, '').split('\n');
@@ -1655,6 +1870,17 @@ export function wedstrijdvormPercentage(exercises: Exercise[]): number {
   return (wedstrijdvorm / total) * 100;
 }
 
+async function downloadPptxBase64(base64: string, filename: string): Promise<void> {
+  const res = await fetch(
+    `data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,${base64}`
+  );
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
 /** Vult het officiële KFC-trainingssjabloon (PowerPoint) in met deze training
  * en download het resultaat — gegenereerd server-side, geen externe API. */
 export async function exportTrainingToPptx(trainingId: string, filename: string): Promise<void> {
@@ -1664,14 +1890,19 @@ export async function exportTrainingToPptx(trainingId: string, filename: string)
   );
   const base64: string | null = data.exportTrainingPptx;
   if (!base64) throw new Error('PowerPoint-export mislukt');
-  const res = await fetch(
-    `data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,${base64}`
+  await downloadPptxBase64(base64, filename);
+}
+
+/** Exporteert één losse, al-bewaarde oefening naar PowerPoint (zelfde
+ * sjabloon-slide als in de volledige trainingsexport). */
+export async function exportExerciseToPptx(exerciseId: string, filename: string): Promise<void> {
+  const data = await gql(
+    `mutation ExportExercisePptx($id: ID!) { exportExercisePptx(id: $id) }`,
+    { id: exerciseId }
   );
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
+  const base64: string | null = data.exportExercisePptx;
+  if (!base64) throw new Error('Oefening-export mislukt');
+  await downloadPptxBase64(base64, filename);
 }
 
 // ── Oefendatabank (club-brede, herbruikbare oefeningenbibliotheek) ─────────────

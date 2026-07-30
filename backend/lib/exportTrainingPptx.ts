@@ -121,6 +121,47 @@ export interface ExportTraining {
   exercises: ExportExercise[];
 }
 
+function set(slide: ISlide, shape: string, value: string) {
+  slide.modifyElement(shape, [ModifyTextHelper.setMultiText(multiText(value))]);
+}
+
+/** Voegt één oefening-slide toe aan `pres`, gekloond van de sjabloon-
+ * oefeningpagina (slide 3) — gedeeld tussen de volledige trainingsexport en
+ * de losse oefening-export, zodat beide altijd exact dezelfde opmaak geven. */
+async function addExerciseSlide(pres: Automizer, ex: ExportExercise): Promise<void> {
+  const scene = parseDrawingScene(ex.drawingData);
+  const pngBuffer = await renderDrawingPng(scene);
+  const pngDataUri = `data:image/png;base64,${pngBuffer.toString('base64')}`;
+  const faseLabel = FASE_LABELS[ex.fase] ?? ex.fase.toUpperCase();
+  // Banner-formaat "<FASE>: <naam>" — zelfde formaat als de echte KFC-template
+  // (zie ook detectFaseAndNaamFromBanner in frontend/src/lib/pdfImport.ts).
+  const banner = `${faseLabel}: ${ex.naam || 'Oefening'}`;
+
+  pres.addSlide('tpl', 3, slide => {
+    set(slide, EXERCISE_SHAPES.beschrijving, ex.beschrijving);
+    set(slide, EXERCISE_SHAPES.duur, `${ex.duurMinuten} min`);
+    set(slide, EXERCISE_SHAPES.materiaalGrid, ex.organisatieMateriaal);
+    set(slide, EXERCISE_SHAPES.spelers, ex.organisatieSpelers);
+    set(slide, EXERCISE_SHAPES.ruimte, ex.organisatieAfmetingen);
+    set(slide, EXERCISE_SHAPES.coaching, ex.coachingPunten);
+    set(slide, EXERCISE_SHAPES.maximaalActief, ex.maximaalActief);
+    set(slide, EXERCISE_SHAPES.fun, ex.fun);
+    set(slide, EXERCISE_BANNER_SHAPE, banner);
+
+    // De tekening zelf bestaat niet als los invulveld in het lege sjabloon
+    // (die wordt pas toegevoegd zodra een trainer ze manueel intekent) —
+    // dus voegen we ze hier toe als nieuw beeld-element, op exact dezelfde
+    // plek als in een echt ingevulde training.
+    slide.generate(pSlide => {
+      pSlide.addImage({
+        data: pngDataUri,
+        x: emuToIn(DRAWING_BOX.x), y: emuToIn(DRAWING_BOX.y),
+        w: emuToIn(DRAWING_BOX.w), h: emuToIn(DRAWING_BOX.h),
+      });
+    });
+  });
+}
+
 export async function exportTrainingPptx(training: ExportTraining): Promise<Buffer> {
   const automizer = new Automizer({
     templateDir: TEMPLATE_DIR,
@@ -129,9 +170,6 @@ export async function exportTrainingPptx(training: ExportTraining): Promise<Buff
   });
 
   const pres = automizer.loadRoot(TEMPLATE_FILE).load(TEMPLATE_FILE, 'tpl');
-
-  const set = (slide: ISlide, shape: string, value: string) =>
-    slide.modifyElement(shape, [ModifyTextHelper.setMultiText(multiText(value))]);
 
   // Slide 1 — titel
   pres.addSlide('tpl', 1, slide => {
@@ -163,39 +201,7 @@ export async function exportTrainingPptx(training: ExportTraining): Promise<Buff
   });
 
   // Eén slide per oefening, telkens gekloond van de sjabloon-oefeningpagina.
-  for (const ex of training.exercises) {
-    const scene = parseDrawingScene(ex.drawingData);
-    const pngBuffer = await renderDrawingPng(scene);
-    const pngDataUri = `data:image/png;base64,${pngBuffer.toString('base64')}`;
-    const faseLabel = FASE_LABELS[ex.fase] ?? ex.fase.toUpperCase();
-    // Banner-formaat "<FASE>: <naam>" — zelfde formaat als de echte KFC-template
-    // (zie ook detectFaseAndNaamFromBanner in frontend/src/lib/pdfImport.ts).
-    const banner = `${faseLabel}: ${ex.naam || 'Oefening'}`;
-
-    pres.addSlide('tpl', 3, slide => {
-      set(slide, EXERCISE_SHAPES.beschrijving, ex.beschrijving);
-      set(slide, EXERCISE_SHAPES.duur, `${ex.duurMinuten} min`);
-      set(slide, EXERCISE_SHAPES.materiaalGrid, ex.organisatieMateriaal);
-      set(slide, EXERCISE_SHAPES.spelers, ex.organisatieSpelers);
-      set(slide, EXERCISE_SHAPES.ruimte, ex.organisatieAfmetingen);
-      set(slide, EXERCISE_SHAPES.coaching, ex.coachingPunten);
-      set(slide, EXERCISE_SHAPES.maximaalActief, ex.maximaalActief);
-      set(slide, EXERCISE_SHAPES.fun, ex.fun);
-      set(slide, EXERCISE_BANNER_SHAPE, banner);
-
-      // De tekening zelf bestaat niet als los invulveld in het lege sjabloon
-      // (die wordt pas toegevoegd zodra een trainer ze manueel intekent) —
-      // dus voegen we ze hier toe als nieuw beeld-element, op exact dezelfde
-      // plek als in een echt ingevulde training.
-      slide.generate(pSlide => {
-        pSlide.addImage({
-          data: pngDataUri,
-          x: emuToIn(DRAWING_BOX.x), y: emuToIn(DRAWING_BOX.y),
-          w: emuToIn(DRAWING_BOX.w), h: emuToIn(DRAWING_BOX.h),
-        });
-      });
-    });
-  }
+  for (const ex of training.exercises) await addExerciseSlide(pres, ex);
 
   // Statische tussenslide "EVALUATIE NA TRAINING" — geen dynamische inhoud nodig.
   pres.addSlide('tpl', 4);
@@ -209,6 +215,23 @@ export async function exportTrainingPptx(training: ExportTraining): Promise<Buff
     set(slide, REFLECTIE_SHAPES.evalBijgeleerd, training.evalBijgeleerd);
     set(slide, REFLECTIE_SHAPES.evalIndividueleAandacht, training.evalIndividueleAandacht);
   });
+
+  const zip = await pres.getJSZip();
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+/** Exporteert één losse oefening naar een PowerPoint met exact één slide
+ * (dezelfde oefening-template als in de volledige trainingsexport) — voor
+ * trainers die een enkele oefening willen delen zonder de hele training. */
+export async function exportExercisePptx(exercise: ExportExercise): Promise<Buffer> {
+  const automizer = new Automizer({
+    templateDir: TEMPLATE_DIR,
+    removeExistingSlides: true,
+    verbosity: 0,
+  });
+
+  const pres = automizer.loadRoot(TEMPLATE_FILE).load(TEMPLATE_FILE, 'tpl');
+  await addExerciseSlide(pres, exercise);
 
   const zip = await pres.getJSZip();
   return zip.generateAsync({ type: 'nodebuffer' });

@@ -168,6 +168,8 @@
 
 /* ═══════════ DATA TAB (import/export) ═══════════ */
 .adm-data-tab { display: flex; flex-direction: column; gap: 16px; max-width: 720px; }
+.adm-data-scope-tabs { margin-bottom: 4px; }
+.adm-data-scope-tabs .adm-tab { min-height: 36px; padding: 6px 14px; font-size: 12px; }
 .adm-data-card { padding: 18px 20px; }
 .adm-data-card-title { font-family: var(--font-display); font-size: 20px; letter-spacing: 1px; margin-bottom: 8px; }
 .adm-data-card-desc { font-size: 13px; color: var(--text-mid); line-height: 1.6; margin-bottom: 14px; }

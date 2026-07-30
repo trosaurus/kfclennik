@@ -8,6 +8,8 @@ import {
   POSITION_LABELS, POSITION_FULL, POSITIONS,
   exportAllData, downloadJSON, countFullDataExport, parseFullDataExportFile,
   wipeAllSportData, importAllData, FullDataExport, ImportProgress, ImportResult,
+  exportTrainingenData, countTrainingenExport, parseTrainingenExportFile, importTrainingenData, TrainingenExport,
+  exportOefendatabankData, countOefendatabankExport, parseOefendatabankExportFile, importOefendatabankData, OefendatabankExport,
 } from '../lib/api';
 import { useTeam } from '../lib/TeamContext';
 import './Admin.css';
@@ -24,6 +26,7 @@ const ENTITY_LABELS: Record<string, string> = {
   matches: 'Wedstrijden', periods: 'Periodes', goals: 'Doelpunten', attendances: 'Aanwezigheden',
   playTimeSessions: 'Speeltijdsessies', evaluations: 'Evaluaties',
   trainings: 'Trainingen', exercises: 'Oefeningen (in trainingen)', oefeningDatabank: 'Oefendatabank',
+  trainingen: 'Trainingen', oefeningen: 'Oefeningen',
 };
 
 const WIPE_CONFIRM_WORD = 'VERWIJDER';
@@ -83,6 +86,28 @@ export default function Admin() {
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
   const [importResult, setImportResult]     = useState<ImportResult | null>(null);
   const [importStage, setImportStage]       = useState<'idle' | 'wiping' | 'importing' | 'done'>('idle');
+  const [dataScope, setDataScope] = useState<'alles' | 'trainingen' | 'oefendatabank'>('alles');
+
+  // ── Losse export/import: Trainingen ───────────────────────────────────────
+  const [trExporting, setTrExporting]           = useState(false);
+  const [trExportError, setTrExportError]       = useState('');
+  const [trImportFile, setTrImportFile]         = useState<File | null>(null);
+  const [trImportPreview, setTrImportPreview]   = useState<TrainingenExport | null>(null);
+  const [trImportFileError, setTrImportFileError] = useState('');
+  const [trImportTeamId, setTrImportTeamId]     = useState('');
+  const [trImporting, setTrImporting]           = useState(false);
+  const [trImportProgress, setTrImportProgress] = useState<ImportProgress | null>(null);
+  const [trImportResult, setTrImportResult]     = useState<ImportResult | null>(null);
+
+  // ── Losse export/import: Oefendatabank ────────────────────────────────────
+  const [odExporting, setOdExporting]           = useState(false);
+  const [odExportError, setOdExportError]       = useState('');
+  const [odImportFile, setOdImportFile]         = useState<File | null>(null);
+  const [odImportPreview, setOdImportPreview]   = useState<OefendatabankExport | null>(null);
+  const [odImportFileError, setOdImportFileError] = useState('');
+  const [odImporting, setOdImporting]           = useState(false);
+  const [odImportProgress, setOdImportProgress] = useState<ImportProgress | null>(null);
+  const [odImportResult, setOdImportResult]     = useState<ImportResult | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -169,6 +194,82 @@ export default function Admin() {
       setImportStage('idle');
     } finally {
       setImporting(false); setImportProgress(null);
+    }
+  }
+
+  // ── Losse export/import: Trainingen ───────────────────────────────────────
+
+  async function handleExportTrainingen() {
+    setTrExporting(true); setTrExportError('');
+    try {
+      const data = await exportTrainingenData();
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadJSON(data, `kfc-lennik-trainingen-${stamp}.json`);
+    } catch (e) {
+      setTrExportError(e instanceof Error ? e.message : 'Export mislukt');
+    } finally { setTrExporting(false); }
+  }
+
+  async function handleTrImportFileChange(file: File | null) {
+    setTrImportFile(file); setTrImportPreview(null); setTrImportFileError(''); setTrImportResult(null); setTrImportTeamId('');
+    if (!file) return;
+    try {
+      const parsed = await parseTrainingenExportFile(file);
+      setTrImportPreview(parsed);
+    } catch (e) {
+      setTrImportFileError(e instanceof Error ? e.message : 'Kon bestand niet lezen');
+    }
+  }
+
+  async function handleRunTrImport() {
+    if (!trImportPreview) return;
+    if (!confirm('Dit voegt de trainingen + oefeningen uit het bestand toe aan de bestaande data. Doorgaan?')) return;
+    setTrImporting(true); setTrImportResult(null);
+    try {
+      const result = await importTrainingenData(trImportPreview, trImportTeamId || undefined, p => setTrImportProgress(p));
+      setTrImportResult(result);
+    } catch (e) {
+      setTrImportFileError(e instanceof Error ? e.message : 'Import mislukt');
+    } finally {
+      setTrImporting(false); setTrImportProgress(null);
+    }
+  }
+
+  // ── Losse export/import: Oefendatabank ────────────────────────────────────
+
+  async function handleExportOefendatabank() {
+    setOdExporting(true); setOdExportError('');
+    try {
+      const data = await exportOefendatabankData();
+      const stamp = new Date().toISOString().slice(0, 10);
+      downloadJSON(data, `kfc-lennik-oefendatabank-${stamp}.json`);
+    } catch (e) {
+      setOdExportError(e instanceof Error ? e.message : 'Export mislukt');
+    } finally { setOdExporting(false); }
+  }
+
+  async function handleOdImportFileChange(file: File | null) {
+    setOdImportFile(file); setOdImportPreview(null); setOdImportFileError(''); setOdImportResult(null);
+    if (!file) return;
+    try {
+      const parsed = await parseOefendatabankExportFile(file);
+      setOdImportPreview(parsed);
+    } catch (e) {
+      setOdImportFileError(e instanceof Error ? e.message : 'Kon bestand niet lezen');
+    }
+  }
+
+  async function handleRunOdImport() {
+    if (!odImportPreview) return;
+    if (!confirm('Dit voegt de oefeningen uit het bestand toe aan de bestaande oefendatabank. Doorgaan?')) return;
+    setOdImporting(true); setOdImportResult(null);
+    try {
+      const result = await importOefendatabankData(odImportPreview, p => setOdImportProgress(p));
+      setOdImportResult(result);
+    } catch (e) {
+      setOdImportFileError(e instanceof Error ? e.message : 'Import mislukt');
+    } finally {
+      setOdImporting(false); setOdImportProgress(null);
     }
   }
 
@@ -562,6 +663,14 @@ export default function Admin() {
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {tab === 'data' && (
         <div className="adm-data-tab">
+          <div className="adm-tabs adm-data-scope-tabs">
+            <button className={`adm-tab ${dataScope === 'alles' ? 'active' : ''}`} onClick={() => setDataScope('alles')}>💾 Alles</button>
+            <button className={`adm-tab ${dataScope === 'trainingen' ? 'active' : ''}`} onClick={() => setDataScope('trainingen')}>📝 Trainingen</button>
+            <button className={`adm-tab ${dataScope === 'oefendatabank' ? 'active' : ''}`} onClick={() => setDataScope('oefendatabank')}>📚 Oefendatabank</button>
+          </div>
+
+          {dataScope === 'alles' && (
+          <>
           {/* Export */}
           <div className="card adm-data-card">
             <div className="adm-data-card-title">⬇ Exporteren</div>
@@ -695,6 +804,195 @@ export default function Admin() {
               </div>
             )}
           </div>
+          </>
+          )}
+
+          {dataScope === 'trainingen' && (
+          <>
+          {/* Export */}
+          <div className="card adm-data-card">
+            <div className="adm-data-card-title">⬇ Exporteren</div>
+            <p className="adm-data-card-desc">
+              Download alle trainingen (incl. hun oefeningen) als apart JSON-bestand, los van de rest van de
+              clubdata — bv. om te delen met een andere trainer/club of als gerichte back-up.
+            </p>
+            {trExportError && <div className="adm-error">⚠ {trExportError}</div>}
+            <button className="btn btn-primary" disabled={trExporting} onClick={handleExportTrainingen}>
+              {trExporting ? 'Bezig met exporteren...' : '⬇ Exporteer trainingen (JSON)'}
+            </button>
+          </div>
+
+          {/* Import */}
+          <div className="card adm-data-card">
+            <div className="adm-data-card-title">⬆ Importeren</div>
+            <p className="adm-data-card-desc">
+              Importeer een eerder geëxporteerd trainingen-bestand. De trainingen worden <strong>toegevoegd</strong> aan
+              de bestaande data — kies hieronder optioneel een ploeg om ze meteen aan te koppelen, anders blijven ze
+              ongekoppeld en verschijnen ze niet in het team-gefilterde trainingenoverzicht tot je ze zelf koppelt.
+            </p>
+
+            <div className="form-group">
+              <input type="file" accept="application/json" className="input-field"
+                onChange={e => handleTrImportFileChange(e.target.files?.[0] ?? null)} />
+            </div>
+
+            {trImportFileError && <div className="adm-error">⚠ {trImportFileError}</div>}
+
+            {trImportPreview && (
+              <div className="adm-import-preview">
+                <div className="adm-import-preview-title">
+                  Gevonden in {trImportFile?.name}
+                  {trImportPreview.exportedAt && (
+                    <span className="adm-import-preview-date">
+                      {' '}— geëxporteerd op {new Date(trImportPreview.exportedAt).toLocaleString('nl-BE')}
+                    </span>
+                  )}
+                </div>
+                <div className="adm-import-counts">
+                  {Object.entries(countTrainingenExport(trImportPreview)).map(([key, count]) => (
+                    <span key={key} className="tag tag-black adm-import-count-tag">
+                      {ENTITY_LABELS[key] ?? key}: {count}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="form-group" style={{ maxWidth: 320 }}>
+                  <label className="input-label">Koppel aan ploeg (optioneel)</label>
+                  <select className="input-field" value={trImportTeamId} onChange={e => setTrImportTeamId(e.target.value)}>
+                    <option value="">— Ongekoppeld laten —</option>
+                    {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.category})</option>)}
+                  </select>
+                </div>
+
+                <button className="btn btn-primary" disabled={trImporting} onClick={handleRunTrImport}>
+                  {trImporting ? 'Bezig met importeren...' : '⬆ Importeer trainingen'}
+                </button>
+
+                {trImporting && trImportProgress && (
+                  <div className="adm-import-progress">
+                    <div className="adm-import-progress-label">
+                      {trImportProgress.label} — {trImportProgress.done}/{trImportProgress.total}
+                    </div>
+                    <div className="sz-bar-wrap">
+                      <div className="sz-bar-fill" style={{ width: `${(trImportProgress.done / Math.max(1, trImportProgress.total)) * 100}%` }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {trImportResult && (
+              <div className="adm-import-result">
+                <div className="adm-import-preview-title">Import voltooid</div>
+                <div className="adm-import-counts">
+                  {Object.entries(trImportResult.counts).map(([key, count]) => (
+                    <span key={key} className="tag tag-green adm-import-count-tag">
+                      {ENTITY_LABELS[key] ?? key}: {count}
+                    </span>
+                  ))}
+                </div>
+                {trImportResult.errors.length > 0 && (
+                  <div className="adm-import-errors">
+                    <div className="adm-import-errors-title">{trImportResult.errors.length} fout(en)</div>
+                    <div className="adm-import-errors-list">
+                      {trImportResult.errors.map((err, i) => <div key={i}>{err}</div>)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          </>
+          )}
+
+          {dataScope === 'oefendatabank' && (
+          <>
+          {/* Export */}
+          <div className="card adm-data-card">
+            <div className="adm-data-card-title">⬇ Exporteren</div>
+            <p className="adm-data-card-desc">
+              Download de volledige oefendatabank als apart JSON-bestand, los van de rest van de clubdata —
+              bv. om te delen met een andere trainer/club of als gerichte back-up.
+            </p>
+            {odExportError && <div className="adm-error">⚠ {odExportError}</div>}
+            <button className="btn btn-primary" disabled={odExporting} onClick={handleExportOefendatabank}>
+              {odExporting ? 'Bezig met exporteren...' : '⬇ Exporteer oefendatabank (JSON)'}
+            </button>
+          </div>
+
+          {/* Import */}
+          <div className="card adm-data-card">
+            <div className="adm-data-card-title">⬆ Importeren</div>
+            <p className="adm-data-card-desc">
+              Importeer een eerder geëxporteerd oefendatabank-bestand. De oefeningen worden <strong>toegevoegd</strong> aan
+              de bestaande oefendatabank.
+            </p>
+
+            <div className="form-group">
+              <input type="file" accept="application/json" className="input-field"
+                onChange={e => handleOdImportFileChange(e.target.files?.[0] ?? null)} />
+            </div>
+
+            {odImportFileError && <div className="adm-error">⚠ {odImportFileError}</div>}
+
+            {odImportPreview && (
+              <div className="adm-import-preview">
+                <div className="adm-import-preview-title">
+                  Gevonden in {odImportFile?.name}
+                  {odImportPreview.exportedAt && (
+                    <span className="adm-import-preview-date">
+                      {' '}— geëxporteerd op {new Date(odImportPreview.exportedAt).toLocaleString('nl-BE')}
+                    </span>
+                  )}
+                </div>
+                <div className="adm-import-counts">
+                  {Object.entries(countOefendatabankExport(odImportPreview)).map(([key, count]) => (
+                    <span key={key} className="tag tag-black adm-import-count-tag">
+                      {ENTITY_LABELS[key] ?? key}: {count}
+                    </span>
+                  ))}
+                </div>
+
+                <button className="btn btn-primary" disabled={odImporting} onClick={handleRunOdImport}>
+                  {odImporting ? 'Bezig met importeren...' : '⬆ Importeer oefendatabank'}
+                </button>
+
+                {odImporting && odImportProgress && (
+                  <div className="adm-import-progress">
+                    <div className="adm-import-progress-label">
+                      {odImportProgress.label} — {odImportProgress.done}/{odImportProgress.total}
+                    </div>
+                    <div className="sz-bar-wrap">
+                      <div className="sz-bar-fill" style={{ width: `${(odImportProgress.done / Math.max(1, odImportProgress.total)) * 100}%` }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {odImportResult && (
+              <div className="adm-import-result">
+                <div className="adm-import-preview-title">Import voltooid</div>
+                <div className="adm-import-counts">
+                  {Object.entries(odImportResult.counts).map(([key, count]) => (
+                    <span key={key} className="tag tag-green adm-import-count-tag">
+                      {ENTITY_LABELS[key] ?? key}: {count}
+                    </span>
+                  ))}
+                </div>
+                {odImportResult.errors.length > 0 && (
+                  <div className="adm-import-errors">
+                    <div className="adm-import-errors-title">{odImportResult.errors.length} fout(en)</div>
+                    <div className="adm-import-errors-list">
+                      {odImportResult.errors.map((err, i) => <div key={i}>{err}</div>)}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          </>
+          )}
         </div>
       )}
 
