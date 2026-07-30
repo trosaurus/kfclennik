@@ -12,7 +12,7 @@
 // resultaat nadien gewoon in de trainingseditor, net zoals bij de andere
 // generator-features.
 
-import { ExerciseFase } from './api';
+import { ExerciseFase, EXERCISE_FASE_LABELS } from './api';
 
 // pdfjs-dist is large and only needed when a trainer actually imports a PDF,
 // so it's loaded on demand instead of bundled into the main chunk.
@@ -168,7 +168,13 @@ function assignFieldsSpatial<K extends string>(
   // kan toevallig op de y-hoogte van een ánder label in de linkerkolom vallen,
   // een paar punten dichter dan zijn eigen label verderop — dan moet x, niet y,
   // de doorslag geven zolang beide ankers "ongeveer dezelfde rij" zijn.
-  const Y_TOL = 2;
+  //
+  // Bij korte "pil"-velden die naast elkaar op dezelfde rij staan (label ernaast,
+  // niet erboven) meet PowerPoint's eigen PDF-export het label soms een fractie
+  // (tot ~3pt) lager dan zijn eigen waarde, door een klein baseline-verschil
+  // tussen het vette labellettertype en het gewone waardelettertype — vandaar
+  // een iets ruimere marge dan de louter positionele afronding zou vereisen.
+  const Y_TOL = 4;
   const ROW_BAND = 10;
   const buckets = new Map<K, PosSeg[]>();
   for (const v of values) {
@@ -267,71 +273,149 @@ export interface ParsedExercise {
 }
 
 /** De fase én de naam staan samen in de grote groene bannertitel bovenaan de
- * pagina, bv. "OPWARMING: MULTISKILLZ - POORTJES & TIKKERS" — fase vóór de
- * eerste dubbele punt, naam erna. De banner is altijd het bovenste fragment
- * op de pagina dat met een van de vier fases begint.
+ * pagina — het scheidingsteken verschilt per sjabloon-versie: een dubbele punt
+ * ("OPWARMING: MULTISKILLZ - POORTJES & TIKKERS") of een liggend streepje
+ * ("Opwarming – Kriskras coördinatie met bal"). Soms staat er ook nog een
+ * volgnummer en/of "/ Slotvorm"-kwalificatie tussen de fase en het echte
+ * scheidingsteken ("Wedstrijdvorm 2 / Slotvorm – 8 tegen 8, ..."). Om dat
+ * betrouwbaar te knippen zoeken we het LAATSTE ":" of "–" op de regel op —
+ * nooit een gewoon koppelteken "-", want dat komt ook vaak gewoon in de naam
+ * zelf voor (bv. "1-2", "B- coachen") en zou de knip verkeerd laten vallen.
  *
- * Het lettertype/de opmaak van de banner (bv. vet "OPWARMING:" gevolgd door
- * niet-vette naam) kan ervoor zorgen dat pdf.js dit als twee aparte
- * tekstfragmenten teruggeeft i.p.v. één samengevoegd fragment — dus herbouwen
- * we de volledige regel uit alle fragmenten op dezelfde rij (y-hoogte),
- * ongeacht hoe reconstructPageSegments ze al dan niet had samengevoegd. */
+ * De vaste instructietekst bovenaan elke oefeningpagina ("KIES JE TEKENFIGUUR
+ * EN VUL HIER HET TRAININGSONDERDEEL IN (OPWARMING, WEDSTRIJDVORM,
+ * TUSSENVORM, COOLING DOWN)") staat in sommige PDF-exports (bv. via
+ * PowerPoint's eigen "Opslaan als PDF") zo dicht bij de echte banner dat ze
+ * tot één tekstfragment worden samengevoegd, mét alle vier fasewoorden erin.
+ * Daarom nemen we niet het EERSTE fasewoord in de (samengevoegde) regel, maar
+ * het LAATSTE — dat is altijd het echte banner-fasewoord, want de
+ * instructietekst met haar opsomming komt er altijd vóór. */
 function detectFaseAndNaamFromBanner(segs: PosSeg[]): { fase: ExerciseFase | null; naam: string | null } {
-  const candidates = segs.filter(s => /^(OPWARMING|TUSSENVORM|WEDSTRIJDVORM|COOLING\s*DOWN)\b/i.test(s.text));
+  const FASE_WORD = /(OPWARMING|TUSSENVORM|WEDSTRIJDVORM|COOLING\s*DOWN)/gi;
+  const candidates = segs.filter(s => FASE_WORD.test(s.text));
+  FASE_WORD.lastIndex = 0;
   if (candidates.length === 0) return { fase: null, naam: null };
   const anchor = candidates.reduce((a, b) => (b.y > a.y ? b : a));
-  let fase: ExerciseFase | null = null;
-  if (/^opwarming/i.test(anchor.text)) fase = 'opwarming';
-  else if (/^tussenvorm/i.test(anchor.text)) fase = 'tussenvorm';
-  else if (/^wedstrijdvorm/i.test(anchor.text)) fase = 'wedstrijdvorm';
-  else if (/^cooling/i.test(anchor.text)) fase = 'cooling_down';
 
+  // Het lettertype/de opmaak van de banner (bv. vet "OPWARMING:" gevolgd door
+  // niet-vette naam) kan ervoor zorgen dat pdf.js dit als twee aparte
+  // tekstfragmenten teruggeeft i.p.v. één samengevoegd fragment — dus herbouwen
+  // we de volledige regel uit alle fragmenten op dezelfde rij (y-hoogte),
+  // ongeacht hoe reconstructPageSegments ze al dan niet had samengevoegd.
   const Y_TOL = 2;
   const fullLine = segs
     .filter(s => Math.abs(s.y - anchor.y) <= Y_TOL)
     .sort((a, b) => a.xStart - b.xStart)
     .map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
 
-  const colonIdx = fullLine.indexOf(':');
+  const faseMatches = [...fullLine.matchAll(FASE_WORD)];
+  if (faseMatches.length === 0) return { fase: null, naam: null };
+  const lastMatch = faseMatches[faseMatches.length - 1];
+  const bannerPart = fullLine.slice(lastMatch.index!);
+
+  let fase: ExerciseFase | null = null;
+  if (/^opwarming/i.test(lastMatch[0])) fase = 'opwarming';
+  else if (/^tussenvorm/i.test(lastMatch[0])) fase = 'tussenvorm';
+  else if (/^wedstrijdvorm/i.test(lastMatch[0])) fase = 'wedstrijdvorm';
+  else if (/^cooling/i.test(lastMatch[0])) fase = 'cooling_down';
+
   let naam: string | null = null;
-  if (colonIdx !== -1) {
-    naam = fullLine.slice(colonIdx + 1).trim() || null;
+  const lastSepIdx = Math.max(bannerPart.lastIndexOf(':'), bannerPart.lastIndexOf('–'));
+  if (lastSepIdx !== -1) {
+    naam = bannerPart.slice(lastSepIdx + 1).trim() || null;
   } else {
-    // Geen dubbele punt teruggevonden — knip dan het fase-woord (+ evt.
-    // volgnummer) van de rest van de regel af als noodgreep.
-    const m = fullLine.match(/^(OPWARMING|TUSSENVORM|WEDSTRIJDVORM|COOLING\s*DOWN)\b\s*\d*\s*[:\-–]?\s*(.*)$/i);
-    naam = m && m[2].trim() ? m[2].trim() : null;
+    // Geen scheidingsteken teruggevonden (bv. gewoon "Cooling down" zonder
+    // extra titel) — dan is er geen aparte naam, de aanroeper valt terug op
+    // de fase zelf.
+    naam = null;
   }
   return { fase, naam };
 }
 
+/** "Organisatie oefening" is een 2x2-rooster van ongelabelde pillen (spelers |
+ * duur — afmetingen | materiaal). Er is geen betrouwbaar tekstpatroon om op te
+ * knippen: afmetingen is niet altijd "XmxYm" (soms "Vrij vak" of "Volledig
+ * U10-veld, wedstrijdrichting"), en spelers/materiaal kunnen over meerdere
+ * regels wrappen. Daarom werken we rechtstreeks op de posities: de kolom
+ * (links/rechts) is de grootste horizontale kloof tussen waardefragmenten, de
+ * rij (boven/onder) is de grootste verticale kloof — dat blijft correct
+ * ongeacht hoeveel regels een veld inneemt of wat de tekst zelf zegt. */
+function parseOrganisatieGrid(segs: PosSeg[]): { spelers: string; duurMinuten: number; afmetingen: string; materiaal: string } {
+  const fallback = { spelers: '', duurMinuten: 10, afmetingen: '', materiaal: '' };
+  const up = (s: string) => s.trim().toUpperCase();
+  const orgAnchor = segs.find(s => up(s.text) === 'ORGANISATIE OEFENING');
+  if (!orgAnchor) return fallback;
+
+  const tekeningAnchor = segs.find(s => up(s.text) === 'TEKENING OEFENING');
+  const yTop = orgAnchor.y;
+  const yBottom = tekeningAnchor ? tekeningAnchor.y : -Infinity;
+
+  const KNOWN_LABELS = new Set(['ORGANISATIE OEFENING', 'BESCHRIJVING OEFENING', 'TEKENING OEFENING', 'COACHING', 'MAXIMAAL ACTIEF', 'FUN']);
+  const candidates = segs.filter(s => s.y < yTop && s.y > yBottom && !KNOWN_LABELS.has(up(s.text)));
+  if (candidates.length === 0) return fallback;
+
+  // Groepeer overlappende/aaneensluitende x-intervallen tot kolomblokken,
+  // ongeacht rij (y) — dat isoleert betrouwbaar de 2 rooster-kolommen van al
+  // wat verder naar rechts staat (bv. de "Beschrijving oefening"-alinea, die
+  // soms zelfs links van haar eigen label start en dus geen vaste x-grens
+  // toelaat). Organisatie is altijd de linkerkant van de pagina, dus we nemen
+  // gewoon de twee meest linkse blokken.
+  const byXStart = [...candidates].sort((a, b) => a.xStart - b.xStart);
+  const blocks: { xEnd: number; segs: PosSeg[] }[] = [];
+  for (const s of byXStart) {
+    const last = blocks[blocks.length - 1];
+    if (last && s.xStart <= last.xEnd) {
+      last.xEnd = Math.max(last.xEnd, s.xEnd);
+      last.segs.push(s);
+    } else {
+      blocks.push({ xEnd: s.xEnd, segs: [s] });
+    }
+  }
+  const leftCol = blocks[0]?.segs ?? [];
+  const rightCol = blocks[1]?.segs ?? [];
+
+  function joinReadingOrder(list: PosSeg[]): string {
+    return [...list].sort((a, b) => (b.y - a.y) || (a.xStart - b.xStart)).map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
+  }
+  function splitRows(colSegs: PosSeg[]): { top: PosSeg[]; bottom: PosSeg[] } {
+    if (colSegs.length <= 1) return { top: colSegs, bottom: [] };
+    const ys = [...new Set(colSegs.map(s => s.y))].sort((a, b) => a - b);
+    let splitY = -Infinity, maxGap = -1;
+    for (let i = 1; i < ys.length; i++) {
+      const gap = ys[i] - ys[i - 1];
+      if (gap > maxGap) { maxGap = gap; splitY = (ys[i] + ys[i - 1]) / 2; }
+    }
+    return { top: colSegs.filter(s => s.y >= splitY), bottom: colSegs.filter(s => s.y < splitY) };
+  }
+
+  const leftRows = splitRows(leftCol);
+  const rightRows = splitRows(rightCol);
+
+  const spelers = joinReadingOrder(leftRows.top);
+  const afmetingen = joinReadingOrder(leftRows.bottom);
+  const duurText = joinReadingOrder(rightRows.top);
+  const materiaal = joinReadingOrder(rightRows.bottom);
+  const durMatch = duurText.match(/\d+/);
+  const duurMinuten = durMatch ? parseInt(durMatch[0], 10) : 10;
+
+  return { spelers, duurMinuten, afmetingen, materiaal };
+}
+
 async function parseExercisePage(segs: PosSeg[], page: any): Promise<ParsedExercise> {
   const fields = assignFieldsSpatial(segs, EXERCISE_LABELS);
-
-  // "Organisatie oefening" bestaat uit 4 ongelabelde pillen in een 2x2-rooster
-  // (rij 1: spelers | duur — rij 2: afmetingen | materiaal), dus we herkennen
-  // elke waarde aan haar eigen patroon (bv. "15 min", "20m x 20m") i.p.v. een
-  // "Label: waarde"-voorvoegsel, dat in dit sjabloon niet bestaat.
-  const orgLines = (fields.organisatie ?? '').split('\n').map(l => l.trim()).filter(Boolean);
-  let duurMinuten = 10;
-  let organisatieSpelers = '', organisatieAfmetingen = '', organisatieMateriaal = '';
-  if (orgLines[0]) {
-    const m = orgLines[0].match(/^(.*?)\s*(\d+)\s*min\s*$/i);
-    if (m) { organisatieSpelers = m[1].trim(); duurMinuten = parseInt(m[2], 10); }
-    else organisatieSpelers = orgLines[0];
-  }
-  if (orgLines[1]) {
-    const m = orgLines[1].match(/^(\d+\s*m\s*x\s*\d+\s*m)\s*(.*)$/i);
-    if (m) { organisatieAfmetingen = m[1].trim(); organisatieMateriaal = m[2].trim(); }
-    else organisatieAfmetingen = orgLines[1];
-  }
+  const {
+    spelers: organisatieSpelers, duurMinuten, afmetingen: organisatieAfmetingen, materiaal: organisatieMateriaal,
+  } = parseOrganisatieGrid(segs);
 
   const beschrijving = (fields.beschrijving ?? '')
     .split('\n').map(l => l.trim().replace(/^[•\-]\s*/, '')).filter(Boolean).join('\n').trim();
 
   const { fase: bannerFase, naam: bannerNaam } = detectFaseAndNaamFromBanner(segs);
   const fase: ExerciseFase = bannerFase ?? 'tussenvorm';
-  const naam = bannerNaam ?? 'Geïmporteerde oefening';
+  // Zonder aparte naam (bv. banner is gewoon "Cooling down") valt terug op de
+  // fase zelf i.p.v. een nietszeggende placeholder — enkel als zelfs de fase
+  // niet herkend werd, is er echt niets bruikbaars en blijft de placeholder over.
+  const naam = bannerNaam ?? (bannerFase ? EXERCISE_FASE_LABELS[bannerFase] : 'Geïmporteerde oefening');
   const drawingImage = await extractExerciseDrawingImage(page);
 
   return {
@@ -351,10 +435,25 @@ export interface ParsedTrainingPdf {
   exercises: ParsedExercise[];
 }
 
+const NL_WEEKDAGEN = 'maandag|dinsdag|woensdag|donderdag|vrijdag|zaterdag|zondag';
+const NL_MAANDEN = 'januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december';
+
+/** "Wanneer" hoort een speluitdaging-trigger te zijn (bv. "zodra de tegenstander
+ * in opbouw is"), maar trainers vullen hier soms per ongeluk de trainingsdatum
+ * in — dat overschrijft dan zinloos het echte "wanneer"-veld, dus laten we het
+ * in dat geval gewoon leeg i.p.v. een datum te importeren als speluitdaging. */
+function looksLikeDate(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (new RegExp(`^(${NL_WEEKDAGEN})?\\s*\\d{1,2}\\s+(${NL_MAANDEN})\\s+\\d{4}$`, 'i').test(t)) return true;
+  if (/^\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}$/.test(t)) return true;
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(t)) return true;
+  return false;
+}
+
 /** Best-effort extractie van een ingevulde KFC-trainingstemplate (PDF) naar Training + Exercises. */
 export async function parseTrainingPdf(file: File): Promise<ParsedTrainingPdf> {
   const pages = await extractPdfPages(file);
-  let titel = '';
   let fields: Partial<Record<TrainingFieldKey, string>> = {};
   const exercises: ParsedExercise[] = [];
 
@@ -371,11 +470,23 @@ export async function parseTrainingPdf(file: File): Promise<ParsedTrainingPdf> {
       fields = { ...fields, ...assignFieldsSpatial(segs, TRAINING_LABELS) };
     } else if (hasOrganisatie) {
       exercises.push(await parseExercisePage(segs, page));
-    } else if (idx === 0) {
-      const cand = segs.find(s => /training/i.test(s.text) && s.text.length > 8);
-      if (cand) titel = cand.text.replace(/\s+/g, ' ').trim();
     }
   }
+
+  if (fields.speluitdagingWanneer && looksLikeDate(fields.speluitdagingWanneer)) {
+    delete fields.speluitdagingWanneer;
+  }
+
+  // Materiaal = optelsom van het materiaal van alle oefeningen, i.p.v. het
+  // eigen "materiaal"-veld uit de PDF (dat gaat over algemeen trainingsmateriaal
+  // en is voor de trainer overbodig om nog eens apart te controleren).
+  const alleMateriaal = [...new Set(exercises.map(e => e.organisatieMateriaal.trim()).filter(Boolean))];
+  if (alleMateriaal.length > 0) fields.materiaal = alleMateriaal.join('\n');
+
+  // Titel van een geïmporteerde training is altijd "Training - <hoofdmoment>",
+  // i.p.v. te proberen een titel te lezen uit de openingsslide (die vaak enkel
+  // datum + jaarplanthema bevat, geen bruikbare "titel").
+  const titel = fields.hoofdmoment ? `Training - ${fields.hoofdmoment}` : '';
 
   return { titel, fields, exercises };
 }
