@@ -1827,6 +1827,9 @@ export interface DrawingScene {
   backgroundImage?: string;
   /** Optionele bewegingsanimatie (wie loopt waarheen, waar gaat de bal naartoe) — afwezig/leeg = statische tekening. */
   animation?: { frames: AnimationFrame[] };
+  /** Handmatig gekozen vorm van het vector-veld — genegeerd zolang backgroundImage
+   * aanwezig is, want dan bepaalt de afbeelding zelf staand/liggend. Default 'portrait'. */
+  orientation?: 'portrait' | 'landscape';
 }
 
 export function parseDrawingScene(raw: string): DrawingScene {

@@ -3,10 +3,11 @@ import { buildDrawingSvg, DrawingScene } from './drawingSvg';
 
 /** Rasterizes a DrawingScene (vector field + elements, or an imported
  * background photo) to a PNG buffer for embedding into the PowerPoint export.
- * Orientation mirrors DrawingCanvas.tsx: landscape only when a background
- * image is present and is itself wider than tall. */
+ * Orientation mirrors DrawingCanvas.tsx: with a background image, landscape
+ * follows the image's own aspect ratio; otherwise it follows the trainer's
+ * manually-chosen scene.orientation for the vector field. */
 export async function renderDrawingPng(scene: DrawingScene): Promise<Buffer> {
-  let landscape = false;
+  let landscape = scene.orientation === 'landscape';
   if (scene.backgroundImage) {
     try {
       const base64 = scene.backgroundImage.split(',')[1] ?? '';

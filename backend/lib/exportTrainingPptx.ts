@@ -45,7 +45,7 @@ const KOP_SHAPES = {
   individueleAandacht: 'Google Shape;438;p3',
 } as const;
 
-// ── Slide 6: Reflectie · 360° evaluatie ─────────────────────────────────────────
+// ── Slide 5: Reflectie · 360° evaluatie ─────────────────────────────────────────
 const REFLECTIE_SHAPES = {
   evalBehouden: 'Google Shape;643;p20',
   evalWijzigen: 'Google Shape;648;p20',
@@ -67,12 +67,16 @@ const EXERCISE_SHAPES = {
   fun: 'Google Shape;477;p5',
 } as const;
 
+// Groene banner bovenaan de oefeningpagina ("Titel oefening" in het lege
+// sjabloon) — bestaat als eigen shape op de slide (geen layout-placeholder),
+// vandaar rechtstreeks via naam aan te spreken i.p.v. via idx.
+const EXERCISE_BANNER_SHAPE = 'Google Shape;433;p2';
+
 const TITLE_SHAPE = 'Google Shape;433;p2';
 
-// Exacte EMU-positie van de "Tekening oefening"-afbeeldingsplaats en de
-// fase-titelbanner op de oefeningpagina (gemeten op het sjabloon).
-const DRAWING_BOX = { x: 536441, y: 2430089, w: 7698294, h: 4336232 };
-const FASE_TITLE_BOX = { x: 536441, y: 208083, w: 11511649, h: 402398 };
+// Exacte EMU-positie van de "Tekening oefening"-afbeeldingsplaats op de
+// oefeningpagina (gemeten op het sjabloon).
+const DRAWING_BOX = { x: 532636, y: 2521768, w: 6697723, h: 4336232 };
 
 export interface ExportExercise {
   fase: string;
@@ -164,28 +168,26 @@ export async function exportTrainingPptx(training: ExportTraining): Promise<Buff
     const pngBuffer = await renderDrawingPng(scene);
     const pngDataUri = `data:image/png;base64,${pngBuffer.toString('base64')}`;
     const faseLabel = FASE_LABELS[ex.fase] ?? ex.fase.toUpperCase();
-    const heading = `${faseLabel} · ${ex.naam || 'Oefening'} · ${ex.duurMinuten} min`;
+    // Banner-formaat "<FASE>: <naam>" — zelfde formaat als de echte KFC-template
+    // (zie ook detectFaseAndNaamFromBanner in frontend/src/lib/pdfImport.ts).
+    const banner = `${faseLabel}: ${ex.naam || 'Oefening'}`;
 
     pres.addSlide('tpl', 3, slide => {
-      set(slide, EXERCISE_SHAPES.beschrijving, `${heading}\n${ex.beschrijving}`);
-      set(slide, EXERCISE_SHAPES.duur, `Duur: ${ex.duurMinuten} min`);
-      set(slide, EXERCISE_SHAPES.materiaalGrid, `Materiaal: ${ex.organisatieMateriaal}`);
-      set(slide, EXERCISE_SHAPES.spelers, `Spelers: ${ex.organisatieSpelers}`);
-      set(slide, EXERCISE_SHAPES.ruimte, `Ruimte: ${ex.organisatieAfmetingen}`);
+      set(slide, EXERCISE_SHAPES.beschrijving, ex.beschrijving);
+      set(slide, EXERCISE_SHAPES.duur, `${ex.duurMinuten} min`);
+      set(slide, EXERCISE_SHAPES.materiaalGrid, ex.organisatieMateriaal);
+      set(slide, EXERCISE_SHAPES.spelers, ex.organisatieSpelers);
+      set(slide, EXERCISE_SHAPES.ruimte, ex.organisatieAfmetingen);
       set(slide, EXERCISE_SHAPES.coaching, ex.coachingPunten);
       set(slide, EXERCISE_SHAPES.maximaalActief, ex.maximaalActief);
       set(slide, EXERCISE_SHAPES.fun, ex.fun);
+      set(slide, EXERCISE_BANNER_SHAPE, banner);
 
-      // Deze twee bestaan niet als los invulveld in het lege sjabloon (de
-      // fase-titelbanner en de tekening zelf worden pas toegevoegd zodra een
-      // trainer ze manueel invult) — dus voegen we ze hier als nieuwe
-      // elementen toe, op exact dezelfde plek als in een echt ingevulde training.
+      // De tekening zelf bestaat niet als los invulveld in het lege sjabloon
+      // (die wordt pas toegevoegd zodra een trainer ze manueel intekent) —
+      // dus voegen we ze hier toe als nieuw beeld-element, op exact dezelfde
+      // plek als in een echt ingevulde training.
       slide.generate(pSlide => {
-        pSlide.addText(faseLabel, {
-          x: emuToIn(FASE_TITLE_BOX.x), y: emuToIn(FASE_TITLE_BOX.y),
-          w: emuToIn(FASE_TITLE_BOX.w), h: emuToIn(FASE_TITLE_BOX.h),
-          fontSize: 20, bold: true, color: 'FFFFFF', valign: 'middle',
-        });
         pSlide.addImage({
           data: pngDataUri,
           x: emuToIn(DRAWING_BOX.x), y: emuToIn(DRAWING_BOX.y),
@@ -196,10 +198,10 @@ export async function exportTrainingPptx(training: ExportTraining): Promise<Buff
   }
 
   // Statische tussenslide "EVALUATIE NA TRAINING" — geen dynamische inhoud nodig.
-  pres.addSlide('tpl', 5);
+  pres.addSlide('tpl', 4);
 
-  // Slide 6 — reflectie · 360° evaluatie
-  pres.addSlide('tpl', 6, slide => {
+  // Slide 5 — reflectie · 360° evaluatie
+  pres.addSlide('tpl', 5, slide => {
     set(slide, REFLECTIE_SHAPES.evalBehouden, training.evalBehouden);
     set(slide, REFLECTIE_SHAPES.evalWijzigen, training.evalWijzigen);
     set(slide, REFLECTIE_SHAPES.evalWarenActief, training.evalWarenActief);

@@ -127,7 +127,7 @@ async function extractPdfPages(file: File): Promise<PdfPage[]> {
 // Kale sectiekoppen/dividers uit het template die geen eigen invulveld hebben.
 const NON_FIELD_HEADERS = new Set([
   'TRAININGSVOORBEREIDING', 'DATUM', 'LEREN', 'SPELUITDAGING',
-  'ACTIEF, FUN & INDIVIDUELE AANDACHT', 'ORGANISATIE OEFENING', 'TEKENING OEFENING',
+  'ACTIEF, FUN & INDIVIDUELE AANDACHT', 'TEKENING OEFENING',
 ]);
 
 function isNonFieldHeader(text: string): boolean {
@@ -242,8 +242,9 @@ const TRAINING_LABELS: Record<string, TrainingFieldKey> = {
   'GAF JE INDIVIDUELE AANDACHT AAN ELKE SPELER?': 'evalIndividueleAandacht',
 };
 
-type ExerciseFieldKey = 'beschrijving' | 'coachingPunten' | 'maximaalActief' | 'fun';
+type ExerciseFieldKey = 'organisatie' | 'beschrijving' | 'coachingPunten' | 'maximaalActief' | 'fun';
 const EXERCISE_LABELS: Record<string, ExerciseFieldKey> = {
+  'ORGANISATIE OEFENING': 'organisatie',
   'BESCHRIJVING OEFENING': 'beschrijving',
   'COACHING': 'coachingPunten',
   'MAXIMAAL ACTIEF': 'maximaalActief',
@@ -265,50 +266,51 @@ export interface ParsedExercise {
   drawingImage?: string;
 }
 
-/** De fase staat ondubbelzinnig in de grote bannertitel bovenaan de pagina
- * ("OPWARMING", "TUSSENVORM 1", "WEDSTRIJDVORM 2 · SLOT", "COOLING DOWN") —
- * dat is een veel betrouwbaardere bron dan de "·"-gescheiden kop in de
- * beschrijvingstekst, die met het lettertype van deze template soms niet
- * schoon als los "·"-teken wordt uitgelezen. De banner is altijd het bovenste,
- * korte fragment op de pagina dat met een van de vier fases begint. */
-function detectFaseFromBanner(segs: PosSeg[]): ExerciseFase | null {
-  const candidates = segs.filter(s => s.text.length < 30 && /^(OPWARMING|TUSSENVORM|WEDSTRIJDVORM|COOLING\s*DOWN)\b/i.test(s.text));
-  if (candidates.length === 0) return null;
+/** De fase én de naam staan samen in de grote groene bannertitel bovenaan de
+ * pagina, bv. "OPWARMING: MULTISKILLZ - POORTJES & TIKKERS" — fase vóór de
+ * eerste dubbele punt, naam erna. De banner is altijd het bovenste fragment
+ * op de pagina dat met een van de vier fases begint. */
+function detectFaseAndNaamFromBanner(segs: PosSeg[]): { fase: ExerciseFase | null; naam: string | null } {
+  const candidates = segs.filter(s => /^(OPWARMING|TUSSENVORM|WEDSTRIJDVORM|COOLING\s*DOWN)\b/i.test(s.text));
+  if (candidates.length === 0) return { fase: null, naam: null };
   const banner = candidates.reduce((a, b) => (b.y > a.y ? b : a));
-  if (/^opwarming/i.test(banner.text)) return 'opwarming';
-  if (/^tussenvorm/i.test(banner.text)) return 'tussenvorm';
-  if (/^wedstrijdvorm/i.test(banner.text)) return 'wedstrijdvorm';
-  if (/^cooling/i.test(banner.text)) return 'cooling_down';
-  return null;
+  let fase: ExerciseFase | null = null;
+  if (/^opwarming/i.test(banner.text)) fase = 'opwarming';
+  else if (/^tussenvorm/i.test(banner.text)) fase = 'tussenvorm';
+  else if (/^wedstrijdvorm/i.test(banner.text)) fase = 'wedstrijdvorm';
+  else if (/^cooling/i.test(banner.text)) fase = 'cooling_down';
+  const colonIdx = banner.text.indexOf(':');
+  const naam = colonIdx === -1 ? null : (banner.text.slice(colonIdx + 1).trim() || null);
+  return { fase, naam };
 }
 
 async function parseExercisePage(segs: PosSeg[], page: any): Promise<ParsedExercise> {
   const fields = assignFieldsSpatial(segs, EXERCISE_LABELS);
 
+  // "Organisatie oefening" bestaat uit 4 ongelabelde pillen in een 2x2-rooster
+  // (rij 1: spelers | duur — rij 2: afmetingen | materiaal), dus we herkennen
+  // elke waarde aan haar eigen patroon (bv. "15 min", "20m x 20m") i.p.v. een
+  // "Label: waarde"-voorvoegsel, dat in dit sjabloon niet bestaat.
+  const orgLines = (fields.organisatie ?? '').split('\n').map(l => l.trim()).filter(Boolean);
   let duurMinuten = 10;
   let organisatieSpelers = '', organisatieAfmetingen = '', organisatieMateriaal = '';
-  for (const s of segs) {
-    const m = s.text.match(/^(Duur|Materiaal|Spelers|Ruimte)\s*:\s*(.+)$/i);
-    if (!m) continue;
-    const label = m[1].toLowerCase();
-    const val = m[2].trim();
-    if (label === 'duur') { const n = parseInt(val, 10); if (!isNaN(n)) duurMinuten = n; }
-    else if (label === 'materiaal') organisatieMateriaal = val;
-    else if (label === 'spelers') organisatieSpelers = val;
-    else if (label === 'ruimte') organisatieAfmetingen = val;
+  if (orgLines[0]) {
+    const m = orgLines[0].match(/^(.*?)\s*(\d+)\s*min\s*$/i);
+    if (m) { organisatieSpelers = m[1].trim(); duurMinuten = parseInt(m[2], 10); }
+    else organisatieSpelers = orgLines[0];
+  }
+  if (orgLines[1]) {
+    const m = orgLines[1].match(/^(\d+\s*m\s*x\s*\d+\s*m)\s*(.*)$/i);
+    if (m) { organisatieAfmetingen = m[1].trim(); organisatieMateriaal = m[2].trim(); }
+    else organisatieAfmetingen = orgLines[1];
   }
 
-  let naam = 'Geïmporteerde oefening';
-  const lines = (fields.beschrijving ?? '').split('\n').map(l => l.trim()).filter(Boolean);
-  if (lines.length > 0) {
-    const parts = lines[0].split('·').map(p => p.trim()).filter(Boolean);
-    if (parts.length >= 2) {
-      naam = parts[1] || naam;
-      lines.shift();
-    }
-  }
-  const beschrijving = lines.map(l => l.replace(/^[•\-]\s*/, '')).join('\n').trim();
-  const fase: ExerciseFase = detectFaseFromBanner(segs) ?? 'tussenvorm';
+  const beschrijving = (fields.beschrijving ?? '')
+    .split('\n').map(l => l.trim().replace(/^[•\-]\s*/, '')).filter(Boolean).join('\n').trim();
+
+  const { fase: bannerFase, naam: bannerNaam } = detectFaseAndNaamFromBanner(segs);
+  const fase: ExerciseFase = bannerFase ?? 'tussenvorm';
+  const naam = bannerNaam ?? 'Geïmporteerde oefening';
   const drawingImage = await extractExerciseDrawingImage(page);
 
   return {

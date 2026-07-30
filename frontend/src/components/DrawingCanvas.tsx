@@ -56,16 +56,20 @@ function coneHex(color?: string): string {
 
 export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [isLandscape, setIsLandscape] = useState(false);
+  // Bij een geïmporteerde achtergrond (PDF) bepaalt de afbeelding zelf staand/liggend
+  // (async, want we moeten de afbeelding laden om de verhouding te kennen). Zonder
+  // achtergrond kiest de trainer dit zelf via de "Draai veld"-knop, bewaard in scene.orientation.
+  const [autoLandscapeFromImage, setAutoLandscapeFromImage] = useState<boolean | null>(null);
+  const isLandscape = scene.backgroundImage ? (autoLandscapeFromImage ?? false) : scene.orientation === 'landscape';
   const W = isLandscape ? LANDSCAPE_W : PORTRAIT_W;
   const H = isLandscape ? LANDSCAPE_H : PORTRAIT_H;
 
   useEffect(() => {
     const src = scene.backgroundImage;
-    if (!src) { setIsLandscape(false); return; }
+    if (!src) { setAutoLandscapeFromImage(null); return; }
     let cancelled = false;
     const img = new Image();
-    img.onload = () => { if (!cancelled) setIsLandscape(img.naturalWidth > img.naturalHeight); };
+    img.onload = () => { if (!cancelled) setAutoLandscapeFromImage(img.naturalWidth > img.naturalHeight); };
     img.src = src;
     return () => { cancelled = true; };
   }, [scene.backgroundImage]);
@@ -360,6 +364,12 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
     commit({ ...scene, background: bg, backgroundImage: undefined });
   }
 
+  function toggleOrientation() {
+    // Elementposities zijn % van de viewBox (0-100), dus die blijven overal correct
+    // staan bij het draaien — enkel W/H (en dus de vorm van het veld) verandert.
+    commit({ ...scene, orientation: isLandscape ? 'portrait' : 'landscape' });
+  }
+
   function removeImportedBackground() {
     if (!scene.backgroundImage) return;
     if (!confirm('Geïmporteerde tekening verwijderen en vervangen door de tekentool? Dit kan niet ongedaan gemaakt worden — de PDF-afbeelding gaat verloren, je geplaatste objecten blijven behouden.')) return;
@@ -610,6 +620,11 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
               {bg === 'grid' ? 'Grid' : bg === 'half' ? 'Half veld' : 'Vol veld'}
             </button>
           ))}
+          {!scene.backgroundImage && (
+            <button className="dc-bg-btn" onClick={toggleOrientation} title="Wissel het veld tussen staand en liggend formaat">
+              ↺ {isLandscape ? 'Zet staand' : 'Zet liggend'}
+            </button>
+          )}
         </div>
       )}
 
@@ -715,28 +730,56 @@ function renderBackground(bg: DrawingBackground, W: number, H: number) {
     return <>{grass}{stripes}<rect x="10" y="10" width={W-20} height={H-20} fill="none" stroke={wl} strokeWidth={sw} strokeDasharray="6 4" />{lines}</>;
   }
 
+  const isLandscape = W > H;
+
   if (bg === 'half') {
-    return <>{grass}{stripes}
-      <rect x="10" y="10" width={W-20} height={H-20} fill="none" stroke={wl} strokeWidth={sw} />
-      <rect x={W/2-40} y="4" width="80" height="14" fill="none" stroke={wl} strokeWidth={sw} />
-      <rect x={W/2-90} y="10" width="180" height="90" fill="none" stroke={wl} strokeWidth={1.5} />
-      <rect x={W/2-50} y="10" width="100" height="40" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1" />
-      <circle cx={W/2} cy="70" r="3" fill="rgba(255,255,255,0.45)" />
-      <path d={`M ${W/2-46} 100 A 52 52 0 0 0 ${W/2+46} 100`} fill="none" stroke={wl} strokeWidth={1.5} />
-    </>;
+    // Liggend: doel/zestien/D-boog draaien 90° mee (doel links, uitlopend naar rechts)
+    // i.p.v. het staande veld te vervormen door de boven/onder-indeling te behouden.
+    return isLandscape ? (
+      <>{grass}{stripes}
+        <rect x="10" y="10" width={W-20} height={H-20} fill="none" stroke={wl} strokeWidth={sw} />
+        <rect x="4" y={H/2-40} width="14" height="80" fill="none" stroke={wl} strokeWidth={sw} />
+        <rect x="10" y={H/2-90} width="90" height="180" fill="none" stroke={wl} strokeWidth={1.5} />
+        <rect x="10" y={H/2-50} width="40" height="100" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1" />
+        <circle cx="70" cy={H/2} r="3" fill="rgba(255,255,255,0.45)" />
+        <path d={`M 100 ${H/2-46} A 52 52 0 0 1 100 ${H/2+46}`} fill="none" stroke={wl} strokeWidth={1.5} />
+      </>
+    ) : (
+      <>{grass}{stripes}
+        <rect x="10" y="10" width={W-20} height={H-20} fill="none" stroke={wl} strokeWidth={sw} />
+        <rect x={W/2-40} y="4" width="80" height="14" fill="none" stroke={wl} strokeWidth={sw} />
+        <rect x={W/2-90} y="10" width="180" height="90" fill="none" stroke={wl} strokeWidth={1.5} />
+        <rect x={W/2-50} y="10" width="100" height="40" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth="1" />
+        <circle cx={W/2} cy="70" r="3" fill="rgba(255,255,255,0.45)" />
+        <path d={`M ${W/2-46} 100 A 52 52 0 0 0 ${W/2+46} 100`} fill="none" stroke={wl} strokeWidth={1.5} />
+      </>
+    );
   }
 
   // full
-  return <>{grass}{stripes}
-    <rect x="10" y="10" width={W-20} height={H-20} fill="none" stroke={wl} strokeWidth={sw} />
-    <rect x={W/2-38} y="4" width="76" height="14" fill="none" stroke={wl} strokeWidth={sw} />
-    <rect x={W/2-38} y={H-18} width="76" height="14" fill="none" stroke={wl} strokeWidth={sw} />
-    <line x1="10" y1={H/2} x2={W-10} y2={H/2} stroke={wl} strokeWidth={1.5} />
-    <circle cx={W/2} cy={H/2} r="46" fill="none" stroke={wl} strokeWidth={1.5} />
-    <circle cx={W/2} cy={H/2} r="3" fill={wl} />
-    <rect x={W/2-85} y="10" width="170" height="80" fill="none" stroke={wl} strokeWidth={1.5} />
-    <rect x={W/2-85} y={H-90} width="170" height="80" fill="none" stroke={wl} strokeWidth={1.5} />
-  </>;
+  return isLandscape ? (
+    <>{grass}{stripes}
+      <rect x="10" y="10" width={W-20} height={H-20} fill="none" stroke={wl} strokeWidth={sw} />
+      <rect x="4" y={H/2-38} width="14" height="76" fill="none" stroke={wl} strokeWidth={sw} />
+      <rect x={W-18} y={H/2-38} width="14" height="76" fill="none" stroke={wl} strokeWidth={sw} />
+      <line x1={W/2} y1="10" x2={W/2} y2={H-10} stroke={wl} strokeWidth={1.5} />
+      <circle cx={W/2} cy={H/2} r="46" fill="none" stroke={wl} strokeWidth={1.5} />
+      <circle cx={W/2} cy={H/2} r="3" fill={wl} />
+      <rect x="10" y={H/2-85} width="80" height="170" fill="none" stroke={wl} strokeWidth={1.5} />
+      <rect x={W-90} y={H/2-85} width="80" height="170" fill="none" stroke={wl} strokeWidth={1.5} />
+    </>
+  ) : (
+    <>{grass}{stripes}
+      <rect x="10" y="10" width={W-20} height={H-20} fill="none" stroke={wl} strokeWidth={sw} />
+      <rect x={W/2-38} y="4" width="76" height="14" fill="none" stroke={wl} strokeWidth={sw} />
+      <rect x={W/2-38} y={H-18} width="76" height="14" fill="none" stroke={wl} strokeWidth={sw} />
+      <line x1="10" y1={H/2} x2={W-10} y2={H/2} stroke={wl} strokeWidth={1.5} />
+      <circle cx={W/2} cy={H/2} r="46" fill="none" stroke={wl} strokeWidth={1.5} />
+      <circle cx={W/2} cy={H/2} r="3" fill={wl} />
+      <rect x={W/2-85} y="10" width="170" height="80" fill="none" stroke={wl} strokeWidth={1.5} />
+      <rect x={W/2-85} y={H-90} width="170" height="80" fill="none" stroke={wl} strokeWidth={1.5} />
+    </>
+  );
 }
 
 // ── Element renderers ──────────────────────────────────────────────────────────

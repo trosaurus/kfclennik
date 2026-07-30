@@ -33,6 +33,9 @@ export interface DrawingScene {
   // toont altijd enkel de basisplaatsing van de elementen, dus dit veld wordt
   // hier bewust genegeerd (alleen aanwezig voor type-consistentie met api.ts).
   animation?: { frames: Array<{ id: string; label?: string; positions: Record<string, { x: number; y: number; x2?: number; y2?: number }> }> };
+  // Handmatig gekozen vorm van het vector-veld (zie DrawingCanvas.tsx) — genegeerd
+  // zolang backgroundImage aanwezig is, want dan bepaalt de afbeelding zelf de vorm.
+  orientation?: 'portrait' | 'landscape';
 }
 
 const PLAYER_HEX: Record<string, string> = {
