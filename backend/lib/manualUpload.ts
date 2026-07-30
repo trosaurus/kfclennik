@@ -11,7 +11,12 @@ import pdfParse from 'pdf-parse';
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'manuals');
 const MAX_BASE64_LENGTH = 28_000_000; // ~20MB gedecodeerd
 
+// teamId is een Keystone cuid (lowercase alfanumeriek) — expliciet valideren
+// voorkomt dat een pad met "../" buiten UPLOAD_DIR terechtkomt.
+const CUID_RE = /^[a-z0-9]+$/i;
+
 function manualPath(teamId: string): string {
+  if (!CUID_RE.test(teamId)) throw new Error('Ongeldig teamId.');
   return path.join(UPLOAD_DIR, `${teamId}.pdf`);
 }
 

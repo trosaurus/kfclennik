@@ -14,6 +14,18 @@ const EXERCISE_QUERY = `
   beschrijving coachingPunten maximaalActief fun drawingData
 `;
 
+function requireSignedIn(context: any): void {
+  if (!context.session) throw new Error('Niet ingelogd.');
+}
+
+function requireOwnTeamOrAdmin(context: any, teamId: string): void {
+  const session = context.session;
+  if (!session) throw new Error('Niet ingelogd.');
+  if (session.data.role !== 'admin' && session.data.team?.id !== teamId) {
+    throw new Error('Geen toegang tot deze ploeg.');
+  }
+}
+
 const TRAINING_QUERY = `
   id titel date jaarplanLabel
   coachNaam tijdstip leeftijdscategorie niveau
@@ -47,24 +59,36 @@ export function extendGraphqlSchema(schema: GraphQLSchema): GraphQLSchema {
           { teamId, filename, contentBase64 }: { teamId: string; filename: string; contentBase64: string },
           context: any
         ) => {
+          requireOwnTeamOrAdmin(context, teamId);
           const { text, uploadedAt } = await saveTeamManual(teamId, contentBase64);
+          // context.sudo(): Team.update staat bewust op admin-only (zie schema.ts/
+          // access.ts) omdat trainers de ploeg zelf niet mogen hernoemen — maar
+          // ze moeten wél de manual van hun eigen ploeg kunnen uploaden. De
+          // requireOwnTeamOrAdmin-check hierboven ís de autorisatie hiervoor;
+          // sudo() slaat enkel de generieke Team.update-check over voor dit ene,
+          // al-geautoriseerde veldenupdate.
           // context.db (i.s.o. context.query) geeft de rauwe Prisma-waarden terug
           // (een echt Date-object voor manualUploadedAt) i.p.v. via een interne
           // GraphQL-uitvoering te gaan, waar de DateTime-scalar een Date-instantie
           // verwacht bij het serialiseren van de respons.
-          return context.db.Team.updateOne({
+          return context.sudo().db.Team.updateOne({
             where: { id: teamId },
             data: { manualFileName: filename, manualUploadedAt: uploadedAt, manualText: text },
           });
         },
         removeTeamManual: async (_root: unknown, { teamId }: { teamId: string }, context: any) => {
+          requireOwnTeamOrAdmin(context, teamId);
           deleteTeamManual(teamId);
-          return context.db.Team.updateOne({
+          return context.sudo().db.Team.updateOne({
             where: { id: teamId },
             data: { manualFileName: '', manualUploadedAt: null, manualText: '' },
           });
         },
         exportTrainingPptx: async (_root: unknown, { id }: { id: string }, context: any) => {
+          requireSignedIn(context);
+          // Training.query-access is al ploeg-gescoped (zie schema.ts) — een
+          // training buiten de eigen ploeg komt hier gewoon als `null` terug,
+          // exact zoals een training die echt niet bestaat.
           const training = await context.query.Training.findOne({ where: { id }, query: TRAINING_QUERY });
           if (!training) throw new Error('Training niet gevonden');
 
@@ -113,6 +137,10 @@ export function extendGraphqlSchema(schema: GraphQLSchema): GraphQLSchema {
           return buffer.toString('base64');
         },
         exportExercisePptx: async (_root: unknown, { id }: { id: string }, context: any) => {
+          requireSignedIn(context);
+          // Exercise.query-access is al ploeg-gescoped via de training (zie
+          // schema.ts) — een oefening buiten de eigen ploeg komt hier gewoon als
+          // `null` terug, exact zoals een oefening die echt niet bestaat.
           const ex = await context.query.Exercise.findOne({ where: { id }, query: EXERCISE_QUERY });
           if (!ex) throw new Error('Oefening niet gevonden');
 

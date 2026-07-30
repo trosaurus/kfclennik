@@ -1,7 +1,12 @@
 import { list } from '@keystone-6/core';
-import { allowAll } from '@keystone-6/core/access';
 import { text, integer, relationship, timestamp, select, password } from '@keystone-6/core/fields';
 import type { Lists } from '.keystone/types';
+import {
+  isSignedIn, isAdmin, anySignedInFilter, selfOrAdminFilter, ownTeamFilter,
+  teamOwnedFilter, matchScopedFilter, attendanceScopedFilter,
+  trainingOwnedFilter, exerciseScopedFilter,
+  relationGuard,
+} from './access';
 
 // ── Lists ──────────────────────────────────────────────────────────────────────
 
@@ -9,7 +14,10 @@ export const lists: Lists = {
 
   // ── Trainer (user account) ──────────────────────────────────────────────────
   Trainer: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isAdmin, update: isAdmin, delete: isAdmin },
+      filter: { query: selfOrAdminFilter, update: selfOrAdminFilter, delete: selfOrAdminFilter },
+    },
     fields: {
       name:  text({ validation: { isRequired: true } }),
       email: text({ validation: { isRequired: true }, isIndexed: 'unique' }),
@@ -29,7 +37,10 @@ export const lists: Lists = {
 
   // ── Team ────────────────────────────────────────────────────────────────────
   Team: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isAdmin, update: isAdmin, delete: isAdmin },
+      filter: { query: ownTeamFilter, update: ownTeamFilter, delete: ownTeamFilter },
+    },
     fields: {
       name: text({ validation: { isRequired: true } }),
       category: select({
@@ -72,7 +83,11 @@ export const lists: Lists = {
 
   // ── Player ──────────────────────────────────────────────────────────────────
   Player: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: teamOwnedFilter, update: teamOwnedFilter, delete: teamOwnedFilter },
+    },
+    hooks: { validateInput: relationGuard({ field: 'team', list: 'Team' }) },
     fields: {
       name:     text({ validation: { isRequired: true } }),
       number:   integer({}),
@@ -101,7 +116,11 @@ export const lists: Lists = {
 
   // ── Match ───────────────────────────────────────────────────────────────────
   Match: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: teamOwnedFilter, update: teamOwnedFilter, delete: teamOwnedFilter },
+    },
+    hooks: { validateInput: relationGuard({ field: 'team', list: 'Team' }, { field: 'weekTheme', list: 'WeekTheme' }) },
     fields: {
       opponent:      text({ validation: { isRequired: true } }),
       date:          timestamp({ validation: { isRequired: true } }),
@@ -145,7 +164,11 @@ export const lists: Lists = {
 
   // ── Period ──────────────────────────────────────────────────────────────────
   Period: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: matchScopedFilter, update: matchScopedFilter, delete: matchScopedFilter },
+    },
+    hooks: { validateInput: relationGuard({ field: 'match', list: 'Match' }) },
     fields: {
       match:           relationship({ ref: 'Match.periods', many: false }),
       periodNumber:    integer({ validation: { isRequired: true } }),
@@ -160,7 +183,11 @@ export const lists: Lists = {
 
   // ── Goal ────────────────────────────────────────────────────────────────────
   Goal: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: matchScopedFilter, update: matchScopedFilter, delete: matchScopedFilter },
+    },
+    hooks: { validateInput: relationGuard({ field: 'match', list: 'Match' }, { field: 'player', list: 'Player' }) },
     fields: {
       player:       relationship({ ref: 'Player.goals', many: false }),
       match:        relationship({ ref: 'Match.goals',  many: false }),
@@ -172,7 +199,11 @@ export const lists: Lists = {
 
   // ── Attendance ──────────────────────────────────────────────────────────────
   Attendance: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: matchScopedFilter, update: matchScopedFilter, delete: matchScopedFilter },
+    },
+    hooks: { validateInput: relationGuard({ field: 'match', list: 'Match' }, { field: 'player', list: 'Player' }) },
     fields: {
       player:  relationship({ ref: 'Player.attendances', many: false }),
       match:   relationship({ ref: 'Match.attendances',  many: false }),
@@ -196,7 +227,11 @@ export const lists: Lists = {
 
   // ── PlayTimeSession ─────────────────────────────────────────────────────────
   PlayTimeSession: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: attendanceScopedFilter, update: attendanceScopedFilter, delete: attendanceScopedFilter },
+    },
+    hooks: { validateInput: relationGuard({ field: 'attendance', list: 'Attendance' }) },
     fields: {
       attendance:      relationship({ ref: 'Attendance.playTimeSessions', many: false }),
       period:          integer({ defaultValue: 1 }),
@@ -214,9 +249,13 @@ export const lists: Lists = {
     },
   }),
 
-  // ── WeekTheme ───────────────────────────────────────────────────────────────
+  // ── WeekTheme (club-breed gedeeld — elke trainer mag aanmaken, enkel admin
+  // bewerkt/verwijdert het seizoensoverzicht) ──────────────────────────────────
   WeekTheme: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isAdmin, delete: isAdmin },
+      filter: { query: anySignedInFilter, update: isAdmin, delete: isAdmin },
+    },
     fields: {
       title: text({ validation: { isRequired: true } }),
       category: select({
@@ -243,7 +282,15 @@ export const lists: Lists = {
 
   // ── Evaluation ──────────────────────────────────────────────────────────────
   Evaluation: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: matchScopedFilter, update: matchScopedFilter, delete: matchScopedFilter },
+    },
+    hooks: {
+      validateInput: relationGuard(
+        { field: 'match', list: 'Match' }, { field: 'player', list: 'Player' }, { field: 'theme', list: 'WeekTheme' }
+      ),
+    },
     fields: {
       player:    relationship({ ref: 'Player.evaluations',    many: false }),
       match:     relationship({ ref: 'Match.evaluations',     many: false }),
@@ -256,7 +303,11 @@ export const lists: Lists = {
 
   // ── Training (voorbereide trainingssessie — velden volgen Template_training_KFC) ──
   Training: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: trainingOwnedFilter, update: trainingOwnedFilter, delete: trainingOwnedFilter },
+    },
+    hooks: { validateInput: relationGuard({ field: 'team', list: 'Team' }, { field: 'trainer', list: 'Trainer' }) },
     fields: {
       trainer:  relationship({ ref: 'Trainer.trainings', many: false }),   // maker, voor attributie
       team:     relationship({ ref: 'Team.trainings',    many: false }),
@@ -318,9 +369,14 @@ export const lists: Lists = {
     ui: { labelField: 'titel' },
   }),
 
-  // ── OefeningDatabank (herbruikbare oefeningenbibliotheek, club-breed gedeeld) ──
+  // ── OefeningDatabank (herbruikbare oefeningenbibliotheek, club-breed gedeeld —
+  // elke ingelogde trainer mag de gedeelde bibliotheek aanvullen en bijwerken) ──
   OefeningDatabank: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: anySignedInFilter, update: anySignedInFilter, delete: anySignedInFilter },
+    },
+    hooks: { validateInput: relationGuard({ field: 'createdBy', list: 'Trainer' }) },
     fields: {
       naam: text({ validation: { isRequired: true } }),
       fase: select({
@@ -387,7 +443,11 @@ export const lists: Lists = {
 
   // ── Exercise (oefening binnen een training — velden volgen template pagina 3-4) ──
   Exercise: list({
-    access: allowAll,
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: exerciseScopedFilter, update: exerciseScopedFilter, delete: exerciseScopedFilter },
+    },
+    hooks: { validateInput: relationGuard({ field: 'training', list: 'Training' }) },
     fields: {
       training: relationship({ ref: 'Training.exercises', many: false }),
       order:    integer({ defaultValue: 0 }),
