@@ -269,18 +269,39 @@ export interface ParsedExercise {
 /** De fase én de naam staan samen in de grote groene bannertitel bovenaan de
  * pagina, bv. "OPWARMING: MULTISKILLZ - POORTJES & TIKKERS" — fase vóór de
  * eerste dubbele punt, naam erna. De banner is altijd het bovenste fragment
- * op de pagina dat met een van de vier fases begint. */
+ * op de pagina dat met een van de vier fases begint.
+ *
+ * Het lettertype/de opmaak van de banner (bv. vet "OPWARMING:" gevolgd door
+ * niet-vette naam) kan ervoor zorgen dat pdf.js dit als twee aparte
+ * tekstfragmenten teruggeeft i.p.v. één samengevoegd fragment — dus herbouwen
+ * we de volledige regel uit alle fragmenten op dezelfde rij (y-hoogte),
+ * ongeacht hoe reconstructPageSegments ze al dan niet had samengevoegd. */
 function detectFaseAndNaamFromBanner(segs: PosSeg[]): { fase: ExerciseFase | null; naam: string | null } {
   const candidates = segs.filter(s => /^(OPWARMING|TUSSENVORM|WEDSTRIJDVORM|COOLING\s*DOWN)\b/i.test(s.text));
   if (candidates.length === 0) return { fase: null, naam: null };
-  const banner = candidates.reduce((a, b) => (b.y > a.y ? b : a));
+  const anchor = candidates.reduce((a, b) => (b.y > a.y ? b : a));
   let fase: ExerciseFase | null = null;
-  if (/^opwarming/i.test(banner.text)) fase = 'opwarming';
-  else if (/^tussenvorm/i.test(banner.text)) fase = 'tussenvorm';
-  else if (/^wedstrijdvorm/i.test(banner.text)) fase = 'wedstrijdvorm';
-  else if (/^cooling/i.test(banner.text)) fase = 'cooling_down';
-  const colonIdx = banner.text.indexOf(':');
-  const naam = colonIdx === -1 ? null : (banner.text.slice(colonIdx + 1).trim() || null);
+  if (/^opwarming/i.test(anchor.text)) fase = 'opwarming';
+  else if (/^tussenvorm/i.test(anchor.text)) fase = 'tussenvorm';
+  else if (/^wedstrijdvorm/i.test(anchor.text)) fase = 'wedstrijdvorm';
+  else if (/^cooling/i.test(anchor.text)) fase = 'cooling_down';
+
+  const Y_TOL = 2;
+  const fullLine = segs
+    .filter(s => Math.abs(s.y - anchor.y) <= Y_TOL)
+    .sort((a, b) => a.xStart - b.xStart)
+    .map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
+
+  const colonIdx = fullLine.indexOf(':');
+  let naam: string | null = null;
+  if (colonIdx !== -1) {
+    naam = fullLine.slice(colonIdx + 1).trim() || null;
+  } else {
+    // Geen dubbele punt teruggevonden — knip dan het fase-woord (+ evt.
+    // volgnummer) van de rest van de regel af als noodgreep.
+    const m = fullLine.match(/^(OPWARMING|TUSSENVORM|WEDSTRIJDVORM|COOLING\s*DOWN)\b\s*\d*\s*[:\-–]?\s*(.*)$/i);
+    naam = m && m[2].trim() ? m[2].trim() : null;
+  }
   return { fase, naam };
 }
 
