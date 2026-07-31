@@ -10,6 +10,8 @@ type Trainer {
   team: Team
   trainings(where: TrainingWhereInput! = {}, orderBy: [TrainingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TrainingWhereUniqueInput): [Training!]
   trainingsCount(where: TrainingWhereInput! = {}): Int
+  sharedTrainings(where: TrainingWhereInput! = {}, orderBy: [TrainingOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TrainingWhereUniqueInput): [Training!]
+  sharedTrainingsCount(where: TrainingWhereInput! = {}): Int
 }
 
 type PasswordState {
@@ -31,6 +33,7 @@ input TrainerWhereInput {
   role: StringNullableFilter
   team: TeamWhereInput
   trainings: TrainingManyRelationFilter
+  sharedTrainings: TrainingManyRelationFilter
 }
 
 input IDFilter {
@@ -118,6 +121,7 @@ input TrainerUpdateInput {
   role: String
   team: TeamRelateToOneForUpdateInput
   trainings: TrainingRelateToManyForUpdateInput
+  sharedTrainings: TrainingRelateToManyForUpdateInput
 }
 
 input TeamRelateToOneForUpdateInput {
@@ -145,6 +149,7 @@ input TrainerCreateInput {
   role: String
   team: TeamRelateToOneForCreateInput
   trainings: TrainingRelateToManyForCreateInput
+  sharedTrainings: TrainingRelateToManyForCreateInput
 }
 
 input TeamRelateToOneForCreateInput {
@@ -998,6 +1003,8 @@ type Training {
   id: ID!
   trainer: Trainer
   team: Team
+  sharedWith(where: TrainerWhereInput! = {}, orderBy: [TrainerOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TrainerWhereUniqueInput): [Trainer!]
+  sharedWithCount(where: TrainerWhereInput! = {}): Int
   date: DateTime
   titel: String
   duurMinuten: Int
@@ -1046,6 +1053,7 @@ input TrainingWhereInput {
   id: IDFilter
   trainer: TrainerWhereInput
   team: TeamWhereInput
+  sharedWith: TrainerManyRelationFilter
   date: DateTimeFilter
   titel: StringFilter
   duurMinuten: IntNullableFilter
@@ -1128,6 +1136,7 @@ input TrainingOrderByInput {
 input TrainingUpdateInput {
   trainer: TrainerRelateToOneForUpdateInput
   team: TeamRelateToOneForUpdateInput
+  sharedWith: TrainerRelateToManyForUpdateInput
   date: DateTime
   titel: String
   duurMinuten: Int
@@ -1185,6 +1194,7 @@ input TrainingUpdateArgs {
 input TrainingCreateInput {
   trainer: TrainerRelateToOneForCreateInput
   team: TeamRelateToOneForCreateInput
+  sharedWith: TrainerRelateToManyForCreateInput
   date: DateTime
   titel: String
   duurMinuten: Int

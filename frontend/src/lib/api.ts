@@ -1715,6 +1715,7 @@ export interface Training {
   id: string;
   trainer: { id: string; name: string } | null;
   team: { id: string } | null;
+  sharedWith: Array<{ id: string; name: string; team: { id: string; name: string } | null }>;
   date: string;
   titel: string;
   duurMinuten: number;
@@ -1763,7 +1764,7 @@ export interface Training {
 }
 
 const TRAINING_FIELDS = `
-  id trainer { id name } team { id } date titel duurMinuten aantalSpelers status createdAt
+  id trainer { id name } team { id } sharedWith { id name team { id name } } date titel duurMinuten aantalSpelers status createdAt
   coachNaam tijdstip leeftijdscategorie niveau
   hoofdmoment spelfase basisvaardigheid
   speluitdagingWie speluitdagingWat speluitdagingWaar speluitdagingWanneer
@@ -1821,6 +1822,71 @@ export async function updateTraining(id: string, input: Record<string, unknown>)
 
 export async function deleteTraining(id: string): Promise<void> {
   await gql(`mutation { deleteTraining(where: { id: "${id}" }) { id } }`);
+}
+
+/** Trainingen die andere trainers expliciet met deze trainer gedeeld hebben
+ * (via TrainingEditor "Delen"), ongeacht ploeg — enkel leesrecht op de
+ * achterliggende data, zie backend/access.ts trainingVisibleFilter. */
+export async function getSharedTrainings(trainerId: string): Promise<Training[]> {
+  const data = await gql(
+    `query GetSharedTrainings($trainerId: ID!) {
+       trainings(
+         where: { sharedWith: { some: { id: { equals: $trainerId } } } },
+         take: 500, orderBy: { date: desc }
+       ) { ${TRAINING_FIELDS} exercises { ${EXERCISE_FIELDS} } }
+     }`,
+    { trainerId }
+  );
+  return (data.trainings as Training[]).map(t => ({
+    ...t, exercises: [...t.exercises].sort((a, b) => a.order - b.order),
+  }));
+}
+
+/** Vervangt de volledige deel-lijst van een training. Enkel de maker (of een
+ * admin) mag dit — zie trainingOwnedFilter op Training.update in schema.ts. */
+export async function setTrainingShare(id: string, trainerIds: string[]): Promise<void> {
+  await gql(
+    `mutation SetTrainingShare($id: ID!, $ids: [TrainerWhereUniqueInput!]!) {
+       updateTraining(where: { id: $id }, data: { sharedWith: { set: $ids } }) { id }
+     }`,
+    { id, ids: trainerIds.map(tid => ({ id: tid })) }
+  );
+}
+
+/** Maakt een eigen, volledig bewerkbare kopie van een (met mij gedeelde)
+ * training — inclusief oefeningen. De kopie hoort bij de eigen ploeg/trainer,
+ * niet bij het origineel, en staat dus los van eventuele latere wijzigingen
+ * of het intrekken van de share door de maker. */
+export async function duplicateTraining(source: Training, trainerId: string, teamId?: string): Promise<Training> {
+  const copy = await createTraining({
+    date: source.date, trainerId, teamId,
+    titel: source.titel ? `${source.titel} (kopie)` : '',
+  });
+  const { titel: _titel, ...rest } = source;
+  const fieldUpdate: Record<string, unknown> = {
+    duurMinuten: rest.duurMinuten, aantalSpelers: rest.aantalSpelers, status: 'concept',
+    coachNaam: rest.coachNaam, tijdstip: rest.tijdstip, leeftijdscategorie: rest.leeftijdscategorie, niveau: rest.niveau,
+    hoofdmoment: rest.hoofdmoment, spelfase: rest.spelfase, basisvaardigheid: rest.basisvaardigheid,
+    speluitdagingWie: rest.speluitdagingWie, speluitdagingWat: rest.speluitdagingWat,
+    speluitdagingWaar: rest.speluitdagingWaar, speluitdagingWanneer: rest.speluitdagingWanneer,
+    coachingswoorden: rest.coachingswoorden, materiaal: rest.materiaal,
+    actiefAanpak: rest.actiefAanpak, funAanpak: rest.funAanpak, individueleAandacht: rest.individueleAandacht,
+    teamprincipe: rest.teamprincipe, spelprincipe: rest.spelprincipe, focusPunten: rest.focusPunten,
+    jaarplanLabel: rest.jaarplanLabel, trainingsschema: rest.trainingsschema,
+  };
+  await updateTraining(copy.id, fieldUpdate);
+
+  for (let i = 0; i < source.exercises.length; i++) {
+    const ex = source.exercises[i];
+    await createExercise(copy.id, {
+      fase: ex.fase, naam: ex.naam, duurMinuten: ex.duurMinuten, order: i,
+      organisatieSpelers: ex.organisatieSpelers, organisatieAfmetingen: ex.organisatieAfmetingen,
+      organisatieMateriaal: ex.organisatieMateriaal, beschrijving: ex.beschrijving,
+      coachingPunten: ex.coachingPunten, maximaalActief: ex.maximaalActief, fun: ex.fun,
+      drawingData: ex.drawingData,
+    });
+  }
+  return getTraining(copy.id) as Promise<Training>;
 }
 
 export async function createExercise(trainingId: string, input: {

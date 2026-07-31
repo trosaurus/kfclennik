@@ -1,0 +1,40 @@
+.home-header { margin-bottom: 28px; }
+
+.home-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.home-tile {
+  aspect-ratio: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: border-color .15s, transform .15s, background .15s;
+}
+.home-tile:hover {
+  border-color: var(--red);
+  background: var(--bg-hover);
+  transform: translateY(-2px);
+}
+
+.home-tile-icon { font-size: 40px; line-height: 1; }
+.home-tile-label {
+  font-family: var(--font-heading); font-size: 17px; font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase; color: var(--text);
+}
+.home-tile-desc { font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+
+@media (max-width: 480px) {
+  .home-tiles { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .home-tile-icon { font-size: 32px; }
+  .home-tile-label { font-size: 14px; }
+}

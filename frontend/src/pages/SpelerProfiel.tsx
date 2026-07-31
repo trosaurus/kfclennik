@@ -76,17 +76,10 @@ export default function SpelerProfiel() {
     }));
   }, [s]);
 
-  if (loading) return <div className="page"><div className="loading-spinner">Spelerprofiel laden...</div></div>;
+  if (loading) return <div className="loading-spinner">Spelerprofiel laden...</div>;
 
   return (
-    <div className="page">
-      <div className="sp-header">
-        <div>
-          <h1 className="page-title">Spelerprofiel</h1>
-          <p className="page-subtitle">Statistieken en evaluaties per speler</p>
-        </div>
-      </div>
-
+    <div className="sp-embedded">
       {sortedPlayers.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">👤</div>

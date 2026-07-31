@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { logout } from '../lib/auth';
 import { useTeam } from '../lib/TeamContext';
 import { useTheme } from '../lib/ThemeContext';
@@ -11,13 +11,13 @@ export default function Layout() {
   const location = useLocation();
 
   const NAV_ITEMS = [
-    { to: '/',            label: 'Matchday',    icon: '⚽', end: true },
+    { to: '/',            label: 'Start',        icon: '🏠', end: true },
+    { to: '/matchday',    label: 'Matchday',     icon: '⚽' },
     { to: '/spelers',     label: 'Spelers',      icon: '👥' },
     { to: '/wedstrijden', label: 'Wedstrijden',  icon: '📋' },
     { to: '/seizoen',     label: 'Seizoen',      icon: '📈' },
     { to: '/trainingen',  label: 'Trainingen',   icon: '📝' },
     { to: '/oefendatabank', label: 'Oefeningen', icon: '📚' },
-    { to: '/profiel',     label: 'Profiel',      icon: '👤' },
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: '⚙️' }] : []),
   ];
 
@@ -30,7 +30,7 @@ export default function Layout() {
     <div className="layout">
       <header className="header">
         <div className="header-inner">
-          <div className="header-brand">
+          <Link to="/" className="header-brand">
             <img src={logo} alt="KFC Lennik" className="brand-logo" />
             <div className="brand-text">
               <span className="brand-name">KFC Lennik</span>
@@ -38,7 +38,7 @@ export default function Layout() {
                 {trainer?.team ? `${trainer.team.name} · ${trainer.team.category}` : '4157'}
               </span>
             </div>
-          </div>
+          </Link>
 
           <nav className="nav desktop-nav">
             {NAV_ITEMS.map(item => (

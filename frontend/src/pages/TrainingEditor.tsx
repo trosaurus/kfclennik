@@ -6,7 +6,7 @@ import {
   Training, Exercise, ExerciseFase, EXERCISE_FASE_LABELS,
   wedstrijdvormPercentage, parseDrawingScene, exportTrainingToPptx, exportExerciseToPptx,
   getOefeningDatabank, createOefeningDatabankItem, OefeningDatabankItem, OefeningCategorie, Doelgroep, DOELGROEP_LEEFTIJDEN, SPELPRINCIPE_LABELS,
-  getTeamManual,
+  getTeamManual, getTrainers, setTrainingShare, TrainerRecord,
 } from '../lib/api';
 import { getJaarplanWeekForDate, getCategoryBracket, formatJaarplanLabel } from '../lib/jaarplan';
 import { suggestExercises, LibraryExercise, KRACHTIGE_LEEROMGEVING_PRINCIPES } from '../lib/oefeningenbibliotheek';
@@ -89,7 +89,7 @@ const EMPTY_FORM = {
 export default function TrainingEditor() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { category, trainer } = useTeam();
+  const { category, trainer, isAdmin } = useTeam();
 
   const [training, setTraining] = useState<Training | null>(null);
   const [loading, setLoading]   = useState(true);
@@ -133,7 +133,48 @@ export default function TrainingEditor() {
   const [saveToDbTeamprincipe, setSaveToDbTeamprincipe] = useState('');
   const [savingToDb, setSavingToDb] = useState(false);
 
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [shareTrainers, setShareTrainers] = useState<TrainerRecord[]>([]);
+  const [shareTrainersLoaded, setShareTrainersLoaded] = useState(false);
+  const [shareSelected, setShareSelected] = useState<Set<string>>(new Set());
+  const [shareSaving, setShareSaving] = useState(false);
+
   useEffect(() => { if (id) load(id); }, [id]);
+
+  async function openShareModal() {
+    if (!training) return;
+    setShareSelected(new Set(training.sharedWith.map(t => t.id)));
+    setShareModalOpen(true);
+    if (!shareTrainersLoaded) {
+      const all = await getTrainers();
+      setShareTrainers(all.filter(t => t.id !== trainer?.id));
+      setShareTrainersLoaded(true);
+    }
+  }
+
+  function toggleShareTrainer(trainerId: string) {
+    setShareSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(trainerId)) next.delete(trainerId); else next.add(trainerId);
+      return next;
+    });
+  }
+
+  async function handleSaveShare() {
+    if (!training) return;
+    setShareSaving(true);
+    try {
+      const ids = Array.from(shareSelected);
+      await setTrainingShare(training.id, ids);
+      setTraining({
+        ...training,
+        sharedWith: shareTrainers.filter(t => shareSelected.has(t.id)),
+      });
+      setShareModalOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delen mislukt');
+    } finally { setShareSaving(false); }
+  }
 
   async function load(trainingId: string): Promise<Training | undefined> {
     setLoading(true);
@@ -433,12 +474,18 @@ export default function TrainingEditor() {
     });
   const saveToDbExercise = exercises.find(e => e.id === saveToDbFor) ?? null;
   const dbImportForExercise = exercises.find(e => e.id === dbImportFor) ?? null;
+  const canShare = isAdmin || (!!trainer && training.trainer?.id === trainer.id);
 
   return (
     <div className="page">
       <div className="te-header">
         <button className="btn btn-ghost btn-sm" onClick={() => navigate('/trainingen')}>← Terug</button>
         <div className="te-header-actions">
+          {canShare && (
+            <button className="btn btn-outline" onClick={openShareModal}>
+              🔗 Delen{training.sharedWith.length > 0 ? ` (${training.sharedWith.length})` : ''}
+            </button>
+          )}
           <button className="btn btn-outline" onClick={() => navigate(`/trainingen/${training.id}/modus`)}>▶ Trainingsmodus</button>
           <button className="btn btn-outline" disabled={exporting || saving} onClick={handleExportPptx}>
             {exporting ? 'Exporteren...' : '📊 Exporteer naar PowerPoint'}
@@ -1032,6 +1079,44 @@ export default function TrainingEditor() {
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setSaveToDbFor(null)}>Annuleer</button>
               <button className="btn btn-primary" disabled={savingToDb} onClick={handleSaveToDb}>{savingToDb ? 'Bewaren...' : 'Bewaar in databank'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delen-modal ── */}
+      {shareModalOpen && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShareModalOpen(false)}>
+          <div className="modal">
+            <div className="modal-title">🔗 Training delen</div>
+            <p style={{ color: 'var(--text-mid)', marginBottom: 16, lineHeight: 1.6 }}>
+              Geselecteerde trainers kunnen deze training bekijken en er een eigen, bewerkbare kopie van maken.
+              Ze kunnen het origineel niet wijzigen.
+            </p>
+            {!shareTrainersLoaded ? (
+              <div className="loading-spinner">Trainers laden...</div>
+            ) : shareTrainers.length === 0 ? (
+              <div className="empty-state">Geen andere trainers gevonden</div>
+            ) : (
+              <div className="te-share-list">
+                {shareTrainers.map(t => (
+                  <label key={t.id} className="te-share-row">
+                    <input
+                      type="checkbox"
+                      checked={shareSelected.has(t.id)}
+                      onChange={() => toggleShareTrainer(t.id)}
+                    />
+                    <span className="te-share-name">{t.name}</span>
+                    <span className="te-share-team">{t.team ? `${t.team.name} (${t.team.category})` : 'Geen ploeg'}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={() => setShareModalOpen(false)}>Annuleer</button>
+              <button className="btn btn-primary" disabled={shareSaving || !shareTrainersLoaded} onClick={handleSaveShare}>
+                {shareSaving ? 'Bewaren...' : 'Delen bewaren'}
+              </button>
             </div>
           </div>
         </div>

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTeam } from '../lib/TeamContext';
 import {
   getTrainings, createTraining, updateTraining, deleteTraining, createExercise, Training,
-  wedstrijdvormPercentage,
+  wedstrijdvormPercentage, getSharedTrainings, duplicateTraining,
 } from '../lib/api';
 import { parseTrainingPdf } from '../lib/pdfImport';
 import { getJaarplanWeekForDate, formatJaarplanLabel } from '../lib/jaarplan';
@@ -20,6 +20,8 @@ export default function Trainingen() {
   const { teamId, trainer } = useTeam();
   const navigate = useNavigate();
   const [trainings, setTrainings] = useState<Training[]>([]);
+  const [sharedTrainings, setSharedTrainings] = useState<Training[]>([]);
+  const [copyingId, setCopyingId] = useState<string | null>(null);
   const [loading, setLoading]     = useState(true);
   const [creating, setCreating]   = useState(false);
   const [importing, setImporting] = useState(false);
@@ -34,7 +36,23 @@ export default function Trainingen() {
 
   async function load() {
     setLoading(true);
-    try { setTrainings(await getTrainings(teamId ?? undefined)); } finally { setLoading(false); }
+    try {
+      const [own, shared] = await Promise.all([
+        getTrainings(teamId ?? undefined),
+        trainer ? getSharedTrainings(trainer.id) : Promise.resolve([]),
+      ]);
+      setTrainings(own);
+      setSharedTrainings(shared);
+    } finally { setLoading(false); }
+  }
+
+  async function handleCopyShared(t: Training) {
+    if (!trainer) return;
+    setCopyingId(t.id);
+    try {
+      const copy = await duplicateTraining(t, trainer.id, teamId ?? undefined);
+      navigate(`/trainingen/${copy.id}`);
+    } finally { setCopyingId(null); }
   }
 
   async function handleCreate() {
@@ -164,6 +182,35 @@ export default function Trainingen() {
         <div className="tr-import-error">
           {importError}
           <button className="btn btn-ghost btn-sm" onClick={() => setImportError(null)}>✕</button>
+        </div>
+      )}
+
+      {sharedTrainings.length > 0 && (
+        <div className="tr-group tr-shared-group">
+          <div className="tr-group-label">🔗 Gedeeld met mij</div>
+          <div className="tr-list">
+            {sharedTrainings.map(t => (
+              <div key={t.id} className="tr-card card">
+                <div className="tr-card-main" style={{ cursor: 'default' }}>
+                  <div className="tr-card-date">
+                    <span className="tr-date-day">{fmtDate(t.date)}</span>
+                  </div>
+                  <div className="tr-card-body">
+                    <div className="tr-card-title">{t.titel || t.teamprincipe || 'Naamloze training'}</div>
+                    <div className="tr-card-meta">
+                      {t.exercises.length} oefening{t.exercises.length === 1 ? '' : 'en'} · {t.duurMinuten}min
+                      {t.trainer && <> · door {t.trainer.name}</>}
+                    </div>
+                  </div>
+                </div>
+                <div className="tr-card-actions">
+                  <button className="btn btn-primary btn-sm" disabled={copyingId === t.id} onClick={() => handleCopyShared(t)}>
+                    {copyingId === t.id ? 'Kopiëren...' : '📋 Kopieer naar mijn trainingen'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

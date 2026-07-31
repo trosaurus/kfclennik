@@ -92,6 +92,47 @@ export function exerciseScopedFilter({ session }: AccessArgs) {
   return { OR: or };
 }
 
+/** Training — LEZEN: alles uit trainingOwnedFilter, plus trainingen die expliciet
+ * met deze trainer gedeeld zijn via `sharedWith`. Enkel voor de query-access:
+ * delen geeft bewust enkel leestoegang (om te kunnen bekijken/kopiëren), geen
+ * schrijfrecht — bewerken/verwijderen/(her)delen blijft via trainingOwnedFilter
+ * voorbehouden aan de maker, diens ploeg en admins. */
+export function trainingVisibleFilter({ session }: AccessArgs) {
+  if (!session) return false;
+  if (session.data.role === 'admin') return true;
+  const or: object[] = [
+    { trainer: { id: { equals: session.data.id } } },
+    { sharedWith: { some: { id: { equals: session.data.id } } } },
+  ];
+  const teamId = session.data.team?.id;
+  if (teamId) or.push({ team: { id: { equals: teamId } } });
+  return { OR: or };
+}
+
+/** Exercise — LEZEN: analoog aan trainingVisibleFilter, via `training.sharedWith`
+ * (nodig om de oefeningen van een gedeelde training te kunnen bekijken/kopiëren). */
+export function exerciseVisibleFilter({ session }: AccessArgs) {
+  if (!session) return false;
+  if (session.data.role === 'admin') return true;
+  const or: object[] = [
+    { training: { trainer: { id: { equals: session.data.id } } } },
+    { training: { sharedWith: { some: { id: { equals: session.data.id } } } } },
+  ];
+  const teamId = session.data.team?.id;
+  if (teamId) or.push({ training: { team: { id: { equals: teamId } } } });
+  return { OR: or };
+}
+
+/** Veld-toegang (niet lijst-toegang): enkel de eigenaar van het account of een
+ * admin mag het veld lezen. Gebruikt op Trainer.email/role zodat de club-brede
+ * trainerslijst (nodig om iemand te kunnen selecteren om mee te delen) wel
+ * naam + ploeg toont, maar geen e-mailadres/rol van andere trainers lekt. */
+export function selfOrAdminFieldRead({ session, item }: any) {
+  if (!session) return false;
+  if (session.data.role === 'admin') return true;
+  return item?.id === session.data.id;
+}
+
 /** Genereert een validateInput-hook die controleert dat elke opgegeven
  * relatie ("connect") verwijst naar een item dat zichtbaar is via de eigen
  * query-access van die lijst. Zo kan een niet-admin trainer bv. nooit een

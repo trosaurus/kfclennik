@@ -39,6 +39,9 @@
 .tr-group:last-child { margin-bottom: 0; }
 .tr-group-label { font-family: var(--font-heading); font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; padding-left: 2px; }
 
+.tr-shared-group { margin-bottom: 28px; padding-bottom: 22px; border-bottom: 1px solid var(--border-soft); }
+.tr-shared-group .tr-group-label { color: var(--green); }
+
 .sb-toggles {
   display: flex; background: var(--bg-elevated);
   border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;

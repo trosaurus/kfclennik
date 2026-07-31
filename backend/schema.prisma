@@ -20,6 +20,7 @@ model Trainer {
   team                            Team?              @relation("Trainer_team", fields: [teamId], references: [id])
   teamId                          String?            @map("team")
   trainings                       Training[]         @relation("Training_trainer")
+  sharedTrainings                 Training[]         @relation("Trainer_sharedTrainings")
   from_OefeningDatabank_createdBy OefeningDatabank[] @relation("OefeningDatabank_createdBy")
 
   @@index([teamId])
@@ -167,6 +168,7 @@ model Training {
   trainerId               String?    @map("trainer")
   team                    Team?      @relation("Training_team", fields: [teamId], references: [id])
   teamId                  String?    @map("team")
+  sharedWith              Trainer[]  @relation("Trainer_sharedTrainings")
   date                    DateTime
   titel                   String     @default("")
   duurMinuten             Int?       @default(90)

@@ -4,7 +4,8 @@ import type { Lists } from '.keystone/types';
 import {
   isSignedIn, isAdmin, anySignedInFilter, selfOrAdminFilter, ownTeamFilter,
   teamOwnedFilter, matchScopedFilter, attendanceScopedFilter,
-  trainingOwnedFilter, exerciseScopedFilter,
+  trainingOwnedFilter, exerciseScopedFilter, trainingVisibleFilter, exerciseVisibleFilter,
+  selfOrAdminFieldRead,
   relationGuard,
 } from './access';
 
@@ -16,11 +17,17 @@ export const lists: Lists = {
   Trainer: list({
     access: {
       operation: { query: isSignedIn, create: isAdmin, update: isAdmin, delete: isAdmin },
-      filter: { query: selfOrAdminFilter, update: selfOrAdminFilter, delete: selfOrAdminFilter },
+      // query: club-breed leesbaar (nodig om iemand te kunnen kiezen om een
+      // training mee te delen) — e-mail/rol blijven wel afgeschermd, zie
+      // fields.email/role hieronder. Wijzigen/verwijderen blijft admin-only.
+      filter: { query: anySignedInFilter, update: selfOrAdminFilter, delete: selfOrAdminFilter },
     },
     fields: {
       name:  text({ validation: { isRequired: true } }),
-      email: text({ validation: { isRequired: true }, isIndexed: 'unique' }),
+      email: text({
+        validation: { isRequired: true }, isIndexed: 'unique',
+        access: { read: selfOrAdminFieldRead },
+      }),
       password: password({ validation: { isRequired: true } }),
       role: select({
         options: [
@@ -28,9 +35,11 @@ export const lists: Lists = {
           { label: 'Trainer', value: 'trainer' },
         ],
         defaultValue: 'trainer',
+        access: { read: selfOrAdminFieldRead },
       }),
       team: relationship({ ref: 'Team.trainers', many: false }),
       trainings: relationship({ ref: 'Training.trainer', many: true }),
+      sharedTrainings: relationship({ ref: 'Training.sharedWith', many: true }),
     },
     ui: { labelField: 'name' },
   }),
@@ -305,12 +314,19 @@ export const lists: Lists = {
   Training: list({
     access: {
       operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
-      filter: { query: trainingOwnedFilter, update: trainingOwnedFilter, delete: trainingOwnedFilter },
+      // query gebruikt de ruimere visible-filter (incl. sharedWith) — bewerken/
+      // verwijderen (en dus ook wie de deel-lijst mag aanpassen) blijft beperkt
+      // tot de maker, diens ploeg en admins.
+      filter: { query: trainingVisibleFilter, update: trainingOwnedFilter, delete: trainingOwnedFilter },
     },
     hooks: { validateInput: relationGuard({ field: 'team', list: 'Team' }, { field: 'trainer', list: 'Trainer' }) },
     fields: {
       trainer:  relationship({ ref: 'Trainer.trainings', many: false }),   // maker, voor attributie
       team:     relationship({ ref: 'Team.trainings',    many: false }),
+      // Trainers waarmee deze training gedeeld is — enkel leesrecht (zie
+      // trainingVisibleFilter/exerciseVisibleFilter); zij maken zelf een kopie
+      // om te bewerken i.p.v. hierin mee te schrijven.
+      sharedWith: relationship({ ref: 'Trainer.sharedTrainings', many: true }),
       date:     timestamp({ validation: { isRequired: true } }),
       titel:    text({ defaultValue: '' }),
       duurMinuten:   integer({ defaultValue: 90 }),
@@ -445,7 +461,7 @@ export const lists: Lists = {
   Exercise: list({
     access: {
       operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
-      filter: { query: exerciseScopedFilter, update: exerciseScopedFilter, delete: exerciseScopedFilter },
+      filter: { query: exerciseVisibleFilter, update: exerciseScopedFilter, delete: exerciseScopedFilter },
     },
     hooks: { validateInput: relationGuard({ field: 'training', list: 'Training' }) },
     fields: {

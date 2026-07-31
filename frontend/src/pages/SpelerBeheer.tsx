@@ -7,12 +7,15 @@ import {
   exportPlayersCSV, importPlayersCSV,
   Player, POSITIONS, POSITION_LABELS, POSITION_FULL,
 } from '../lib/api';
+import SpelerProfiel from './SpelerProfiel';
 import './SpelerBeheer.css';
 
 type SortKey = 'name' | 'number' | 'position';
+type SbTab = 'lijst' | 'profiel';
 
 export default function SpelerBeheer() {
   const { teamId, isAdmin } = useTeam();
+  const [tab, setTab] = useState<SbTab>('lijst');
   const [players, setPlayers] = useState<Player[]>([]);
   const [teams, setTeams]   = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,15 +133,25 @@ export default function SpelerBeheer() {
           <h1 className="page-title">Spelerbeheer</h1>
           <p className="page-subtitle">KFC Lennik — Kern & Selectie</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button className="btn btn-ghost btn-sm" onClick={() => exportPlayersCSV(players)} title="Exporteer als CSV">⬇ CSV</button>
-          <button className="btn btn-ghost btn-sm" disabled={importing} onClick={() => fileInputRef.current?.click()}>
-            {importing ? 'Laden...' : '⬆ CSV'}
-          </button>
-          <input ref={fileInputRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImportCSV} />
-          <button className="btn btn-primary" onClick={openCreate}>+ Nieuwe speler</button>
-        </div>
+        {tab === 'lijst' && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => exportPlayersCSV(players)} title="Exporteer als CSV">⬇ CSV</button>
+            <button className="btn btn-ghost btn-sm" disabled={importing} onClick={() => fileInputRef.current?.click()}>
+              {importing ? 'Laden...' : '⬆ CSV'}
+            </button>
+            <input ref={fileInputRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImportCSV} />
+            <button className="btn btn-primary" onClick={openCreate}>+ Nieuwe speler</button>
+          </div>
+        )}
       </div>
+
+      {/* ── Tabs ── */}
+      <div className="sb-toggles" style={{ display: 'inline-flex', marginBottom: 20 }}>
+        <button className={`sb-toggle ${tab === 'lijst' ? 'active' : ''}`} onClick={() => setTab('lijst')}>👥 Spelerslijst</button>
+        <button className={`sb-toggle ${tab === 'profiel' ? 'active' : ''}`} onClick={() => setTab('profiel')}>👤 Profiel</button>
+      </div>
+
+      {tab === 'profiel' ? <SpelerProfiel /> : <>
 
       {/* ── Stats strip ── */}
       <div className="sb-stats">
@@ -372,6 +385,7 @@ export default function SpelerBeheer() {
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }
