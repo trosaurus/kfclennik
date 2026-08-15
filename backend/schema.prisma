@@ -22,23 +22,25 @@ model Trainer {
   trainings                       Training[]         @relation("Training_trainer")
   sharedTrainings                 Training[]         @relation("Trainer_sharedTrainings")
   from_OefeningDatabank_createdBy OefeningDatabank[] @relation("OefeningDatabank_createdBy")
+  from_Whiteboard_trainer         Whiteboard[]       @relation("Whiteboard_trainer")
 
   @@index([teamId])
 }
 
 model Team {
-  id               String     @id @default(cuid())
-  name             String     @default("")
-  category         String
-  club             String     @default("")
-  active           String?    @default("true")
-  manualFileName   String     @default("")
-  manualUploadedAt DateTime?
-  manualText       String     @default("")
-  trainers         Trainer[]  @relation("Trainer_team")
-  players          Player[]   @relation("Player_team")
-  matches          Match[]    @relation("Match_team")
-  trainings        Training[] @relation("Training_team")
+  id                   String       @id @default(cuid())
+  name                 String       @default("")
+  category             String
+  club                 String       @default("")
+  active               String?      @default("true")
+  manualFileName       String       @default("")
+  manualUploadedAt     DateTime?
+  manualText           String       @default("")
+  trainers             Trainer[]    @relation("Trainer_team")
+  players              Player[]     @relation("Player_team")
+  matches              Match[]      @relation("Match_team")
+  trainings            Training[]   @relation("Training_team")
+  from_Whiteboard_team Whiteboard[] @relation("Whiteboard_team")
 }
 
 model Player {
@@ -230,6 +232,20 @@ model OefeningDatabank {
   createdAt             DateTime? @default(now())
 
   @@index([createdById])
+}
+
+model Whiteboard {
+  id          String    @id @default(cuid())
+  naam        String    @default("Tekening")
+  drawingData String    @default("")
+  trainer     Trainer?  @relation("Whiteboard_trainer", fields: [trainerId], references: [id])
+  trainerId   String?   @map("trainer")
+  team        Team?     @relation("Whiteboard_team", fields: [teamId], references: [id])
+  teamId      String?   @map("team")
+  createdAt   DateTime? @default(now())
+
+  @@index([trainerId])
+  @@index([teamId])
 }
 
 model Exercise {

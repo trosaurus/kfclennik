@@ -21,6 +21,47 @@
 .tm-progress-fill { height: 100%; background: linear-gradient(90deg, var(--red-dark), var(--red)); transition: width .3s; }
 .tm-progress-label { font-family: var(--font-heading); font-size: 10px; letter-spacing: 0.5px; color: var(--text-dim); margin-bottom: 16px; }
 
+/* Tijdlijn (klokuren per oefening, vanaf ingegeven tijdstip) */
+.tm-schedule {
+  display: flex; align-items: stretch; gap: 6px; overflow-x: auto;
+  padding-bottom: 6px; margin-bottom: 16px; -webkit-overflow-scrolling: touch;
+}
+.tm-schedule-chip {
+  flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  min-width: 64px; padding: 6px 10px; border-radius: var(--radius); cursor: pointer;
+  background: var(--bg-card); border: 2px solid var(--border); color: var(--text-mid);
+  font-family: var(--font-heading); transition: all .12s;
+}
+.tm-schedule-time { font-size: 12px; font-weight: 700; letter-spacing: 0.5px; }
+.tm-schedule-name { font-size: 9px; letter-spacing: 0.5px; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
+.tm-schedule-current { border-color: var(--red); background: var(--red-muted); color: var(--white); }
+.tm-schedule-past { opacity: 0.5; }
+.tm-schedule-end {
+  flex-shrink: 0; display: flex; align-items: center; padding: 6px 10px;
+  font-family: var(--font-heading); font-size: 12px; font-weight: 700; color: var(--text-dim);
+}
+.tm-schedule-end.over { color: var(--red-bright); }
+.tm-schedule-hint {
+  font-size: 12px; color: var(--text-dim); background: var(--bg-card); border: 1px solid var(--border-soft);
+  border-radius: var(--radius); padding: 8px 12px; margin-bottom: 16px; line-height: 1.5;
+}
+
+/* Capaciteitscheck: passen de oefeningen samen binnen de ingestelde duur? */
+.tm-capacity {
+  font-size: 12px; font-weight: 600; border-radius: var(--radius); padding: 8px 12px;
+  margin-bottom: 16px; line-height: 1.5;
+}
+.tm-capacity.ok   { background: var(--green-bg); color: var(--green); }
+.tm-capacity.over { background: var(--red-muted); color: var(--red-bright); }
+
+.tm-schedule-status {
+  font-family: var(--font-heading); font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+  padding: 5px 12px; border-radius: 20px; margin-bottom: 4px;
+}
+.tm-schedule-status-before  { background: var(--bg-elevated); color: var(--text-dim); }
+.tm-schedule-status-during  { background: var(--green-bg); color: var(--green); }
+.tm-schedule-status-over    { background: var(--red-muted); color: var(--red-bright); }
+
 .tm-exercise { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
 
 .tm-fase-badge {
@@ -34,9 +75,11 @@
 
 .tm-ex-name { font-family: var(--font-display); font-size: 30px; letter-spacing: 1px; line-height: 1.1; margin: 2px 0 4px; }
 
-.tm-timer { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.tm-timer { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 16px; }
 .tm-timer-clock { font-family: var(--font-display); font-size: 30px; color: var(--white); letter-spacing: 1px; }
+.tm-timer-clock.over { color: var(--red-bright); }
 .tm-timer-target { font-family: var(--font-heading); font-size: 14px; color: var(--text-dim); }
+.tm-start-btn { width: 100%; min-height: 52px; font-size: 16px; }
 
 .tm-info-block { width: 100%; text-align: left; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px 16px; }
 .tm-info-title { font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--red); margin-bottom: 6px; }

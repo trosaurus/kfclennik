@@ -457,6 +457,25 @@ export const lists: Lists = {
     ui: { labelField: 'naam' },
   }),
 
+  // ── Whiteboard (losse, snelle tekening — géén training/oefening nodig; eigen
+  // ploeg + eigen trainer zoals Training, met dezelfde teamloze-trainer-fallback
+  // via trainingOwnedFilter, dat generiek werkt op elke lijst met trainer/team). ──
+  Whiteboard: list({
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: trainingOwnedFilter, update: trainingOwnedFilter, delete: trainingOwnedFilter },
+    },
+    hooks: { validateInput: relationGuard({ field: 'trainer', list: 'Trainer' }, { field: 'team', list: 'Team' }) },
+    fields: {
+      naam:        text({ validation: { isRequired: true }, defaultValue: 'Tekening' }),
+      drawingData: text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),  // JSON-string (DrawingScene)
+      trainer:   relationship({ ref: 'Trainer', many: false }),  // maker, voor attributie + scoping — geen back-reference nodig
+      team:      relationship({ ref: 'Team',    many: false }),
+      createdAt: timestamp({ defaultValue: { kind: 'now' } }),
+    },
+    ui: { labelField: 'naam' },
+  }),
+
   // ── Exercise (oefening binnen een training — velden volgen template pagina 3-4) ──
   Exercise: list({
     access: {

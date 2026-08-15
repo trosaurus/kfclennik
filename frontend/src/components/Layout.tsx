@@ -18,6 +18,7 @@ export default function Layout() {
     { to: '/seizoen',     label: 'Seizoen',      icon: '📈' },
     { to: '/trainingen',  label: 'Trainingen',   icon: '📝' },
     { to: '/oefendatabank', label: 'Oefeningen', icon: '📚' },
+    { to: '/whiteboard',    label: 'Whiteboard', icon: '🎨' },
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: '⚙️' }] : []),
   ];
 

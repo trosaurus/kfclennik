@@ -1355,6 +1355,59 @@ input OefeningDatabankCreateInput {
   createdAt: DateTime
 }
 
+type Whiteboard {
+  id: ID!
+  naam: String
+  drawingData: String
+  trainer: Trainer
+  team: Team
+  createdAt: DateTime
+}
+
+input WhiteboardWhereUniqueInput {
+  id: ID
+}
+
+input WhiteboardWhereInput {
+  AND: [WhiteboardWhereInput!]
+  OR: [WhiteboardWhereInput!]
+  NOT: [WhiteboardWhereInput!]
+  id: IDFilter
+  naam: StringFilter
+  drawingData: StringFilter
+  trainer: TrainerWhereInput
+  team: TeamWhereInput
+  createdAt: DateTimeNullableFilter
+}
+
+input WhiteboardOrderByInput {
+  id: OrderDirection
+  naam: OrderDirection
+  drawingData: OrderDirection
+  createdAt: OrderDirection
+}
+
+input WhiteboardUpdateInput {
+  naam: String
+  drawingData: String
+  trainer: TrainerRelateToOneForUpdateInput
+  team: TeamRelateToOneForUpdateInput
+  createdAt: DateTime
+}
+
+input WhiteboardUpdateArgs {
+  where: WhiteboardWhereUniqueInput!
+  data: WhiteboardUpdateInput!
+}
+
+input WhiteboardCreateInput {
+  naam: String
+  drawingData: String
+  trainer: TrainerRelateToOneForCreateInput
+  team: TeamRelateToOneForCreateInput
+  createdAt: DateTime
+}
+
 type Exercise {
   id: ID!
   training: Training
@@ -1538,6 +1591,12 @@ type Mutation {
   updateOefeningDatabanks(data: [OefeningDatabankUpdateArgs!]!): [OefeningDatabank]
   deleteOefeningDatabank(where: OefeningDatabankWhereUniqueInput!): OefeningDatabank
   deleteOefeningDatabanks(where: [OefeningDatabankWhereUniqueInput!]!): [OefeningDatabank]
+  createWhiteboard(data: WhiteboardCreateInput!): Whiteboard
+  createWhiteboards(data: [WhiteboardCreateInput!]!): [Whiteboard]
+  updateWhiteboard(where: WhiteboardWhereUniqueInput!, data: WhiteboardUpdateInput!): Whiteboard
+  updateWhiteboards(data: [WhiteboardUpdateArgs!]!): [Whiteboard]
+  deleteWhiteboard(where: WhiteboardWhereUniqueInput!): Whiteboard
+  deleteWhiteboards(where: [WhiteboardWhereUniqueInput!]!): [Whiteboard]
   createExercise(data: ExerciseCreateInput!): Exercise
   createExercises(data: [ExerciseCreateInput!]!): [Exercise]
   updateExercise(where: ExerciseWhereUniqueInput!, data: ExerciseUpdateInput!): Exercise
@@ -1607,6 +1666,9 @@ type Query {
   oefeningDatabanks(where: OefeningDatabankWhereInput! = {}, orderBy: [OefeningDatabankOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: OefeningDatabankWhereUniqueInput): [OefeningDatabank!]
   oefeningDatabank(where: OefeningDatabankWhereUniqueInput!): OefeningDatabank
   oefeningDatabanksCount(where: OefeningDatabankWhereInput! = {}): Int
+  whiteboards(where: WhiteboardWhereInput! = {}, orderBy: [WhiteboardOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: WhiteboardWhereUniqueInput): [Whiteboard!]
+  whiteboard(where: WhiteboardWhereUniqueInput!): Whiteboard
+  whiteboardsCount(where: WhiteboardWhereInput! = {}): Int
   exercises(where: ExerciseWhereInput! = {}, orderBy: [ExerciseOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ExerciseWhereUniqueInput): [Exercise!]
   exercise(where: ExerciseWhereUniqueInput!): Exercise
   exercisesCount(where: ExerciseWhereInput! = {}): Int

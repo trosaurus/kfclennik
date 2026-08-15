@@ -45,6 +45,13 @@
 }
 .dc-swatch.active { border-color: white; box-shadow: 0 0 0 2px var(--red); }
 
+.dc-number-input {
+  width: 56px; padding: 6px 8px; background: var(--bg); border: 2px solid var(--border);
+  border-radius: var(--radius); font-family: var(--font-heading); font-size: 14px;
+  font-weight: 700; color: var(--text); text-align: center;
+}
+.dc-number-input:focus { outline: none; border-color: var(--red); }
+
 .dc-anim-toolbar {
   display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
   background: var(--bg-elevated); border: 1px solid var(--border);

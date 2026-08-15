@@ -9,6 +9,7 @@ const TILES = [
   { to: '/seizoen',       icon: '📈', label: 'Seizoensoverzicht',    desc: 'Speeltijd & statistieken' },
   { to: '/trainingen',    icon: '📝', label: 'Trainingen',           desc: 'Trainingen voorbereiden' },
   { to: '/oefendatabank', icon: '📚', label: 'Oefeningen',           desc: 'Oefeningendatabank' },
+  { to: '/whiteboard',    icon: '🎨', label: 'Whiteboard',           desc: 'Snel een tekening maken' },
 ];
 
 export default function Home() {

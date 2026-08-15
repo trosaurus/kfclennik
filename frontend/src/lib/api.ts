@@ -2073,7 +2073,8 @@ export async function deleteOefeningDatabankItem(id: string): Promise<void> {
 export type DrawingElementType =
   | 'player' | 'cone' | 'joker' | 'goal' | 'ball' | 'ladder' | 'flag'
   | 'hoop' | 'wall' | 'marker' | 'coach' | 'image'
-  | 'arrow-pass' | 'arrow-dribble' | 'arrow-run' | 'text';
+  | 'arrow-pass' | 'arrow-dribble' | 'arrow-run' | 'text'
+  | 'line' | 'line-dashed' | 'rect' | 'ellipse' | 'triangle';
 
 export type PlayerColor = 'red' | 'blue' | 'white' | 'grey';
 export type ConeColor = 'orange' | 'red' | 'green' | 'blue';
@@ -2082,7 +2083,7 @@ export interface DrawingElement {
   id: string;
   type: DrawingElementType;
   x: number; y: number;     // % van viewBox (0-100)
-  x2?: number; y2?: number; // eindpunt, enkel voor pijlen
+  x2?: number; y2?: number; // eindpunt (pijlen/lijnen) of tegenoverliggende hoek van de omvattende box (zones)
   label?: string;           // spelernummer of tekstinhoud
   color?: string;           // PlayerColor voor 'player', ConeColor voor 'cone'
   rotation?: number;        // graden, rond het eigen middelpunt (niet gebruikt bij pijlen)
@@ -2105,7 +2106,7 @@ export const CONE_COLORS: { value: ConeColor; label: string; hex: string }[] = [
   { value: 'blue',   label: 'Blauw',  hex: '#2563eb' },
 ];
 
-export type DrawingBackground = 'grid' | 'half' | 'full';
+export type DrawingBackground = 'grid' | 'half' | 'full' | 'phases';
 
 /** Eén stap in een bewegingsanimatie — enkel posities die afwijken van de
  * basisplaatsing van het element zijn nodig; ontbrekende elementen vallen
@@ -2136,4 +2137,50 @@ export function parseDrawingScene(raw: string): DrawingScene {
     if (parsed && Array.isArray(parsed.elements)) return parsed as DrawingScene;
   } catch { /* fall through to default */ }
   return { background: 'grid', elements: [] };
+}
+
+// ── Whiteboard: losse, snelle tekeningen (geen training/oefening nodig) ────────
+
+export interface WhiteboardItem {
+  id: string;
+  naam: string;
+  drawingData: string;
+  createdAt: string;
+}
+
+const WHITEBOARD_FIELDS = `id naam drawingData createdAt`;
+
+export async function getWhiteboards(): Promise<WhiteboardItem[]> {
+  const data = await gql(`query {
+    whiteboards(take: 500, orderBy: { createdAt: desc }) { ${WHITEBOARD_FIELDS} }
+  }`);
+  return data.whiteboards;
+}
+
+export async function createWhiteboard(input: {
+  naam: string; drawingData?: string; trainerId?: string; teamId?: string;
+}): Promise<WhiteboardItem> {
+  const itemData: Record<string, unknown> = { naam: input.naam, drawingData: input.drawingData ?? '' };
+  if (input.trainerId) itemData.trainer = { connect: { id: input.trainerId } };
+  if (input.teamId) itemData.team = { connect: { id: input.teamId } };
+  const data = await gql(
+    `mutation CreateWhiteboard($data: WhiteboardCreateInput!) { createWhiteboard(data: $data) { ${WHITEBOARD_FIELDS} } }`,
+    { data: itemData }
+  );
+  return data.createWhiteboard;
+}
+
+export async function updateWhiteboard(id: string, input: Record<string, unknown>): Promise<WhiteboardItem> {
+  const data = await gql(
+    `mutation UpdateWhiteboard($id: ID!, $data: WhiteboardUpdateInput!) { updateWhiteboard(where: { id: $id }, data: $data) { ${WHITEBOARD_FIELDS} } }`,
+    { id, data: input }
+  );
+  return data.updateWhiteboard;
+}
+
+export async function deleteWhiteboard(id: string): Promise<void> {
+  await gql(
+    `mutation DeleteWhiteboard($id: ID!) { deleteWhiteboard(where: { id: $id }) { id } }`,
+    { id }
+  );
 }
