@@ -16,6 +16,36 @@
 .tm-title-main { font-family: var(--font-display); font-size: 18px; letter-spacing: 0.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tm-title-sub { font-family: var(--font-heading); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--red); }
 .tm-screen-count { font-family: var(--font-display); font-size: 16px; color: var(--text-dim); flex-shrink: 0; }
+.tm-menu-btn {
+  width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%;
+  background: var(--bg-elevated); border: none; color: var(--text);
+  font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+
+/* Navigatiemenu: laat je tijdens de training naar een andere rubriek doorklikken
+ * — de voortgang (oefening, timer, ...) blijft intussen bewaard, zie tm-progress-*. */
+.tm-nav-overlay {
+  position: fixed; inset: 0; z-index: 1500;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(2px);
+  display: flex; justify-content: flex-end;
+}
+.tm-nav-drawer {
+  width: min(300px, 85vw); height: 100%; background: var(--bg-card);
+  border-left: 1px solid var(--border); padding: 16px;
+  display: flex; flex-direction: column; gap: 4px; overflow-y: auto;
+  animation: tm-drawer-in .15s ease;
+}
+@keyframes tm-drawer-in { from { transform: translateX(100%); } to { transform: none; } }
+.tm-nav-drawer-hint {
+  font-size: 12px; line-height: 1.5; color: var(--text-dim);
+  background: var(--bg-elevated); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 10px;
+}
+.tm-nav-drawer-item {
+  display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: var(--radius);
+  font-family: var(--font-heading); font-weight: 700; font-size: 14px; color: var(--text);
+  text-decoration: none; transition: background .12s;
+}
+.tm-nav-drawer-item:hover { background: var(--bg-hover); }
 
 .tm-progress-wrap { height: 6px; background: var(--bg-elevated); border-radius: 3px; overflow: hidden; margin-bottom: 4px; }
 .tm-progress-fill { height: 100%; background: linear-gradient(90deg, var(--red-dark), var(--red)); transition: width .3s; }

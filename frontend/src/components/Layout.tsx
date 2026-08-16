@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { logout } from '../lib/auth';
 import { useTeam } from '../lib/TeamContext';
 import { useTheme } from '../lib/ThemeContext';
 import { useFont } from '../lib/FontContext';
+import { NAV_ITEMS as BASE_NAV_ITEMS } from '../lib/navItems';
+import { getActiveTraining } from '../lib/activeTraining';
 import logo from '../assets/Logo-KFC-Lennik.png';
 import './Layout.css';
 
@@ -11,17 +14,16 @@ export default function Layout() {
   const { theme, toggleTheme } = useTheme();
   const { font, toggleFont } = useFont();
   const location = useLocation();
+  // Gelezen bij het mounten van Layout — Layout wordt altijd opnieuw gemount
+  // wanneer je de (aparte, standalone) trainingsmodus-route verlaat, dus dit
+  // pikt een intussen gestarte sessie steeds correct op.
+  const [activeTraining] = useState(() => getActiveTraining());
 
   const NAV_ITEMS = [
-    { to: '/',            label: 'Start',        icon: '🏠', end: true },
-    { to: '/matchday',    label: 'Matchday',     icon: '⚽' },
-    { to: '/spelers',     label: 'Spelers',      icon: '👥' },
-    { to: '/wedstrijden', label: 'Wedstrijden',  icon: '📋' },
-    { to: '/seizoen',     label: 'Seizoen',      icon: '📈' },
-    { to: '/trainingen',  label: 'Trainingen',   icon: '📝' },
-    { to: '/oefendatabank', label: 'Oefeningen', icon: '📚' },
-    { to: '/whiteboard',    label: 'Whiteboard', icon: '🎨' },
-    { to: '/tactiek',       label: 'Tactiek',    icon: '🧠' },
+    ...BASE_NAV_ITEMS,
+    ...(activeTraining
+      ? [{ to: `/trainingen/${activeTraining.id}/modus`, label: activeTraining.titel, icon: '▶', resume: true }]
+      : []),
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: '⚙️' }] : []),
   ];
 
@@ -47,7 +49,7 @@ export default function Layout() {
           <nav className="nav desktop-nav">
             {NAV_ITEMS.map(item => (
               <NavLink key={item.to} to={item.to} end={item.end}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''} ${item.resume ? 'nav-link-resume' : ''}`}>
                 <span className="nav-icon">{item.icon}</span>
                 <span>{item.label}</span>
               </NavLink>
@@ -84,7 +86,7 @@ export default function Layout() {
             : location.pathname.startsWith(item.to);
           return (
             <NavLink key={item.to} to={item.to} end={item.end}
-              className={`mobile-nav-item ${isActive ? 'active' : ''}`}>
+              className={`mobile-nav-item ${isActive ? 'active' : ''} ${item.resume ? 'mobile-nav-item-resume' : ''}`}>
               <span className="mobile-nav-icon">{item.icon}</span>
               <span className="mobile-nav-label">{item.label}</span>
             </NavLink>

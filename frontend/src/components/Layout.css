@@ -111,6 +111,14 @@
 }
 .nav-icon { font-size: 15px; }
 
+/* "Terug naar de actieve trainingsmodus" — bewust opvallend, staat los van de
+ * gewone navigatie-items omdat het een tijdelijke, contextuele snelkoppeling is. */
+.nav-link-resume, .nav-link-resume:hover {
+  color: white; background: var(--red); max-width: 160px;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.nav-link-resume.active::after { display: none; }
+
 /* ── Main ── */
 .main-content { flex: 1; }
 
@@ -159,6 +167,13 @@
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 64px;
+}
+
+.mobile-nav-item-resume, .mobile-nav-item-resume.active { color: var(--red); }
+.mobile-nav-item-resume::before {
+  content: ''; position: absolute; top: 0; left: 20%; right: 20%;
+  height: 2px; background: var(--red); border-radius: 0 0 2px 2px;
 }
 
 /* ── Header user / logout ── */

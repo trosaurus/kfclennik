@@ -1,10 +1,35 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { getTraining, updateTraining, Training, EXERCISE_FASE_LABELS, parseDrawingScene } from '../lib/api';
 import DrawingCanvas from '../components/DrawingCanvas';
+import { NAV_ITEMS } from '../lib/navItems';
+import { setActiveTraining, clearActiveTraining } from '../lib/activeTraining';
 import './TrainingsModus.css';
 
 const EINDGESPREK_VRAGEN = ['Actief?', 'Plezant?', 'Wat geleerd?'];
+
+// Voortgang (welke oefening, afgevinkte eindgesprek-items, sessietimer) wordt
+// bewaard per training zodat je tijdens de training naar een andere rubriek
+// kan doorklikken en nadien hier hervat i.p.v. terug bij oefening 1 te starten.
+interface TmProgress {
+  screenIdx: number;
+  checked: Record<number, boolean>;
+  sessionStarted: boolean;
+  sessionStartedAt: string | null;
+}
+function progressKey(id: string) { return `tm-progress-${id}`; }
+function loadProgress(id: string): TmProgress | null {
+  try {
+    const raw = localStorage.getItem(progressKey(id));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function saveProgress(id: string, p: TmProgress) {
+  localStorage.setItem(progressKey(id), JSON.stringify(p));
+}
+function clearProgress(id: string) {
+  localStorage.removeItem(progressKey(id));
+}
 
 /** Parseert vrije-tekst tijdstip-invoer ("18:30", "18u30", "18.30") naar een
  * Date van vandaag. Geeft null bij lege/onherkenbare invoer — de tijdlijn
@@ -39,6 +64,7 @@ export default function TrainingsModus() {
   const [screenIdx, setScreenIdx] = useState(0);
   const [checked, setChecked] = useState<Record<number, boolean>>({});
   const [finishing, setFinishing] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
 
   // Trainingstimer: start één keer (bij de eerste oefening die gestart wordt) en
   // loopt daarna ononderbroken door tot het ingestelde einduur, ook als je tussen
@@ -49,12 +75,41 @@ export default function TrainingsModus() {
   // Live klok, voor de tijdlijn/"over tijd"-indicator en de sessietimer
   const [now, setNow] = useState(() => new Date());
 
-  useEffect(() => { if (id) load(id); }, [id]);
+  useEffect(() => {
+    if (!id) return;
+    load(id);
+    // Bewaarde voortgang herstellen — zo hervat je hier correct nadat je
+    // tussendoor naar een andere rubriek was doorgeklikt.
+    const saved = loadProgress(id);
+    if (saved) {
+      setScreenIdx(saved.screenIdx);
+      setChecked(saved.checked);
+      setSessionStarted(saved.sessionStarted);
+      setSessionStartedAt(saved.sessionStartedAt ? new Date(saved.sessionStartedAt) : null);
+    }
+  }, [id]);
+
+  // Elke wijziging aan de voortgang meteen bewaren, zodat wegnavigeren nooit
+  // voortgang kan laten verliezen (geen expliciete "opslaan"-stap nodig).
+  useEffect(() => {
+    if (!id) return;
+    saveProgress(id, {
+      screenIdx, checked, sessionStarted,
+      sessionStartedAt: sessionStartedAt ? sessionStartedAt.toISOString() : null,
+    });
+  }, [id, screenIdx, checked, sessionStarted, sessionStartedAt]);
 
   useEffect(() => {
     const clockRef = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(clockRef);
   }, []);
+
+  // Zodra de training geladen is: markeren als "de actieve trainingsmodus",
+  // zodat het navigatiemenu (Layout) er van eender welke andere rubriek
+  // rechtstreeks naar kan terugverwijzen.
+  useEffect(() => {
+    if (training) setActiveTraining({ id: training.id, titel: training.titel || 'Training' });
+  }, [training]);
 
   async function load(trainingId: string) {
     setLoading(true);
@@ -71,6 +126,8 @@ export default function TrainingsModus() {
     setFinishing(true);
     try {
       await updateTraining(training.id, { status: 'afgewerkt' });
+      clearProgress(training.id);
+      clearActiveTraining();
       navigate('/trainingen');
     } finally { setFinishing(false); }
   }
@@ -150,7 +207,24 @@ export default function TrainingsModus() {
           {training.jaarplanLabel && <span className="tm-title-sub">{training.jaarplanLabel}</span>}
         </div>
         <span className="tm-screen-count">{isEindgesprek ? '✓' : `${screenIdx + 1}/${exercises.length}`}</span>
+        <button className="tm-menu-btn" title="Naar een andere rubriek" onClick={() => setNavOpen(v => !v)}>☰</button>
       </div>
+
+      {navOpen && (
+        <div className="tm-nav-overlay" onClick={() => setNavOpen(false)}>
+          <div className="tm-nav-drawer" onClick={e => e.stopPropagation()}>
+            <div className="tm-nav-drawer-hint">
+              De training loopt door — kom hier terug via ▶ Trainingsmodus om verder te gaan waar je gebleven was.
+            </div>
+            {NAV_ITEMS.map(item => (
+              <Link key={item.to} to={item.to} className="tm-nav-drawer-item" onClick={() => setNavOpen(false)}>
+                <span>{item.icon}</span>
+                <span>{item.label}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="tm-progress-wrap">
         <div className="tm-progress-fill" style={{ width: `${((screenIdx) / totalScreens) * 100}%` }} />
