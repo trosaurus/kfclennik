@@ -1,0 +1,75 @@
+.tac-header { margin-bottom: 16px; }
+
+.tac-tabs {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 6px;
+}
+.tac-tab {
+  padding: 10px 16px; background: none; border: none; border-radius: var(--radius);
+  font-family: var(--font-heading); font-size: 14px; font-weight: 700;
+  letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim);
+  cursor: pointer; transition: all .12s;
+}
+.tac-tab:hover { color: var(--text); }
+.tac-tab.active { background: var(--red); color: white; }
+
+.tac-intro {
+  display: grid; grid-template-columns: minmax(220px, 320px) 1fr; gap: 20px;
+  padding: 20px; margin-bottom: 16px;
+}
+@media (max-width: 700px) { .tac-intro { grid-template-columns: 1fr; } }
+.tac-intro-diagram {
+  width: 100%; border-radius: var(--radius); border: 1px solid var(--border);
+  cursor: zoom-in; display: block;
+}
+.tac-intro-text { display: flex; flex-direction: column; gap: 14px; }
+.tac-intro-titel {
+  font-family: var(--font-heading); font-weight: 700; color: var(--red);
+  font-size: 14px; margin-bottom: 4px;
+}
+.tac-intro-text p { font-size: 14px; line-height: 1.5; color: var(--text-mid); }
+
+.tac-principe-list {
+  display: flex; flex-direction: column; gap: 12px; padding: 18px; margin-bottom: 16px;
+}
+.tac-principe-list-compact { padding: 0; margin-bottom: 14px; }
+.tac-principe { display: flex; gap: 12px; align-items: flex-start; }
+.tac-principe-nr {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: var(--radius);
+  background: var(--red); color: white; font-family: var(--font-heading);
+  font-weight: 700; font-size: 13px; display: flex; align-items: center; justify-content: center;
+}
+.tac-principe-titel { font-family: var(--font-heading); font-weight: 700; font-size: 15px; margin-bottom: 2px; }
+.tac-principe-desc { font-size: 13px; line-height: 1.45; color: var(--text-mid); }
+
+.tac-fase { margin-bottom: 16px; }
+.tac-fase-header {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 16px 20px; background: none; border: none; cursor: pointer; text-align: left;
+}
+.tac-fase-titel { font-family: var(--font-heading); font-weight: 700; font-size: 17px; }
+.tac-fase-ondertitel {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--red);
+}
+.tac-fase-toggle { color: var(--text-dim); flex-shrink: 0; }
+.tac-fase-body { padding: 0 20px 20px; border-top: 1px solid var(--border-soft); padding-top: 16px; }
+
+.tac-diagram-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;
+}
+.tac-diagram-thumb {
+  width: 100%; border-radius: var(--radius); border: 1px solid var(--border);
+  cursor: zoom-in; display: block; transition: border-color .12s, transform .12s;
+}
+.tac-diagram-thumb:hover { border-color: var(--red); transform: scale(1.02); }
+
+.tac-lightbox-overlay {
+  position: fixed; inset: 0; z-index: 2100;
+  background: rgba(0,0,0,0.85); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.tac-lightbox-img { max-width: 92vw; max-height: 92vh; border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.tac-lightbox-close {
+  position: absolute; top: 20px; right: 20px; background: var(--bg-card);
+}

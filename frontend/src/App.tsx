@@ -12,6 +12,7 @@ import TrainingEditor from './pages/TrainingEditor';
 import TrainingsModus from './pages/TrainingsModus';
 import Oefendatabank from './pages/Oefendatabank';
 import Whiteboard from './pages/Whiteboard';
+import Tactiek from './pages/Tactiek';
 import Admin from './pages/Admin';
 
 function AppRoutes() {
@@ -40,6 +41,7 @@ function AppRoutes() {
         <Route path="/trainingen/:id" element={<TrainingEditor />} />
         <Route path="/oefendatabank"  element={<Oefendatabank />} />
         <Route path="/whiteboard"     element={<Whiteboard />} />
+        <Route path="/tactiek"        element={<Tactiek />} />
         <Route path="/admin"       element={trainer.role === 'admin' ? <Admin /> : <Navigate to="/" replace />} />
         <Route path="/matches"     element={<Navigate to="/wedstrijden" replace />} />
         <Route path="/matches/:id" element={<Navigate to="/wedstrijden" replace />} />

@@ -325,7 +325,7 @@ export default function FieldView({
         {/* Position key label on empty slot */}
         {!isOccupied && (
           <text x={cx} y={cy + 5} textAnchor="middle"
-            fill="rgba(255,255,255,0.75)" fontSize="14" fontFamily="'Bebas Neue',sans-serif" letterSpacing="0.5">
+            fill="rgba(255,255,255,0.75)" fontSize="14" fontFamily="var(--font-display)" letterSpacing="0.5">
             {posKey}
           </text>
         )}
@@ -334,17 +334,17 @@ export default function FieldView({
         {isOccupied && player && (
           <>
             <text x={cx} y={cy - 6} textAnchor="middle"
-              fill="white" fontSize="15" fontFamily="'Bebas Neue',sans-serif"
+              fill="white" fontSize="15" fontFamily="var(--font-display)"
               style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
               {player.number !== null ? player.number : posKey}
             </text>
             <text x={cx} y={cy + 9} textAnchor="middle"
-              fill="rgba(255,255,255,0.95)" fontSize="8" fontFamily="'Barlow Condensed',sans-serif" fontWeight="700">
+              fill="rgba(255,255,255,0.95)" fontSize="8" fontFamily="var(--font-heading)" fontWeight="700">
               {player.name.length > 10 ? player.name.split(' ').slice(-1)[0].substring(0, 9).toUpperCase() : player.name.toUpperCase()}
             </text>
             {liveSec > 0 && (
               <text x={cx} y={cy + 21} textAnchor="middle"
-                fill="rgba(255,220,0,0.95)" fontSize="8" fontFamily="'Bebas Neue',sans-serif">
+                fill="rgba(255,220,0,0.95)" fontSize="8" fontFamily="var(--font-display)">
                 {formatDuration(liveSec)}
               </text>
             )}
@@ -354,7 +354,7 @@ export default function FieldView({
         {/* "klik" hint on empty editable slot */}
         {!isOccupied && isEditable && (
           <text x={cx} y={cy + 35} textAnchor="middle"
-            fill="rgba(255,255,255,0.35)" fontSize="8" fontFamily="'Barlow Condensed',sans-serif">
+            fill="rgba(255,255,255,0.35)" fontSize="8" fontFamily="var(--font-heading)">
             klik / sleep
           </text>
         )}

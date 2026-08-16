@@ -10,6 +10,7 @@ const TILES = [
   { to: '/trainingen',    icon: '📝', label: 'Trainingen',           desc: 'Trainingen voorbereiden' },
   { to: '/oefendatabank', icon: '📚', label: 'Oefeningen',           desc: 'Oefeningendatabank' },
   { to: '/whiteboard',    icon: '🎨', label: 'Whiteboard',           desc: 'Snel een tekening maken' },
+  { to: '/tactiek',       icon: '🧠', label: 'Tactiek',              desc: 'Het gamemodel van de club' },
 ];
 
 export default function Home() {

@@ -6,6 +6,7 @@
 import { GraphQLSchema } from 'graphql';
 import { mergeSchemas } from '@graphql-tools/schema';
 import { exportTrainingPptx, exportExercisePptx, ExportTraining, ExportExercise } from './lib/exportTrainingPptx';
+import { exportTrainingPdf } from './lib/exportTrainingPdf';
 import { saveTeamManual, deleteTeamManual } from './lib/manualUpload';
 
 const EXERCISE_QUERY = `
@@ -41,6 +42,52 @@ const TRAINING_QUERY = `
   }
 `;
 
+/** Zet de ruwe GraphQL-respons van TRAINING_QUERY om naar de platte ExportTraining-
+ * vorm — gedeeld tussen de PowerPoint- en PDF-export zodat beide exact dezelfde
+ * data zien. */
+function buildExportTrainingData(training: any): ExportTraining {
+  return {
+    titel: training.titel ?? '',
+    date: training.date ?? '',
+    jaarplanLabel: training.jaarplanLabel ?? '',
+    coachNaam: training.coachNaam ?? '',
+    tijdstip: training.tijdstip ?? '',
+    leeftijdscategorie: training.leeftijdscategorie ?? '',
+    niveau: training.niveau ?? '',
+    hoofdmoment: training.hoofdmoment ?? '',
+    spelfase: training.spelfase ?? '',
+    basisvaardigheid: training.basisvaardigheid ?? '',
+    speluitdagingWie: training.speluitdagingWie ?? '',
+    speluitdagingWat: training.speluitdagingWat ?? '',
+    speluitdagingWaar: training.speluitdagingWaar ?? '',
+    speluitdagingWanneer: training.speluitdagingWanneer ?? '',
+    coachingswoorden: training.coachingswoorden ?? '',
+    materiaal: training.materiaal ?? '',
+    actiefAanpak: training.actiefAanpak ?? '',
+    funAanpak: training.funAanpak ?? '',
+    individueleAandacht: training.individueleAandacht ?? '',
+    evalBehouden: training.evalBehouden ?? '',
+    evalWijzigen: training.evalWijzigen ?? '',
+    evalWarenActief: training.evalWarenActief ?? '',
+    evalHaddenFun: training.evalHaddenFun ?? '',
+    evalBijgeleerd: training.evalBijgeleerd ?? '',
+    evalIndividueleAandacht: training.evalIndividueleAandacht ?? '',
+    exercises: (training.exercises ?? []).map((ex: any) => ({
+      fase: ex.fase ?? 'tussenvorm',
+      naam: ex.naam ?? '',
+      duurMinuten: ex.duurMinuten ?? 0,
+      organisatieSpelers: ex.organisatieSpelers ?? '',
+      organisatieAfmetingen: ex.organisatieAfmetingen ?? '',
+      organisatieMateriaal: ex.organisatieMateriaal ?? '',
+      beschrijving: ex.beschrijving ?? '',
+      coachingPunten: ex.coachingPunten ?? '',
+      maximaalActief: ex.maximaalActief ?? '',
+      fun: ex.fun ?? '',
+      drawingData: ex.drawingData ?? '',
+    })),
+  };
+}
+
 export function extendGraphqlSchema(schema: GraphQLSchema): GraphQLSchema {
   return mergeSchemas({
     schemas: [schema],
@@ -48,6 +95,7 @@ export function extendGraphqlSchema(schema: GraphQLSchema): GraphQLSchema {
       type Mutation {
         exportTrainingPptx(id: ID!): String
         exportExercisePptx(id: ID!): String
+        exportTrainingPdf(id: ID!): String
         uploadTeamManual(teamId: ID!, filename: String!, contentBase64: String!): Team
         removeTeamManual(teamId: ID!): Team
       }
@@ -92,48 +140,18 @@ export function extendGraphqlSchema(schema: GraphQLSchema): GraphQLSchema {
           const training = await context.query.Training.findOne({ where: { id }, query: TRAINING_QUERY });
           if (!training) throw new Error('Training niet gevonden');
 
-          const data: ExportTraining = {
-            titel: training.titel ?? '',
-            date: training.date ?? '',
-            jaarplanLabel: training.jaarplanLabel ?? '',
-            coachNaam: training.coachNaam ?? '',
-            tijdstip: training.tijdstip ?? '',
-            leeftijdscategorie: training.leeftijdscategorie ?? '',
-            niveau: training.niveau ?? '',
-            hoofdmoment: training.hoofdmoment ?? '',
-            spelfase: training.spelfase ?? '',
-            basisvaardigheid: training.basisvaardigheid ?? '',
-            speluitdagingWie: training.speluitdagingWie ?? '',
-            speluitdagingWat: training.speluitdagingWat ?? '',
-            speluitdagingWaar: training.speluitdagingWaar ?? '',
-            speluitdagingWanneer: training.speluitdagingWanneer ?? '',
-            coachingswoorden: training.coachingswoorden ?? '',
-            materiaal: training.materiaal ?? '',
-            actiefAanpak: training.actiefAanpak ?? '',
-            funAanpak: training.funAanpak ?? '',
-            individueleAandacht: training.individueleAandacht ?? '',
-            evalBehouden: training.evalBehouden ?? '',
-            evalWijzigen: training.evalWijzigen ?? '',
-            evalWarenActief: training.evalWarenActief ?? '',
-            evalHaddenFun: training.evalHaddenFun ?? '',
-            evalBijgeleerd: training.evalBijgeleerd ?? '',
-            evalIndividueleAandacht: training.evalIndividueleAandacht ?? '',
-            exercises: (training.exercises ?? []).map((ex: any) => ({
-              fase: ex.fase ?? 'tussenvorm',
-              naam: ex.naam ?? '',
-              duurMinuten: ex.duurMinuten ?? 0,
-              organisatieSpelers: ex.organisatieSpelers ?? '',
-              organisatieAfmetingen: ex.organisatieAfmetingen ?? '',
-              organisatieMateriaal: ex.organisatieMateriaal ?? '',
-              beschrijving: ex.beschrijving ?? '',
-              coachingPunten: ex.coachingPunten ?? '',
-              maximaalActief: ex.maximaalActief ?? '',
-              fun: ex.fun ?? '',
-              drawingData: ex.drawingData ?? '',
-            })),
-          };
-
+          const data = buildExportTrainingData(training);
           const buffer = await exportTrainingPptx(data);
+          return buffer.toString('base64');
+        },
+        exportTrainingPdf: async (_root: unknown, { id }: { id: string }, context: any) => {
+          requireSignedIn(context);
+          // Zelfde ploeg-scoping als exportTrainingPptx hierboven.
+          const training = await context.query.Training.findOne({ where: { id }, query: TRAINING_QUERY });
+          if (!training) throw new Error('Training niet gevonden');
+
+          const data = buildExportTrainingData(training);
+          const buffer = await exportTrainingPdf(data);
           return buffer.toString('base64');
         },
         exportExercisePptx: async (_root: unknown, { id }: { id: string }, context: any) => {

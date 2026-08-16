@@ -1936,15 +1936,17 @@ export function wedstrijdvormPercentage(exercises: Exercise[]): number {
   return (wedstrijdvorm / total) * 100;
 }
 
-async function downloadPptxBase64(base64: string, filename: string): Promise<void> {
-  const res = await fetch(
-    `data:application/vnd.openxmlformats-officedocument.presentationml.presentation;base64,${base64}`
-  );
+async function downloadBase64File(base64: string, filename: string, mimeType: string): Promise<void> {
+  const res = await fetch(`data:${mimeType};base64,${base64}`);
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
+}
+const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+async function downloadPptxBase64(base64: string, filename: string): Promise<void> {
+  await downloadBase64File(base64, filename, PPTX_MIME);
 }
 
 /** Vult het officiële KFC-trainingssjabloon (PowerPoint) in met deze training
@@ -1969,6 +1971,18 @@ export async function exportExerciseToPptx(exerciseId: string, filename: string)
   const base64: string | null = data.exportExercisePptx;
   if (!base64) throw new Error('Oefening-export mislukt');
   await downloadPptxBase64(base64, filename);
+}
+
+/** Genereert een eenvoudig PDF-verslag van deze training (geen sjabloon nodig,
+ * server-side gegenereerd) en download het resultaat. */
+export async function exportTrainingToPdf(trainingId: string, filename: string): Promise<void> {
+  const data = await gql(
+    `mutation ExportTrainingPdf($id: ID!) { exportTrainingPdf(id: $id) }`,
+    { id: trainingId }
+  );
+  const base64: string | null = data.exportTrainingPdf;
+  if (!base64) throw new Error('PDF-export mislukt');
+  await downloadBase64File(base64, filename, 'application/pdf');
 }
 
 // ── Oefendatabank (club-brede, herbruikbare oefeningenbibliotheek) ─────────────

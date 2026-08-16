@@ -126,6 +126,10 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   }, [scene.backgroundImage]);
 
   const [tool, setTool] = useState<Tool>('select');
+  // Volledig-scherm: een puur visuele CSS-overlay (geen native Fullscreen API,
+  // die vereist een expliciete gebaar-toestemming en gedraagt zich wisselend
+  // op mobiel) die de tekening veel groter toont zonder de rest van de pagina.
+  const [fullscreen, setFullscreen] = useState(false);
   const [playerColor, setPlayerColor] = useState<PlayerColor>('red');
   const [coneColor, setConeColor] = useState<ConeColor>('orange');
   // Gekozen grootte-preset per objecttype (voor nieuw geplaatste objecten van
@@ -155,6 +159,21 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   const pasteOffsetRef = useRef(0);
   const [hasClipboard, setHasClipboard] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // Volledig scherm: Escape sluit het, en de achtergrondpagina mag intussen
+  // niet meescrollen achter de overlay.
+  useEffect(() => {
+    if (!fullscreen) return;
+    document.body.style.overflow = 'hidden';
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setFullscreen(false);
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [fullscreen]);
 
   // ── Animatie (stappen tonen waar spelers/bal naartoe bewegen) ──────────────
   const frames = scene.animation?.frames ?? [];
@@ -632,7 +651,12 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   function onElementPointerDown(e: React.PointerEvent, el: DrawingElement) {
     if (readOnly || playing) return;
     e.stopPropagation();
-    if (tool !== 'select') return;
+    // Tikken op een al geplaatst object selecteert het altijd, ook als een
+    // plaats-tool (bv. "speler") nog actief staat — anders blijft die tool
+    // actief en interpreteert de volgende tik (vooral op tablet, waar precies
+    // raken lastiger is) het als "plaats hier een NIEUW object" i.p.v. het
+    // bestaande te selecteren, met de "Spelernummer?"-prompt tot gevolg.
+    if (tool !== 'select') setTool('select');
     // Shift-klik voegt toe/verwijdert uit de selectie, om later samen uit te
     // lijnen — dit sleept niets, zo blijft een gewone klik het enige dat verplaatst.
     if (e.shiftKey) {
@@ -735,9 +759,17 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   }
 
   return (
-    <div className="dc-wrap">
+    <div className={`dc-wrap ${fullscreen ? 'dc-fullscreen' : ''}`}>
       {!readOnly && (
         <div className="dc-toolbar">
+          <button
+            className={`dc-tool ${fullscreen ? 'active' : ''}`}
+            title={fullscreen ? 'Volledig scherm verlaten (Esc)' : 'Volledig scherm'}
+            onClick={() => setFullscreen(v => !v)}
+          >
+            {fullscreen ? '⤢' : '⛶'}
+          </button>
+          <span className="dc-sep" />
           <button className={`dc-tool ${tool === 'select' ? 'active' : ''}`} title="Verplaatsen (shift-klik om meerdere te selecteren en uit te lijnen)" onClick={() => setTool('select')}>↖</button>
           {POINT_TOOLS.map(t => (
             <button key={t.tool} className={`dc-tool ${tool === t.tool ? 'active' : ''}`} title={t.title} onClick={() => setTool(t.tool)}>{t.icon}</button>
@@ -1069,9 +1101,9 @@ function renderPhasesField(W: number, H: number, isLandscape: boolean) {
         <circle cx={cx} cy={yMid} r="46" fill="none" stroke={wl} strokeWidth="1.5" />
         <line x1={x0} y1={yFase3} x2={x1} y2={yFase3} stroke={wl} strokeWidth="1.5" strokeDasharray="7 5" />
         <line x1={x0} y1={yFase2} x2={x1} y2={yFase2} stroke={wl} strokeWidth="1.5" strokeDasharray="7 5" />
-        <text x={x0+4} y={yFase3-6} fontSize="9" fontFamily="'Barlow Condensed',sans-serif" fontWeight={700} fill="rgba(255,255,255,0.9)">Fase 3</text>
-        <text x={x0+4} y={yFase2-6} fontSize="9" fontFamily="'Barlow Condensed',sans-serif" fontWeight={700} fill="rgba(255,255,255,0.9)">Fase 2</text>
-        <text x={x0+4} y={y1-6} fontSize="9" fontFamily="'Barlow Condensed',sans-serif" fontWeight={700} fill="rgba(255,255,255,0.9)">Fase 1</text>
+        <text x={x0+4} y={yFase3-6} fontSize="9" fontFamily="var(--font-heading)" fontWeight={700} fill="rgba(255,255,255,0.9)">Fase 3</text>
+        <text x={x0+4} y={yFase2-6} fontSize="9" fontFamily="var(--font-heading)" fontWeight={700} fill="rgba(255,255,255,0.9)">Fase 2</text>
+        <text x={x0+4} y={y1-6} fontSize="9" fontFamily="var(--font-heading)" fontWeight={700} fill="rgba(255,255,255,0.9)">Fase 1</text>
         {cone(x0, y0, RED, 'red-tl')}{cone(x1, y0, RED, 'red-tr')}
         {cone(x0+8, boxTopY, BLUE, 'blue-tl')}{cone(x1-8, boxTopY, BLUE, 'blue-tr')}
         {cone(x0+8, yMid, YELLOW, 'yellow-l')}{cone(x1-8, yMid, YELLOW, 'yellow-r')}
@@ -1103,9 +1135,9 @@ function renderPhasesField(W: number, H: number, isLandscape: boolean) {
       <circle cx={xMid} cy={cy} r="46" fill="none" stroke={wl} strokeWidth="1.5" />
       <line x1={xFase3} y1={y0} x2={xFase3} y2={y1} stroke={wl} strokeWidth="1.5" strokeDasharray="7 5" />
       <line x1={xFase2} y1={y0} x2={xFase2} y2={y1} stroke={wl} strokeWidth="1.5" strokeDasharray="7 5" />
-      <text x={xFase3+4} y={y0+12} fontSize="9" fontFamily="'Barlow Condensed',sans-serif" fontWeight={700} fill="rgba(255,255,255,0.9)">Fase 3</text>
-      <text x={xFase2+4} y={y0+12} fontSize="9" fontFamily="'Barlow Condensed',sans-serif" fontWeight={700} fill="rgba(255,255,255,0.9)">Fase 2</text>
-      <text x={x1-32} y={y0+12} fontSize="9" fontFamily="'Barlow Condensed',sans-serif" fontWeight={700} fill="rgba(255,255,255,0.9)">Fase 1</text>
+      <text x={xFase3+4} y={y0+12} fontSize="9" fontFamily="var(--font-heading)" fontWeight={700} fill="rgba(255,255,255,0.9)">Fase 3</text>
+      <text x={xFase2+4} y={y0+12} fontSize="9" fontFamily="var(--font-heading)" fontWeight={700} fill="rgba(255,255,255,0.9)">Fase 2</text>
+      <text x={x1-32} y={y0+12} fontSize="9" fontFamily="var(--font-heading)" fontWeight={700} fill="rgba(255,255,255,0.9)">Fase 1</text>
       {cone(x0, y0, RED, 'red-tl')}{cone(x0, y1, RED, 'red-bl')}
       {cone(boxLeftX, y0+8, BLUE, 'blue-tl')}{cone(boxLeftX, y1-8, BLUE, 'blue-bl')}
       {cone(xMid, y0+8, YELLOW, 'yellow-t')}{cone(xMid, y1-8, YELLOW, 'yellow-b')}
@@ -1144,9 +1176,23 @@ function renderElement(
     const handleBaseR = Math.max(20, Math.hypot(dxPix, dyPix) / 2 + 10);
     const rotateHandle = (selected && showHandles && onRotateStart) ? renderRotateHandle(cx, cy, rotation, scale, handleBaseR, onRotateStart) : null;
     const resizeHandle = (selected && showHandles && onResizeStart) ? renderResizeHandle(cx, cy, rotation, scale, handleBaseR, onResizeStart) : null;
+    // Dunne lijnen/pijlen (niet de gevulde zone-vormen, die al overal binnenin
+    // tikbaar zijn) krijgen een brede onzichtbare vangstreep — anders is een
+    // lijntje van 2,5px op een tablet vrijwel niet te raken.
+    const isThinLine = el.type === 'line' || el.type === 'line-dashed' || el.type.startsWith('arrow-');
+    const touchTarget = isThinLine ? (
+      <line
+        x1={(el.x / 100) * W} y1={(el.y / 100) * H}
+        x2={((el.x2 ?? el.x) / 100) * W} y2={((el.y2 ?? el.y) / 100) * H}
+        stroke="transparent" strokeWidth={16}
+      />
+    ) : null;
     return (
       <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
-        <g transform={transform}>{renderLineOrShape(el, selected, W, H)}</g>
+        <g transform={transform}>
+          {touchTarget}
+          {renderLineOrShape(el, selected, W, H)}
+        </g>
         {rotateHandle}
         {resizeHandle}
       </g>
@@ -1169,9 +1215,15 @@ function renderElement(
     : null;
   const rotateHandle = (selected && showHandles && onRotateStart) ? renderRotateHandle(cx, cy, rotation, scale, handleBaseR, onRotateStart) : null;
   const resizeHandle = (selected && showHandles && onResizeStart) ? renderResizeHandle(cx, cy, rotation, scale, handleBaseR, onResizeStart) : null;
+  // Onzichtbaar maar wél tikbaar (fill="transparent", niet "none") vanggebied,
+  // ruimer dan de meeste iconen zelf (straal 12 of kleiner) — op een tablet is
+  // precies op zo'n klein icoontje tikken lastig, waardoor de tik anders naast
+  // het object valt en als een nieuwe plaatsing wordt gezien i.p.v. een selectie.
+  const touchTarget = !isImage ? <circle cx={cx} cy={cy} r={20 * scale} fill="transparent" /> : null;
 
   return (
     <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
+      {touchTarget}
       {ring}
       <g transform={transform}>
         {renderShape(el, cx, cy)}
@@ -1189,7 +1241,7 @@ function renderShape(el: DrawingElement, cx: number, cy: number) {
     return (
       <>
         <circle cx={cx} cy={cy} r="12" fill={fill} stroke="white" strokeWidth="1.5" />
-        {el.label && <text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontFamily="'Bebas Neue',sans-serif" fill={textFill}>{el.label}</text>}
+        {el.label && <text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontFamily="var(--font-display)" fill={textFill}>{el.label}</text>}
       </>
     );
   }
@@ -1206,7 +1258,7 @@ function renderShape(el: DrawingElement, cx: number, cy: number) {
     return (
       <>
         <rect x={cx-10} y={cy-10} width="20" height="20" rx="4" fill="#16161D" stroke="white" strokeWidth="1.5" />
-        <text x={cx} y={cy+4} textAnchor="middle" fontSize="10" fontFamily="'Bebas Neue',sans-serif" fill="white">T</text>
+        <text x={cx} y={cy+4} textAnchor="middle" fontSize="10" fontFamily="var(--font-display)" fill="white">T</text>
       </>
     );
   }
@@ -1252,7 +1304,7 @@ function renderShape(el: DrawingElement, cx: number, cy: number) {
   }
   // text
   return (
-    <text x={cx} y={cy} textAnchor="middle" fontSize="13" fontFamily="'Barlow Condensed',sans-serif" fontWeight={700}
+    <text x={cx} y={cy} textAnchor="middle" fontSize="13" fontFamily="var(--font-heading)" fontWeight={700}
       fill="white" stroke="rgba(0,0,0,0.6)" strokeWidth="3" paintOrder="stroke">
       {el.label}
     </text>

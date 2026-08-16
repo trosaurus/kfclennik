@@ -1,5 +1,14 @@
 .dc-wrap { display: flex; flex-direction: column; gap: 8px; }
 
+/* Volledig scherm — CSS-overlay i.p.v. de native Fullscreen API, zodat het
+ * overal (ook binnen een modal) hetzelfde werkt en zonder gebaar-vereisten. */
+.dc-wrap.dc-fullscreen {
+  position: fixed; inset: 0; z-index: 2000;
+  background: var(--bg); padding: 16px;
+  overflow-y: auto;
+}
+.dc-fullscreen .dc-canvas-container { max-width: min(94vw, 760px); }
+
 .dc-toolbar, .dc-bg-toolbar {
   display: flex; gap: 4px; flex-wrap: wrap; align-items: center;
   background: var(--bg-elevated); border: 1px solid var(--border);

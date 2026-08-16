@@ -2,12 +2,14 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { logout } from '../lib/auth';
 import { useTeam } from '../lib/TeamContext';
 import { useTheme } from '../lib/ThemeContext';
+import { useFont } from '../lib/FontContext';
 import logo from '../assets/Logo-KFC-Lennik.png';
 import './Layout.css';
 
 export default function Layout() {
   const { trainer, setTrainer, isAdmin, category } = useTeam();
   const { theme, toggleTheme } = useTheme();
+  const { font, toggleFont } = useFont();
   const location = useLocation();
 
   const NAV_ITEMS = [
@@ -19,6 +21,7 @@ export default function Layout() {
     { to: '/trainingen',  label: 'Trainingen',   icon: '📝' },
     { to: '/oefendatabank', label: 'Oefeningen', icon: '📚' },
     { to: '/whiteboard',    label: 'Whiteboard', icon: '🎨' },
+    { to: '/tactiek',       label: 'Tactiek',    icon: '🧠' },
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: '⚙️' }] : []),
   ];
 
@@ -55,6 +58,14 @@ export default function Layout() {
             <button className="btn btn-ghost btn-icon" onClick={toggleTheme}
               title={theme === 'dark' ? 'Lichte modus' : 'Donkere modus'}>
               {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
+            <button className="btn btn-ghost btn-icon" onClick={toggleFont}
+              title={font === 'default' ? 'Poppins lettertype' : 'Standaard lettertype'}
+              style={{
+                fontFamily: font === 'default' ? "'Poppins', sans-serif" : 'var(--font-body)',
+                textTransform: 'none', letterSpacing: 0,
+              }}>
+              Aa
             </button>
             <span className="header-trainer-name">{trainer?.name}</span>
             <button className="btn btn-ghost btn-sm" onClick={handleLogout} title="Afmelden">↩ Afmelden</button>

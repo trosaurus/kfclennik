@@ -4,7 +4,7 @@ import { useTeam } from '../lib/TeamContext';
 import {
   getTraining, updateTraining, createExercise, updateExercise, deleteExercise,
   Training, Exercise, ExerciseFase, EXERCISE_FASE_LABELS,
-  wedstrijdvormPercentage, parseDrawingScene, exportTrainingToPptx, exportExerciseToPptx,
+  wedstrijdvormPercentage, parseDrawingScene, exportTrainingToPptx, exportExerciseToPptx, exportTrainingToPdf,
   getOefeningDatabank, createOefeningDatabankItem, OefeningDatabankItem, OefeningCategorie, Doelgroep, DOELGROEP_LEEFTIJDEN, SPELPRINCIPE_LABELS,
   getTeamManual, getTrainers, setTrainingShare, TrainerRecord,
 } from '../lib/api';
@@ -15,6 +15,7 @@ import { extractManualSuggestions } from '../lib/manualOefeningen';
 import { buildOefeningPrompt, parseClaudeResponse, ParsedClaudeExercise } from '../lib/claudePrompt';
 import { parseTrainingPdf, ParsedExercise } from '../lib/pdfImport';
 import DrawingCanvas from '../components/DrawingCanvas';
+import { PowerPointIcon, PdfIcon } from '../components/icons/FileTypeIcons';
 import './TrainingEditor.css';
 import './Oefendatabank.css'; // hergebruikt .od-card-teamprincipe voor de databank-picker
 
@@ -95,6 +96,7 @@ export default function TrainingEditor() {
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExerciseId, setExportingExerciseId] = useState<string | null>(null);
   const [importingExercisePdf, setImportingExercisePdf] = useState(false);
   const exerciseFileInputRef = useRef<HTMLInputElement>(null);
@@ -403,6 +405,18 @@ export default function TrainingEditor() {
     } finally { setExporting(false); }
   }
 
+  async function handleExportPdf() {
+    if (!training) return;
+    setExportingPdf(true); setError('');
+    try {
+      await handleSave(); // exporteer altijd de meest recente (net opgeslagen) gegevens
+      const safeName = (form.titel || 'training').replace(/[^\p{L}\p{N}\-_]+/gu, '_').slice(0, 60);
+      await exportTrainingToPdf(training.id, `${safeName || 'training'}.pdf`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'PDF-export mislukt');
+    } finally { setExportingPdf(false); }
+  }
+
   async function handleExportExercise(ex: LocalExercise) {
     if (!training) return;
     setExportingExerciseId(ex.id);
@@ -488,7 +502,10 @@ export default function TrainingEditor() {
           )}
           <button className="btn btn-outline" onClick={() => navigate(`/trainingen/${training.id}/modus`)}>▶ Trainingsmodus</button>
           <button className="btn btn-outline" disabled={exporting || saving} onClick={handleExportPptx}>
-            {exporting ? 'Exporteren...' : '📊 Exporteer naar PowerPoint'}
+            <PowerPointIcon /> {exporting ? 'Exporteren...' : 'Exporteer naar PowerPoint'}
+          </button>
+          <button className="btn btn-outline" disabled={exportingPdf || saving} onClick={handleExportPdf}>
+            <PdfIcon /> {exportingPdf ? 'Exporteren...' : 'Exporteer naar PDF'}
           </button>
           <button className="btn btn-primary" disabled={saving} onClick={handleSave}>{saving ? 'Opslaan...' : '💾 Opslaan'}</button>
         </div>
@@ -821,7 +838,7 @@ export default function TrainingEditor() {
                       <button className="btn btn-outline btn-sm" onClick={() => openDbModal(ex)}>📚 Importeer uit databank</button>
                       <button className="btn btn-outline btn-sm" onClick={() => openSaveToDb(ex)}>💾 Bewaar in databank</button>
                       <button className="btn btn-outline btn-sm" disabled={exportingExerciseId === ex.id} onClick={() => handleExportExercise(ex)}>
-                        {exportingExerciseId === ex.id ? 'Exporteren...' : '📊 Exporteer oefening'}
+                        <PowerPointIcon size={14} /> {exportingExerciseId === ex.id ? 'Exporteren...' : 'Exporteer oefening'}
                       </button>
                     </div>
                     <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => removeExercise(ex.id)}>🗑️ Verwijderen</button>
