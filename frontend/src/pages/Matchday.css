@@ -217,6 +217,11 @@
   letter-spacing: -1px;
 }
 
+/* ── Inklapbare opstelling-planner tijdens actieve/gepauzeerde match ── */
+.md-lineup-toggle-row {
+  margin-bottom: 20px;
+}
+
 /* ── PeriodLineupSelector ── */
 .md-lineup-selector {
   background: var(--bg-card); border: 1px solid var(--border);

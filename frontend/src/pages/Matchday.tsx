@@ -51,6 +51,11 @@ export default function Matchday() {
   const [subModal, setSubModal]         = useState<PlayerState | null>(null);
   const [matchPicker, setMatchPicker]   = useState(false);
   const [scoreModal, setScoreModal]     = useState(false);
+  // De opstelling-planner (kwart 1-4) blijft na de aftrap enkel INklapbaar
+  // bereikbaar i.p.v. volledig te verdwijnen — de opgeslagen opstellingen voor
+  // kwart 2-4 blijven altijd intact (localStorage), maar zonder dit paneel was
+  // er tijdens de match geen enkele manier meer om ze te bekijken of te wijzigen.
+  const [showLineupPlanner, setShowLineupPlanner] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Boot ────────────────────────────────────────────────────────────────────
@@ -616,7 +621,7 @@ export default function Matchday() {
         />
       )}
 
-      {/* ── PLANNED: per-period lineup selector ── */}
+      {/* ── PLANNED: per-period lineup selector, altijd zichtbaar vóór de aftrap ── */}
       {isPlanned && (
         <PeriodLineupSelector
           matchId={m!.id}
@@ -631,6 +636,33 @@ export default function Matchday() {
             await refresh();
           }}
         />
+      )}
+
+      {/* ── ACTIEF/PAUZE: opstelling per kwart blijft inklapbaar bereikbaar, zodat
+          de vooraf ingestelde opstellingen voor kwart 2-4 zichtbaar/wijzigbaar
+          blijven i.p.v. te verdwijnen zodra kwart 1 gestart is ── */}
+      {!isPlanned && !isFinished && (
+        <div className="md-lineup-toggle-row">
+          <button className="btn btn-outline btn-sm" onClick={() => setShowLineupPlanner(v => !v)}>
+            {showLineupPlanner ? '▲ Verberg opstelling per kwart' : '▼ Opstelling per kwart bekijken/wijzigen'}
+          </button>
+          {showLineupPlanner && (
+            <PeriodLineupSelector
+              matchId={m!.id}
+              allPlayers={squadPlayers}
+              attendances={attendances}
+              fieldAssignments={fieldAssignments}
+              onPreAssign={handlePreAssign}
+              teamCategory={matchCategory}
+              teamId={teamId}
+              initialPeriod={Math.min(curPeriod + 1, TOTAL_PERIODS)}
+              onToggleAttendance={async (playerId, sel) => {
+                await setAttendance(m!.id, playerId, true, sel);
+                await refresh();
+              }}
+            />
+          )}
+        </div>
       )}
 
       {/* ── ACTIVE / PAUSED: veld + lijst altijd zichtbaar ── */}
@@ -1141,7 +1173,7 @@ function ScoreModal({ match, periods, onSave, onClose }: {
 
 // ── PeriodLineupSelector ─────────────────────────────────────────────────────
 
-function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignments, onPreAssign, onToggleAttendance, teamCategory, teamId }: {
+function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignments, onPreAssign, onToggleAttendance, teamCategory, teamId, initialPeriod }: {
   matchId: string;
   allPlayers: Player[];
   attendances: Attendance[];
@@ -1150,8 +1182,9 @@ function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignmen
   onToggleAttendance: (playerId: string, selected: boolean) => Promise<void>;
   teamCategory?: string;
   teamId: string | null;
+  initialPeriod?: number;
 }) {
-  const [activePeriod, setActivePeriod] = useState(1);
+  const [activePeriod, setActivePeriod] = useState(initialPeriod ?? 1);
   const [lineups, setLineups] = useState<Record<number, Set<string>>>(() => {
     const init: Record<number, Set<string>> = {};
     for (let p = 1; p <= 4; p++) {
