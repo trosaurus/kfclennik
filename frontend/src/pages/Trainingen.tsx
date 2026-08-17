@@ -128,6 +128,10 @@ export default function Trainingen() {
     const d = new Date(iso);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   }
+  function isToday(iso: string): boolean {
+    const d = new Date(iso), now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  }
 
   if (loading) return <div className="page"><div className="loading-spinner">Trainingen laden...</div></div>;
 
@@ -253,11 +257,13 @@ export default function Trainingen() {
                     const status = STATUS_META[t.status] ?? STATUS_META.concept;
                     const jw = getJaarplanWeekForDate(new Date(t.date));
                     const schema = t.trainingsschema ? getTrainingsschema(t.trainingsschema) : undefined;
+                    const today = isToday(t.date);
                     return (
-                      <div key={t.id} className="tr-card card">
+                      <div key={t.id} className={`tr-card card ${today ? 'tr-card-today' : ''}`}>
                         <div className="tr-card-main" onClick={() => navigate(`/trainingen/${t.id}`)}>
                           <div className="tr-card-date">
                             <span className="tr-date-day">{fmtDate(t.date)}</span>
+                            {today && <span className="tr-date-today">Vandaag</span>}
                             {t.jaarplanLabel && <span className="tr-date-jaarplan">{t.jaarplanLabel}</span>}
                             {!t.jaarplanLabel && jw && <span className="tr-date-jaarplan">{formatJaarplanLabel(jw)}</span>}
                           </div>

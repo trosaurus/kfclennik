@@ -61,6 +61,20 @@
 }
 .dc-number-input:focus { outline: none; border-color: var(--red); }
 
+.dc-number-list {
+  display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto;
+  max-width: 100%; padding-bottom: 2px;
+}
+.dc-number-chip {
+  flex-shrink: 0; min-width: 26px; height: 26px; padding: 0 4px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 2px solid var(--border); border-radius: var(--radius);
+  font-family: var(--font-heading); font-size: 12px; font-weight: 700;
+  color: var(--text-dim); cursor: pointer; transition: all .12s;
+}
+.dc-number-chip:hover { color: var(--text); border-color: var(--text-dim); }
+.dc-number-chip.active { background: var(--red); border-color: var(--red); color: white; }
+
 .dc-anim-toolbar {
   display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
   background: var(--bg-elevated); border: 1px solid var(--border);

@@ -2090,7 +2090,7 @@ export type DrawingElementType =
   | 'arrow-pass' | 'arrow-dribble' | 'arrow-run' | 'text'
   | 'line' | 'line-dashed' | 'rect' | 'ellipse' | 'triangle';
 
-export type PlayerColor = 'red' | 'blue' | 'white' | 'grey';
+export type PlayerColor = 'red' | 'blue' | 'yellow' | 'white' | 'grey';
 export type ConeColor = 'orange' | 'red' | 'green' | 'blue';
 
 export interface DrawingElement {
@@ -2110,6 +2110,7 @@ export interface DrawingElement {
 export const PLAYER_COLORS: { value: PlayerColor; label: string; hex: string }[] = [
   { value: 'red',   label: 'Rood',  hex: '#CC1A1A' },
   { value: 'blue',  label: 'Blauw', hex: '#2563eb' },
+  { value: 'yellow', label: 'Geel', hex: '#F5D020' },
   { value: 'white', label: 'Wit',   hex: '#f5f5f5' },
   { value: 'grey',  label: 'Grijs', hex: '#6b7280' },
 ];

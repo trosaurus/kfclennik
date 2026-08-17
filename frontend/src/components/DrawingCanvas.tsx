@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   DrawingScene, DrawingElement, DrawingElementType, DrawingBackground, AnimationFrame,
   PlayerColor, ConeColor, PLAYER_COLORS, CONE_COLORS,
+  WhiteboardItem, getWhiteboards, parseDrawingScene,
 } from '../lib/api';
 import './DrawingCanvas.css';
 
@@ -58,6 +59,10 @@ const SHAPE_TOOLS: { tool: DrawingElementType; icon: string; title: string }[] =
 const TWO_POINT_TYPES = new Set<DrawingElementType>([
   'arrow-pass', 'arrow-dribble', 'arrow-run', 'line', 'line-dashed', 'rect', 'ellipse', 'triangle',
 ]);
+
+// Keuzelijst voor spelernummers in de toolbar (1 t/m 11, een volledig elftal)
+// — vervangt de vroegere invoerpopup per plaatsing. "K" (keeper) staat apart.
+const PLAYER_NUMBERS = Array.from({ length: 11 }, (_, i) => i + 1);
 
 const MIN_SCALE = 0.4, MAX_SCALE = 3.5;
 
@@ -131,6 +136,12 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   // op mobiel) die de tekening veel groter toont zonder de rest van de pagina.
   const [fullscreen, setFullscreen] = useState(false);
   const [playerColor, setPlayerColor] = useState<PlayerColor>('red');
+  // Nummer dat de volgende geplaatste speler krijgt — kiesbaar uit de nummerlijst
+  // in de toolbar (i.p.v. een popup per plaatsing). Springt na het plaatsen
+  // automatisch naar het eerstvolgende vrije nummer, zodat snel na elkaar
+  // plaatsen zonder heraanklikken blijft werken, maar blijft ook gewoon
+  // vrij te kiezen door in de lijst een ander nummer aan te klikken.
+  const [playerNumber, setPlayerNumber] = useState('1');
   const [coneColor, setConeColor] = useState<ConeColor>('orange');
   // Gekozen grootte-preset per objecttype (voor nieuw geplaatste objecten van
   // dat type) — onthouden per type zodat bv. "L" voor pionnen niet ook "L" voor
@@ -460,6 +471,30 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
     commit({ ...scene, backgroundImage: undefined });
   }
 
+  // ── Opgeslagen whiteboard-tekening als veldtekening laden ───────────────
+  // Laadt de volledige gekozen scene (veld + alle geplaatste elementen) als
+  // startpunt in deze tekentool — vervangt de huidige tekening volledig,
+  // maar blijft daarna gewoon verder bewerkbaar (geen platte achtergrond).
+  const [whiteboardPickerOpen, setWhiteboardPickerOpen] = useState(false);
+  const [whiteboards, setWhiteboards] = useState<WhiteboardItem[] | null>(null);
+  const [whiteboardsLoading, setWhiteboardsLoading] = useState(false);
+
+  function openWhiteboardPicker() {
+    setWhiteboardPickerOpen(true);
+    setWhiteboardsLoading(true);
+    getWhiteboards()
+      .then(setWhiteboards)
+      .catch(() => alert('Kon de opgeslagen tekeningen niet ophalen.'))
+      .finally(() => setWhiteboardsLoading(false));
+  }
+
+  function pickWhiteboard(item: WhiteboardItem) {
+    const hasContent = scene.elements.length > 0 || scene.backgroundImage;
+    if (hasContent && !confirm(`De huidige tekening vervangen door "${item.naam}"?`)) return;
+    commit(parseDrawingScene(item.drawingData));
+    setWhiteboardPickerOpen(false);
+  }
+
   // ── Pointer handlers ─────────────────────────────────────────────────────
   function onCanvasPointerDown(e: React.PointerEvent<SVGSVGElement>) {
     if (readOnly || playing) return;
@@ -484,15 +519,30 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
     let label: string | undefined;
     let color: string | undefined;
     if (tool === 'player') {
-      const count = scene.elements.filter(el => el.type === 'player' && el.color === playerColor).length + 1;
-      const input = prompt('Spelernummer:', String(count));
-      if (input === null) return; // geannuleerd — geen speler plaatsen
-      label = input.trim() || undefined;
+      // Nummer komt uit de nummerlijst in de toolbar (playerNumber) i.p.v. een
+      // popup per plaatsing — nadien nog aanpasbaar via de "Nummer"-invoer die
+      // verschijnt zodra de speler geselecteerd wordt (select-tool).
+      label = playerNumber || undefined;
       color = playerColor;
+      setPlayerNumber(nextFreeNumber(playerColor, playerNumber));
     } else if (tool === 'cone') {
       color = coneColor;
     }
     addElement({ id: uid(), type: tool, x, y, label, color, scale: scaleByType[tool] });
+  }
+
+  // Eerstvolgende nog niet gebruikte nummer (1-11) binnen een kleur, te
+  // beginnen na `after` — gebruikt om na het plaatsen van een speler de
+  // nummerlijst alvast op een zinvolle volgende keuze te zetten. Buiten het
+  // 1-11 bereik (bv. na "K", of als alle elf al bezet zijn) valt terug op
+  // "geen nummer", zodat de gebruiker zelf opnieuw kiest.
+  function nextFreeNumber(color: PlayerColor, after: string): string {
+    const usedNumbers = new Set(
+      scene.elements.filter(el => el.type === 'player' && el.color === color && el.label).map(el => el.label)
+    );
+    let next = (parseInt(after, 10) || 0) + 1;
+    while (next <= 11 && usedNumbers.has(String(next))) next++;
+    return next <= 11 ? String(next) : '';
   }
 
   const SNAP_PX = 6; // vangafstand in schermpixels, onafhankelijk van veldformaat
@@ -655,7 +705,7 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
     // plaats-tool (bv. "speler") nog actief staat — anders blijft die tool
     // actief en interpreteert de volgende tik (vooral op tablet, waar precies
     // raken lastiger is) het als "plaats hier een NIEUW object" i.p.v. het
-    // bestaande te selecteren, met de "Spelernummer?"-prompt tot gevolg.
+    // bestaande te selecteren.
     if (tool !== 'select') setTool('select');
     // Shift-klik voegt toe/verwijdert uit de selectie, om later samen uit te
     // lijnen — dit sleept niets, zo blijft een gewone klik het enige dat verplaatst.
@@ -805,6 +855,21 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
           ))}
         </div>
       )}
+      {!readOnly && tool === 'player' && (
+        <div className="dc-color-toolbar">
+          <span className="dc-color-label">Nummer:</span>
+          <div className="dc-number-list">
+            <button className={`dc-number-chip ${!playerNumber ? 'active' : ''}`} title="Geen nummer"
+              onClick={() => setPlayerNumber('')}>–</button>
+            <button className={`dc-number-chip ${playerNumber === 'K' ? 'active' : ''}`} title="Keeper"
+              onClick={() => setPlayerNumber('K')}>K</button>
+            {PLAYER_NUMBERS.map(n => (
+              <button key={n} className={`dc-number-chip ${playerNumber === String(n) ? 'active' : ''}`}
+                onClick={() => setPlayerNumber(String(n))}>{n}</button>
+            ))}
+          </div>
+        </div>
+      )}
       {!readOnly && tool === 'cone' && (
         <div className="dc-color-toolbar">
           <span className="dc-color-label">Kleur:</span>
@@ -879,6 +944,33 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
               ↺ {isLandscape ? 'Zet staand' : 'Zet liggend'}
             </button>
           )}
+          <button className="dc-bg-btn" onClick={openWhiteboardPicker} title="Start van een opgeslagen whiteboard-tekening (veld + geplaatste elementen)">
+            📂 Uit whiteboard...
+          </button>
+        </div>
+      )}
+
+      {whiteboardPickerOpen && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setWhiteboardPickerOpen(false)}>
+          <div className="modal">
+            <div className="modal-title">Tekening uit whiteboard</div>
+            {whiteboardsLoading && <p>Tekeningen laden...</p>}
+            {!whiteboardsLoading && whiteboards && whiteboards.length === 0 && (
+              <p>Er zijn nog geen opgeslagen whiteboard-tekeningen.</p>
+            )}
+            {!whiteboardsLoading && whiteboards && whiteboards.length > 0 && (
+              <div className="sub-player-list">
+                {whiteboards.map(item => (
+                  <button key={item.id} className="sub-player-btn" onClick={() => pickWhiteboard(item)}>
+                    <span className="sub-name">{item.naam}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={() => setWhiteboardPickerOpen(false)}>Annuleren</button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1237,7 +1329,7 @@ function renderElement(
 function renderShape(el: DrawingElement, cx: number, cy: number) {
   if (el.type === 'player') {
     const fill = playerHex(el.color);
-    const textFill = el.color === 'white' ? '#16161D' : 'white';
+    const textFill = (el.color === 'yellow' || el.color === 'white') ? '#16161D' : 'white';
     return (
       <>
         <circle cx={cx} cy={cy} r="12" fill={fill} stroke="white" strokeWidth="1.5" />
