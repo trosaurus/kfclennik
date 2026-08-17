@@ -4,6 +4,8 @@
 // tekening-rasterisatie (parseDrawingScene + renderDrawingPng) als de
 // PowerPoint-export, en dezelfde ExportTraining/ExportExercise data-vorm.
 
+import path from 'path';
+import fs from 'fs';
 import PDFDocument from 'pdfkit';
 import { parseDrawingScene } from './drawingSvg';
 import { renderDrawingPng } from './renderDrawingPng';
@@ -17,6 +19,19 @@ const RED = '#CC1A1A';
 const DARK = '#16161D';
 const DIM = '#6b7280';
 const MARGIN = 44;
+
+const LOGO_PATH = path.join(__dirname, '..', 'assets', 'images', 'logo-kfc-lennik.png');
+const LOGO_ASPECT = 455 / 491; // breedte/hoogte van het bronbestand
+const LOGO_BUFFER: Buffer | null = fs.existsSync(LOGO_PATH) ? fs.readFileSync(LOGO_PATH) : null;
+
+/** Klein clublogo linksboven op elke pagina — puur decoratief, staat los van
+ * de tekst-flow (vaste positie) zodat de strakke een-pagina-per-oefening
+ * budgettering in addExercisePage() er niet door verschuift. */
+function addHeaderLogo(doc: PDFKit.PDFDocument) {
+  if (!LOGO_BUFFER) return;
+  const h = 24, w = h * LOGO_ASPECT;
+  doc.image(LOGO_BUFFER, doc.page.margins.left, 14, { width: w, height: h });
+}
 
 function collectBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -68,6 +83,7 @@ function drawTableRow(doc: PDFKit.PDFDocument, x: number, y: number, width: numb
  * pagina past, ongeacht hoe lang de trainer de velden invulde. */
 async function addExercisePage(doc: PDFKit.PDFDocument, ex: ExportExercise) {
   doc.addPage();
+  addHeaderLogo(doc);
   const left = doc.page.margins.left;
   const cw = contentWidth(doc);
   let y = doc.page.margins.top;
@@ -121,22 +137,74 @@ async function addExercisePage(doc: PDFKit.PDFDocument, ex: ExportExercise) {
   ], bottomRowH);
 }
 
+/** Titelpagina met het clublogo in een rode kopbalk (zelfde stijl als de
+ * officiële KFC-documenten: rode banner met logo + clubnaam bovenaan, een
+ * dunne rode balk onderaan), i.p.v. gewoon losse gecentreerde tekstregels. */
+function addTitlePage(doc: PDFKit.PDFDocument, training: ExportTraining, dateLabel: string) {
+  const pageW = doc.page.width;
+  const cw = contentWidth(doc);
+  const bannerH = 110;
+  const footerH = 14;
+
+  doc.rect(0, 0, pageW, bannerH).fill(RED);
+  const logoH = 66;
+  const logoW = LOGO_BUFFER ? logoH * LOGO_ASPECT : 0;
+  if (LOGO_BUFFER) doc.image(LOGO_BUFFER, MARGIN, (bannerH - logoH) / 2, { width: logoW, height: logoH });
+  const textX = MARGIN + (logoW ? logoW + 20 : 0);
+  doc.fillColor('white').font('Helvetica-Bold').fontSize(27).text('KFC LENNIK 4157', textX, 34, { characterSpacing: 0.5 });
+  doc.font('Helvetica-Oblique').fontSize(13).text('Onze club, onze trots!', textX, 68);
+
+  // Samenvattingsregel ("3 oefeningen · 90 min") — extra houvast, en vult de
+  // ruimte tussen kop en balk zinvoller op dan enkel witruimte.
+  const totalMin = training.exercises.reduce((a, e) => a + (e.duurMinuten || 0), 0);
+  const summary = training.exercises.length > 0
+    ? `${training.exercises.length} oefening${training.exercises.length === 1 ? '' : 'en'} · ${totalMin} min`
+    : '';
+
+  // Het hele inhoudsblok (balk + titel + samenvatting) verticaal centreren in
+  // de ruimte tussen kopbanner en voetbalk, i.p.v. het bovenaan te proppen.
+  const blockH = 30 + 44 + 30 + (training.jaarplanLabel ? 22 : 0) + (dateLabel ? 20 : 0) + (summary ? 26 : 0);
+  let y = bannerH + (doc.page.height - footerH - bannerH - blockH) / 2;
+
+  doc.rect(MARGIN, y, cw, 30).fill(RED);
+  doc.fillColor('white').font('Helvetica-Bold').fontSize(13)
+    .text('TRAININGSVOORBEREIDING', MARGIN, y + 9, { width: cw, align: 'center', characterSpacing: 1.5 });
+  y += 30 + 44;
+
+  doc.font('Helvetica-Bold').fontSize(21).fillColor(DARK)
+    .text(training.titel || 'Training', MARGIN, y, { width: cw, align: 'center' });
+  y += 30;
+  if (training.jaarplanLabel) {
+    doc.font('Helvetica').fontSize(13).fillColor(RED).text(training.jaarplanLabel, MARGIN, y, { width: cw, align: 'center' });
+    y += 22;
+  }
+  if (dateLabel) {
+    const capitalized = dateLabel.charAt(0).toUpperCase() + dateLabel.slice(1);
+    doc.font('Helvetica').fontSize(12).fillColor(DIM).text(capitalized, MARGIN, y, { width: cw, align: 'center' });
+    y += 20;
+  }
+  if (summary) {
+    y += 6;
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(DIM)
+      .text(summary.toUpperCase(), MARGIN, y, { width: cw, align: 'center', characterSpacing: 1 });
+  }
+
+  doc.rect(0, doc.page.height - footerH, pageW, footerH).fill(RED);
+}
+
 export async function exportTrainingPdf(training: ExportTraining): Promise<Buffer> {
   const doc = new PDFDocument({ size: 'A4', margin: MARGIN, bufferPages: true });
   const bufferPromise = collectBuffer(doc);
 
-  const dateLabel = training.date ? new Date(training.date).toLocaleDateString('nl-BE') : '';
+  const dateLabel = training.date
+    ? new Date(training.date).toLocaleDateString('nl-BE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    : '';
 
-  // ── Titelpagina ──
-  doc.fontSize(24).fillColor(RED).font('Helvetica-Bold').text('KFC Lennik 4157', { align: 'center' });
-  doc.moveDown(0.5);
-  doc.fontSize(16).fillColor(DARK).font('Helvetica').text(
-    [dateLabel, training.titel, training.jaarplanLabel].filter(Boolean).join(' · ') || 'Trainingsvoorbereiding',
-    { align: 'center' }
-  );
+  addTitlePage(doc, training, dateLabel);
 
   // ── Trainingsvoorbereiding / Leren / Actief-Fun-Individuele aandacht ──
   doc.addPage();
+  addHeaderLogo(doc);
   sectionTitle(doc, 'Trainingsvoorbereiding');
   field(doc, 'Coach', training.coachNaam);
   field(doc, 'Datum', dateLabel);
@@ -165,9 +233,11 @@ export async function exportTrainingPdf(training: ExportTraining): Promise<Buffe
 
   // ── Evaluatie ──
   doc.addPage();
+  addHeaderLogo(doc);
   doc.fontSize(20).fillColor(RED).font('Helvetica-Bold').text('EVALUATIE NA TRAINING', { align: 'center' });
 
   doc.addPage();
+  addHeaderLogo(doc);
   sectionTitle(doc, 'Reflectie · 360° evaluatie');
   field(doc, 'Behouden', training.evalBehouden);
   field(doc, 'Wijzigen', training.evalWijzigen);

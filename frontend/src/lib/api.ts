@@ -2088,7 +2088,8 @@ export type DrawingElementType =
   | 'player' | 'cone' | 'joker' | 'goal' | 'ball' | 'ladder' | 'flag'
   | 'hoop' | 'wall' | 'marker' | 'coach' | 'image'
   | 'arrow-pass' | 'arrow-dribble' | 'arrow-run' | 'text'
-  | 'line' | 'line-dashed' | 'rect' | 'ellipse' | 'triangle';
+  | 'line' | 'line-dashed' | 'rect' | 'ellipse' | 'triangle'
+  | 'line-curve' | 'arrow-pass-curve';
 
 export type PlayerColor = 'red' | 'blue' | 'yellow' | 'white' | 'grey';
 export type ConeColor = 'orange' | 'red' | 'green' | 'blue';
@@ -2105,6 +2106,7 @@ export interface DrawingElement {
   src?: string;             // data-URI, enkel voor 'image'
   width?: number;           // basisbreedte in viewBox-eenheden bij scale 1, enkel voor 'image'
   height?: number;          // basishoogte in viewBox-eenheden bij scale 1, enkel voor 'image'
+  bend?: number;            // kromming (% van viewBox, loodrecht op x/y-x2/y2), enkel voor 'line-curve'/'arrow-pass-curve'
 }
 
 export const PLAYER_COLORS: { value: PlayerColor; label: string; hex: string }[] = [

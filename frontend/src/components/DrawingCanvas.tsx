@@ -37,14 +37,16 @@ const POINT_TOOLS: { tool: DrawingElementType; icon: string; title: string }[] =
 ];
 
 const ARROW_TOOLS: { tool: DrawingElementType; icon: string; title: string }[] = [
-  { tool: 'arrow-pass',    icon: '→', title: 'Pijl: pass' },
-  { tool: 'arrow-dribble', icon: '⇝', title: 'Pijl: dribbel' },
-  { tool: 'arrow-run',     icon: '⤍', title: 'Pijl: loop zonder bal' },
+  { tool: 'arrow-pass',       icon: '→', title: 'Pijl: pass' },
+  { tool: 'arrow-pass-curve', icon: '↷', title: 'Pijl: gebogen pass' },
+  { tool: 'arrow-dribble',    icon: '⇝', title: 'Pijl: dribbel' },
+  { tool: 'arrow-run',        icon: '⤍', title: 'Pijl: loop zonder bal' },
 ];
 
 const LINE_TOOLS: { tool: DrawingElementType; icon: string; title: string }[] = [
   { tool: 'line',        icon: '—', title: 'Lijn' },
   { tool: 'line-dashed', icon: '┄', title: 'Stippellijn' },
+  { tool: 'line-curve',  icon: '⌒', title: 'Gebogen lijn' },
 ];
 
 const SHAPE_TOOLS: { tool: DrawingElementType; icon: string; title: string }[] = [
@@ -57,8 +59,43 @@ const SHAPE_TOOLS: { tool: DrawingElementType; icon: string; title: string }[] =
 // ingedrukt houden op het startpunt en slepen naar het eindpunt (x2/y2) —
 // i.p.v. één klik zoals bij de punt-gebonden tools (speler, pion, ...).
 const TWO_POINT_TYPES = new Set<DrawingElementType>([
-  'arrow-pass', 'arrow-dribble', 'arrow-run', 'line', 'line-dashed', 'rect', 'ellipse', 'triangle',
+  'arrow-pass', 'arrow-pass-curve', 'arrow-dribble', 'arrow-run',
+  'line', 'line-dashed', 'line-curve', 'rect', 'ellipse', 'triangle',
 ]);
+
+// Types die een kromming (bend) ondersteunen — hun peil-handvat verschijnt
+// enkel bij deze twee, de rechte lijnen/pijlen blijven onveranderd recht.
+const CURVED_TYPES = new Set<DrawingElementType>(['line-curve', 'arrow-pass-curve']);
+
+// Kromming wordt bewaard als percentage (zelfde 0-100-schaal als x/y), maar de
+// loodrechte richting op de lijn mengt beide assen — omgerekend naar pixels
+// via het gemiddelde van W/H, zelfde pragmatische aanpak als elders in dit
+// bestand voor rotatie/schaal op een niet-vierkant veld.
+function bendToPx(bend: number, W: number, H: number): number {
+  return (bend / 100) * ((W + H) / 2);
+}
+function pxToBend(px: number, W: number, H: number): number {
+  return (px / ((W + H) / 2)) * 100;
+}
+
+/** Geometrie van een (eventueel gebogen) lijn/pijl in pixelruimte: eindpunten,
+ * middelpunt, kwadratisch-bézier-controlepunt en het zichtbare "piekpunt"
+ * van de curve (waar het sleephandvat komt) — gedeeld tussen tekenen en
+ * de sleepinteractie zodat ze nooit uit sync kunnen raken. */
+function curveGeometry(el: { x: number; y: number; x2?: number; y2?: number; bend?: number }, W: number, H: number) {
+  const x1 = (el.x / 100) * W, y1 = (el.y / 100) * H;
+  const x2 = ((el.x2 ?? el.x) / 100) * W, y2 = ((el.y2 ?? el.y) / 100) * H;
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len; // eenheidsnormaal, loodrecht op de lijn
+  const bendPx = bendToPx(el.bend ?? 0, W, H);
+  // Kwadratische bézier op t=0.5 geeft 0.5*(midden) + 0.5*(controlepunt) —
+  // dus het controlepunt op 2x de gewenste piekafstand plaatsen.
+  const cx = mx + nx * bendPx * 2, cy = my + ny * bendPx * 2;
+  const peakX = mx + nx * bendPx, peakY = my + ny * bendPx;
+  return { x1, y1, x2, y2, mx, my, nx, ny, cx, cy, peakX, peakY };
+}
 
 // Keuzelijst voor spelernummers in de toolbar (1 t/m 11, een volledig elftal)
 // — vervangt de vroegere invoerpopup per plaatsing. "K" (keeper) staat apart.
@@ -163,6 +200,7 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   const dragRef = useRef<{ id: string; dx: number; dy: number } | null>(null);
   const rotateDragRef = useRef<{ id: string } | null>(null);
   const resizeDragRef = useRef<{ id: string; startScale: number; startDist: number } | null>(null);
+  const curveDragRef = useRef<{ id: string } | null>(null);
   const dragStartSceneRef = useRef<DrawingScene | null>(null);
   const draftArrowRef = useRef<{ x: number; y: number } | null>(null);
   const [draftArrow, setDraftArrow] = useState<{ x: number; y: number; x2: number; y2: number } | null>(null);
@@ -619,6 +657,26 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
       onChange?.({ ...scene, elements: updated });
       return;
     }
+    if (curveDragRef.current) {
+      const { id } = curveDragRef.current;
+      const el = scene.elements.find(el => el.id === id);
+      if (!el) return;
+      const pos = effectivePosition(el);
+      const { mx, my, nx, ny } = curveGeometry({ ...pos }, W, H);
+      const px = (x / 100) * W, py = (y / 100) * H;
+      // Getekende (loodrechte) afstand van de aanwijzer t.o.v. de rechte lijn —
+      // de curve "volgt" de aanwijzer dus rechtstreeks i.p.v. via een tussenstap.
+      let bendPx = (px - mx) * nx + (py - my) * ny;
+      const maxBendPx = ((W + H) / 2) * 0.35;
+      bendPx = Math.min(maxBendPx, Math.max(-maxBendPx, bendPx));
+      let bend = pxToBend(bendPx, W, H);
+      // Magnetisch vastklikken op volledig recht (bend 0), net zoals rotatie
+      // vastklikt op rechte hoeken.
+      if (Math.abs(bend) < 2.5) bend = 0;
+      const updated = scene.elements.map(item => item.id === id ? { ...item, bend } : item);
+      onChange?.({ ...scene, elements: updated });
+      return;
+    }
     if (dragRef.current) {
       const { id, dx, dy } = dragRef.current;
       const el = scene.elements.find(el => el.id === id);
@@ -684,6 +742,16 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
       dragStartSceneRef.current = null;
       return;
     }
+    if (curveDragRef.current) {
+      const before = dragStartSceneRef.current;
+      if (before) {
+        setHistory(h => [...h, before]);
+        setFuture([]);
+      }
+      curveDragRef.current = null;
+      dragStartSceneRef.current = null;
+      return;
+    }
     if (dragRef.current) {
       // Live position was already pushed to the parent via onChange during the drag —
       // here we only need to record the pre-drag snapshot for undo (captured at pointerdown,
@@ -738,6 +806,15 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
     const px = (x / 100) * W, py = (y / 100) * H;
     const ecx = (center.x / 100) * W, ecy = (center.y / 100) * H;
     resizeDragRef.current = { id: el.id, startScale: el.scale ?? 1, startDist: Math.hypot(px - ecx, py - ecy) };
+    dragStartSceneRef.current = scene;
+    setSelectedIds([el.id]);
+  }
+
+  function onCurveHandlePointerDown(e: React.PointerEvent, el: DrawingElement) {
+    if (readOnly || playing || tool !== 'select') return;
+    e.stopPropagation();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    curveDragRef.current = { id: el.id };
     dragStartSceneRef.current = scene;
     setSelectedIds([el.id]);
   }
@@ -1045,6 +1122,7 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
             return renderElement(
               displayEl, selectedIds.includes(el.id), e => onElementPointerDown(e, displayEl), W, H,
               tool === 'select' && !playing && selectedIds.length === 1, e => onRotateHandlePointerDown(e, displayEl), e => onResizeHandlePointerDown(e, displayEl),
+              e => onCurveHandlePointerDown(e, displayEl),
             );
           })}
 
@@ -1246,6 +1324,7 @@ function renderPhasesField(W: number, H: number, isLandscape: boolean) {
 function renderElement(
   el: DrawingElement, selected: boolean, onPointerDown: (e: React.PointerEvent) => void, W: number, H: number,
   showHandles?: boolean, onRotateStart?: (e: React.PointerEvent) => void, onResizeStart?: (e: React.PointerEvent) => void,
+  onCurveStart?: (e: React.PointerEvent) => void,
 ) {
   const center = centerOf(el.type, el);
   const cx = (center.x / 100) * W;
@@ -1268,16 +1347,23 @@ function renderElement(
     const handleBaseR = Math.max(20, Math.hypot(dxPix, dyPix) / 2 + 10);
     const rotateHandle = (selected && showHandles && onRotateStart) ? renderRotateHandle(cx, cy, rotation, scale, handleBaseR, onRotateStart) : null;
     const resizeHandle = (selected && showHandles && onResizeStart) ? renderResizeHandle(cx, cy, rotation, scale, handleBaseR, onResizeStart) : null;
+    const isCurved = CURVED_TYPES.has(el.type);
+    const curveHandle = (isCurved && selected && showHandles && onCurveStart) ? renderCurveHandle(el, W, H, onCurveStart) : null;
     // Dunne lijnen/pijlen (niet de gevulde zone-vormen, die al overal binnenin
     // tikbaar zijn) krijgen een brede onzichtbare vangstreep — anders is een
-    // lijntje van 2,5px op een tablet vrijwel niet te raken.
+    // lijntje van 2,5px op een tablet vrijwel niet te raken. Voor gebogen
+    // lijnen volgt die vangstreep dezelfde kromme als de zichtbare lijn.
     const isThinLine = el.type === 'line' || el.type === 'line-dashed' || el.type.startsWith('arrow-');
     const touchTarget = isThinLine ? (
-      <line
-        x1={(el.x / 100) * W} y1={(el.y / 100) * H}
-        x2={((el.x2 ?? el.x) / 100) * W} y2={((el.y2 ?? el.y) / 100) * H}
-        stroke="transparent" strokeWidth={16}
-      />
+      isCurved ? (
+        <path d={curvePathD(el, W, H)} fill="none" stroke="transparent" strokeWidth={16} />
+      ) : (
+        <line
+          x1={(el.x / 100) * W} y1={(el.y / 100) * H}
+          x2={((el.x2 ?? el.x) / 100) * W} y2={((el.y2 ?? el.y) / 100) * H}
+          stroke="transparent" strokeWidth={16}
+        />
+      )
     ) : null;
     return (
       <g key={el.id} onPointerDown={onPointerDown} style={{ cursor: 'pointer' }}>
@@ -1287,6 +1373,7 @@ function renderElement(
         </g>
         {rotateHandle}
         {resizeHandle}
+        {curveHandle}
       </g>
     );
   }
@@ -1473,7 +1560,7 @@ function renderResizeHandle(cx: number, cy: number, rotation: number, scale: num
 // Tekent alles wat via slepen van startpunt naar eindpunt ontstaat: de 3
 // pijltypes, gewone/stippellijnen, en de zone-vormen (rechthoek/ovaal/driehoek,
 // opgebouwd uit de omvattende box tussen (x,y) en (x2,y2)).
-function renderLineOrShape(el: { id: string; type: DrawingElementType; x: number; y: number; x2?: number; y2?: number }, selected: boolean, W: number, H: number) {
+function renderLineOrShape(el: { id: string; type: DrawingElementType; x: number; y: number; x2?: number; y2?: number; bend?: number }, selected: boolean, W: number, H: number) {
   const x1 = (el.x / 100) * W, y1 = (el.y / 100) * H;
   const x2 = ((el.x2 ?? el.x) / 100) * W, y2 = ((el.y2 ?? el.y) / 100) * H;
 
@@ -1501,13 +1588,43 @@ function renderLineOrShape(el: { id: string; type: DrawingElementType; x: number
     );
   }
 
-  const isArrow = el.type === 'arrow-pass' || el.type === 'arrow-dribble' || el.type === 'arrow-run';
+  const isArrow = el.type === 'arrow-pass' || el.type === 'arrow-pass-curve' || el.type === 'arrow-dribble' || el.type === 'arrow-run';
   const dash = el.type === 'arrow-dribble' ? '6 5' : el.type === 'arrow-run' ? '2 3' : el.type === 'line-dashed' ? '8 5' : undefined;
+
+  if (CURVED_TYPES.has(el.type)) {
+    const d = curvePathD(el, W, H);
+    return (
+      <g key={el.id}>
+        {selected && <path d={d} fill="none" stroke="white" strokeWidth="6" strokeOpacity="0.25" />}
+        <path d={d} fill="none" stroke="white" strokeWidth="2.5" markerEnd={isArrow ? 'url(#dc-arrowhead)' : undefined} />
+      </g>
+    );
+  }
+
   return (
     <g key={el.id}>
       {selected && <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="white" strokeWidth="6" strokeOpacity="0.25" />}
       <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="white" strokeWidth="2.5"
         strokeDasharray={dash} markerEnd={isArrow ? 'url(#dc-arrowhead)' : undefined} />
+    </g>
+  );
+}
+
+function curvePathD(el: { x: number; y: number; x2?: number; y2?: number; bend?: number }, W: number, H: number): string {
+  const { x1, y1, cx, cy, x2, y2 } = curveGeometry(el, W, H);
+  return `M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}`;
+}
+
+function renderCurveHandle(el: { x: number; y: number; x2?: number; y2?: number; bend?: number }, W: number, H: number, onPointerDown: (e: React.PointerEvent) => void) {
+  const { peakX, peakY } = curveGeometry(el, W, H);
+  return (
+    <g className="dc-curve-handle">
+      {/* Ruim, onzichtbaar grijpgebied — ruimer dan de brede onzichtbare
+       * vangstreep van de lijn zelf, anders "wint" die en versleep je per
+       * ongeluk de hele lijn i.p.v. de kromming aan te passen. */}
+      <circle cx={peakX} cy={peakY} r="18" fill="transparent"
+        style={{ cursor: 'grab', touchAction: 'none' }} onPointerDown={onPointerDown} />
+      <circle cx={peakX} cy={peakY} r="6" fill="white" stroke="var(--red, #CC1A1A)" strokeWidth="1.5" style={{ pointerEvents: 'none' }} />
     </g>
   );
 }

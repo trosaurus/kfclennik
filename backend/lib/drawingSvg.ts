@@ -7,7 +7,8 @@
 export type DrawingElementType =
   | 'player' | 'cone' | 'joker' | 'goal' | 'ball' | 'ladder' | 'flag'
   | 'hoop' | 'wall' | 'marker' | 'coach' | 'image'
-  | 'arrow-pass' | 'arrow-dribble' | 'arrow-run' | 'text';
+  | 'arrow-pass' | 'arrow-pass-curve' | 'arrow-dribble' | 'arrow-run' | 'text'
+  | 'line' | 'line-dashed' | 'line-curve' | 'rect' | 'ellipse' | 'triangle';
 
 export interface DrawingElement {
   id: string;
@@ -21,6 +22,31 @@ export interface DrawingElement {
   src?: string;
   width?: number;
   height?: number;
+  bend?: number; // kromming (% van viewBox), enkel voor 'line-curve'/'arrow-pass-curve'
+}
+
+// Types die met slepen van start- naar eindpunt getekend worden (i.p.v. één
+// klik) — pijlen, lijnen en zone-vormen. Zelfde lijst als TWO_POINT_TYPES in
+// DrawingCanvas.tsx.
+const TWO_POINT_TYPES = new Set<DrawingElementType>([
+  'arrow-pass', 'arrow-pass-curve', 'arrow-dribble', 'arrow-run',
+  'line', 'line-dashed', 'line-curve', 'rect', 'ellipse', 'triangle',
+]);
+const CURVED_TYPES = new Set<DrawingElementType>(['line-curve', 'arrow-pass-curve']);
+
+// Zelfde kromming-wiskunde als curveGeometry/bendToPx in DrawingCanvas.tsx —
+// bend is bewaard als percentage, loodrecht op de lijn, omgerekend naar pixels
+// via het gemiddelde van W/H.
+function curveControlPoint(el: DrawingElement, W: number, H: number) {
+  const x1 = (el.x / 100) * W, y1 = (el.y / 100) * H;
+  const x2 = ((el.x2 ?? el.x) / 100) * W, y2 = ((el.y2 ?? el.y) / 100) * H;
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  const bendPx = ((el.bend ?? 0) / 100) * ((W + H) / 2);
+  const cx = mx + nx * bendPx * 2, cy = my + ny * bendPx * 2;
+  return { x1, y1, x2, y2, cx, cy };
 }
 
 export type DrawingBackground = 'grid' | 'half' | 'full';
@@ -88,17 +114,37 @@ function renderBackground(bg: DrawingBackground, W: number, H: number): string {
     <rect x="${W / 2 - 85}" y="${H - 90}" width="170" height="80" fill="none" stroke="${wl}" stroke-width="1.5"/>`;
 }
 
-function renderArrow(el: DrawingElement, W: number, H: number): string {
+/** Pijlen, lijnen en zone-vormen (rechthoek/ovaal/driehoek) — zelfde opbouw
+ * als renderLineOrShape in DrawingCanvas.tsx. */
+function renderLineOrShape(el: DrawingElement, W: number, H: number): string {
   const x1 = (el.x / 100) * W, y1 = (el.y / 100) * H;
   const x2 = ((el.x2 ?? el.x) / 100) * W, y2 = ((el.y2 ?? el.y) / 100) * H;
-  const dash = el.type === 'arrow-dribble' ? '6 5' : el.type === 'arrow-run' ? '2 3' : undefined;
+
+  if (el.type === 'rect' || el.type === 'ellipse' || el.type === 'triangle') {
+    const bx = Math.min(x1, x2), by = Math.min(y1, y2);
+    const bw = Math.abs(x2 - x1), bh = Math.abs(y2 - y1);
+    const fill = 'rgba(255,255,255,0.08)';
+    if (el.type === 'rect') return `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${fill}" stroke="white" stroke-width="2"/>`;
+    if (el.type === 'ellipse') return `<ellipse cx="${bx + bw / 2}" cy="${by + bh / 2}" rx="${bw / 2}" ry="${bh / 2}" fill="${fill}" stroke="white" stroke-width="2"/>`;
+    const pts = `${bx + bw / 2},${by} ${bx},${by + bh} ${bx + bw},${by + bh}`;
+    return `<polygon points="${pts}" fill="${fill}" stroke="white" stroke-width="2"/>`;
+  }
+
+  const isArrow = el.type === 'arrow-pass' || el.type === 'arrow-pass-curve' || el.type === 'arrow-dribble' || el.type === 'arrow-run';
+  const dash = el.type === 'arrow-dribble' ? '6 5' : el.type === 'arrow-run' ? '2 3' : el.type === 'line-dashed' ? '8 5' : undefined;
+  const markerAttr = isArrow ? 'marker-end="url(#dc-arrowhead)"' : '';
+
+  if (CURVED_TYPES.has(el.type)) {
+    const { cx, cy } = curveControlPoint(el, W, H);
+    return `<path d="M ${x1} ${y1} Q ${cx} ${cy} ${x2} ${y2}" fill="none" stroke="white" stroke-width="2.5" ${markerAttr}/>`;
+  }
   return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="white" stroke-width="2.5"
-    ${dash ? `stroke-dasharray="${dash}"` : ''} marker-end="url(#dc-arrowhead)"/>`;
+    ${dash ? `stroke-dasharray="${dash}"` : ''} ${markerAttr}/>`;
 }
 
 function renderElement(el: DrawingElement, W: number, H: number): string {
-  if (el.type === 'arrow-pass' || el.type === 'arrow-dribble' || el.type === 'arrow-run') {
-    return renderArrow(el, W, H);
+  if (TWO_POINT_TYPES.has(el.type)) {
+    return renderLineOrShape(el, W, H);
   }
   const cx = (el.x / 100) * W, cy = (el.y / 100) * H;
   const shape = renderShape(el, cx, cy);
