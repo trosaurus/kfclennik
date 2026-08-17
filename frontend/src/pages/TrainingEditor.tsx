@@ -25,6 +25,16 @@ function uid(): string {
   return (crypto as any).randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+// Laat een textarea vanzelf meegroeien met de inhoud — i.p.v. een vast aantal
+// rijen te gokken (dat bij een lange beschrijving alsnog moet scrollen), past
+// de hoogte zich telkens aan aan wat er effectief staat. Aangeroepen zowel via
+// de ref (juiste hoogte al bij het openen/laden) als bij elke wijziging.
+function autoGrowTextarea(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 function newExercise(fase: ExerciseFase): LocalExercise {
   return {
     id: `new-${uid()}`, isNew: true, order: 0, fase, naam: '', duurMinuten: 10,
@@ -805,8 +815,11 @@ export default function TrainingEditor() {
 
                   <div className="form-group">
                     <label className="input-label">Beschrijving oefening</label>
-                    <textarea className="input-field" rows={3} value={ex.beschrijving} onChange={e => updateLocal(ex.id, { beschrijving: e.target.value })}
-                      placeholder="Opstelling, spelregels, verloop..." />
+                    <textarea
+                      className="input-field te-autogrow" rows={3} ref={autoGrowTextarea} value={ex.beschrijving}
+                      onChange={e => { updateLocal(ex.id, { beschrijving: e.target.value }); autoGrowTextarea(e.target); }}
+                      placeholder="Opstelling, spelregels, verloop..."
+                    />
                   </div>
 
                   <div className="te-ex-drawing">

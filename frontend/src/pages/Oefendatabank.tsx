@@ -39,6 +39,14 @@ function draftFromItem(it: OefeningDatabankItem): DraftForm {
 
 // Index voor sortering "van U6 tot U17" — items zonder doelgroep komen laatst.
 const AGE_INDEX: Record<string, number> = Object.fromEntries(DOELGROEP_LEEFTIJDEN.map((a, i) => [a, i]));
+// Laat een textarea vanzelf meegroeien met de inhoud i.p.v. een vast aantal
+// rijen te gokken — zie TrainingEditor.tsx voor dezelfde helper.
+function autoGrowTextarea(el: HTMLTextAreaElement | null) {
+  if (!el) return;
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight}px`;
+}
+
 function ageRank(doelgroep: string | null): number {
   return doelgroep && doelgroep in AGE_INDEX ? AGE_INDEX[doelgroep] : DOELGROEP_LEEFTIJDEN.length;
 }
@@ -462,8 +470,11 @@ function OefeningCard({ isNew, draft, setDraft, saving, onSave, onCancel, onOpen
 
       <div className="form-group">
         <label className="input-label">Beschrijving oefening</label>
-        <textarea className="input-field" rows={3} value={draft.beschrijving} onChange={e => setDraft(d => ({ ...d, beschrijving: e.target.value }))}
-          placeholder="Opstelling, spelregels, verloop..." />
+        <textarea
+          className="input-field te-autogrow" rows={3} ref={autoGrowTextarea} value={draft.beschrijving}
+          onChange={e => { setDraft(d => ({ ...d, beschrijving: e.target.value })); autoGrowTextarea(e.target); }}
+          placeholder="Opstelling, spelregels, verloop..."
+        />
       </div>
 
       <div className="te-ex-drawing">
