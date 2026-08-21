@@ -469,6 +469,10 @@ type Match {
   weekTheme: WeekTheme
   evaluations(where: EvaluationWhereInput! = {}, orderBy: [EvaluationOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: EvaluationWhereUniqueInput): [Evaluation!]
   evaluationsCount(where: EvaluationWhereInput! = {}): Int
+  lineupProposals(where: LineupProposalWhereInput! = {}, orderBy: [LineupProposalOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: LineupProposalWhereUniqueInput): [LineupProposal!]
+  lineupProposalsCount(where: LineupProposalWhereInput! = {}): Int
+  matchLineups(where: MatchLineupWhereInput! = {}, orderBy: [MatchLineupOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: MatchLineupWhereUniqueInput): [MatchLineup!]
+  matchLineupsCount(where: MatchLineupWhereInput! = {}): Int
 }
 
 input MatchWhereUniqueInput {
@@ -495,6 +499,8 @@ input MatchWhereInput {
   goals: GoalManyRelationFilter
   weekTheme: WeekThemeWhereInput
   evaluations: EvaluationManyRelationFilter
+  lineupProposals: LineupProposalManyRelationFilter
+  matchLineups: MatchLineupManyRelationFilter
 }
 
 input DateTimeFilter {
@@ -512,6 +518,18 @@ input PeriodManyRelationFilter {
   every: PeriodWhereInput
   some: PeriodWhereInput
   none: PeriodWhereInput
+}
+
+input LineupProposalManyRelationFilter {
+  every: LineupProposalWhereInput
+  some: LineupProposalWhereInput
+  none: LineupProposalWhereInput
+}
+
+input MatchLineupManyRelationFilter {
+  every: MatchLineupWhereInput
+  some: MatchLineupWhereInput
+  none: MatchLineupWhereInput
 }
 
 input MatchOrderByInput {
@@ -543,6 +561,8 @@ input MatchUpdateInput {
   goals: GoalRelateToManyForUpdateInput
   weekTheme: WeekThemeRelateToOneForUpdateInput
   evaluations: EvaluationRelateToManyForUpdateInput
+  lineupProposals: LineupProposalRelateToManyForUpdateInput
+  matchLineups: MatchLineupRelateToManyForUpdateInput
 }
 
 input PeriodRelateToManyForUpdateInput {
@@ -556,6 +576,20 @@ input WeekThemeRelateToOneForUpdateInput {
   create: WeekThemeCreateInput
   connect: WeekThemeWhereUniqueInput
   disconnect: Boolean
+}
+
+input LineupProposalRelateToManyForUpdateInput {
+  disconnect: [LineupProposalWhereUniqueInput!]
+  set: [LineupProposalWhereUniqueInput!]
+  create: [LineupProposalCreateInput!]
+  connect: [LineupProposalWhereUniqueInput!]
+}
+
+input MatchLineupRelateToManyForUpdateInput {
+  disconnect: [MatchLineupWhereUniqueInput!]
+  set: [MatchLineupWhereUniqueInput!]
+  create: [MatchLineupCreateInput!]
+  connect: [MatchLineupWhereUniqueInput!]
 }
 
 input MatchUpdateArgs {
@@ -579,6 +613,8 @@ input MatchCreateInput {
   goals: GoalRelateToManyForCreateInput
   weekTheme: WeekThemeRelateToOneForCreateInput
   evaluations: EvaluationRelateToManyForCreateInput
+  lineupProposals: LineupProposalRelateToManyForCreateInput
+  matchLineups: MatchLineupRelateToManyForCreateInput
 }
 
 input PeriodRelateToManyForCreateInput {
@@ -589,6 +625,16 @@ input PeriodRelateToManyForCreateInput {
 input WeekThemeRelateToOneForCreateInput {
   create: WeekThemeCreateInput
   connect: WeekThemeWhereUniqueInput
+}
+
+input LineupProposalRelateToManyForCreateInput {
+  create: [LineupProposalCreateInput!]
+  connect: [LineupProposalWhereUniqueInput!]
+}
+
+input MatchLineupRelateToManyForCreateInput {
+  create: [MatchLineupCreateInput!]
+  connect: [MatchLineupWhereUniqueInput!]
 }
 
 type Period {
@@ -805,6 +851,114 @@ input AttendanceCreateInput {
 input PlayTimeSessionRelateToManyForCreateInput {
   create: [PlayTimeSessionCreateInput!]
   connect: [PlayTimeSessionWhereUniqueInput!]
+}
+
+type LineupProposal {
+  id: ID!
+  match: Match
+  trainer: Trainer
+  period: Int
+  assignment: String
+}
+
+input LineupProposalWhereUniqueInput {
+  id: ID
+}
+
+input LineupProposalWhereInput {
+  AND: [LineupProposalWhereInput!]
+  OR: [LineupProposalWhereInput!]
+  NOT: [LineupProposalWhereInput!]
+  id: IDFilter
+  match: MatchWhereInput
+  trainer: TrainerWhereInput
+  period: IntFilter
+  assignment: StringFilter
+}
+
+input LineupProposalOrderByInput {
+  id: OrderDirection
+  period: OrderDirection
+  assignment: OrderDirection
+}
+
+input LineupProposalUpdateInput {
+  match: MatchRelateToOneForUpdateInput
+  trainer: TrainerRelateToOneForUpdateInput
+  period: Int
+  assignment: String
+}
+
+input TrainerRelateToOneForUpdateInput {
+  create: TrainerCreateInput
+  connect: TrainerWhereUniqueInput
+  disconnect: Boolean
+}
+
+input LineupProposalUpdateArgs {
+  where: LineupProposalWhereUniqueInput!
+  data: LineupProposalUpdateInput!
+}
+
+input LineupProposalCreateInput {
+  match: MatchRelateToOneForCreateInput
+  trainer: TrainerRelateToOneForCreateInput
+  period: Int
+  assignment: String
+}
+
+input TrainerRelateToOneForCreateInput {
+  create: TrainerCreateInput
+  connect: TrainerWhereUniqueInput
+}
+
+type MatchLineup {
+  id: ID!
+  match: Match
+  period: Int
+  assignment: String
+  selectedPlayerIds: String
+}
+
+input MatchLineupWhereUniqueInput {
+  id: ID
+}
+
+input MatchLineupWhereInput {
+  AND: [MatchLineupWhereInput!]
+  OR: [MatchLineupWhereInput!]
+  NOT: [MatchLineupWhereInput!]
+  id: IDFilter
+  match: MatchWhereInput
+  period: IntFilter
+  assignment: StringFilter
+  selectedPlayerIds: StringFilter
+}
+
+input MatchLineupOrderByInput {
+  id: OrderDirection
+  period: OrderDirection
+  assignment: OrderDirection
+  selectedPlayerIds: OrderDirection
+}
+
+input MatchLineupUpdateInput {
+  match: MatchRelateToOneForUpdateInput
+  period: Int
+  assignment: String
+  selectedPlayerIds: String
+}
+
+input MatchLineupUpdateArgs {
+  where: MatchLineupWhereUniqueInput!
+  data: MatchLineupUpdateInput!
+}
+
+input MatchLineupCreateInput {
+  match: MatchRelateToOneForCreateInput
+  period: Int
+  assignment: String
+  selectedPlayerIds: String
 }
 
 type PlayTimeSession {
@@ -1173,12 +1327,6 @@ input TrainingUpdateInput {
   exercises: ExerciseRelateToManyForUpdateInput
 }
 
-input TrainerRelateToOneForUpdateInput {
-  create: TrainerCreateInput
-  connect: TrainerWhereUniqueInput
-  disconnect: Boolean
-}
-
 input ExerciseRelateToManyForUpdateInput {
   disconnect: [ExerciseWhereUniqueInput!]
   set: [ExerciseWhereUniqueInput!]
@@ -1229,11 +1377,6 @@ input TrainingCreateInput {
   evalBijgeleerd: String
   evalIndividueleAandacht: String
   exercises: ExerciseRelateToManyForCreateInput
-}
-
-input TrainerRelateToOneForCreateInput {
-  create: TrainerCreateInput
-  connect: TrainerWhereUniqueInput
 }
 
 input ExerciseRelateToManyForCreateInput {
@@ -1561,6 +1704,18 @@ type Mutation {
   updateAttendances(data: [AttendanceUpdateArgs!]!): [Attendance]
   deleteAttendance(where: AttendanceWhereUniqueInput!): Attendance
   deleteAttendances(where: [AttendanceWhereUniqueInput!]!): [Attendance]
+  createLineupProposal(data: LineupProposalCreateInput!): LineupProposal
+  createLineupProposals(data: [LineupProposalCreateInput!]!): [LineupProposal]
+  updateLineupProposal(where: LineupProposalWhereUniqueInput!, data: LineupProposalUpdateInput!): LineupProposal
+  updateLineupProposals(data: [LineupProposalUpdateArgs!]!): [LineupProposal]
+  deleteLineupProposal(where: LineupProposalWhereUniqueInput!): LineupProposal
+  deleteLineupProposals(where: [LineupProposalWhereUniqueInput!]!): [LineupProposal]
+  createMatchLineup(data: MatchLineupCreateInput!): MatchLineup
+  createMatchLineups(data: [MatchLineupCreateInput!]!): [MatchLineup]
+  updateMatchLineup(where: MatchLineupWhereUniqueInput!, data: MatchLineupUpdateInput!): MatchLineup
+  updateMatchLineups(data: [MatchLineupUpdateArgs!]!): [MatchLineup]
+  deleteMatchLineup(where: MatchLineupWhereUniqueInput!): MatchLineup
+  deleteMatchLineups(where: [MatchLineupWhereUniqueInput!]!): [MatchLineup]
   createPlayTimeSession(data: PlayTimeSessionCreateInput!): PlayTimeSession
   createPlayTimeSessions(data: [PlayTimeSessionCreateInput!]!): [PlayTimeSession]
   updatePlayTimeSession(where: PlayTimeSessionWhereUniqueInput!, data: PlayTimeSessionUpdateInput!): PlayTimeSession
@@ -1652,6 +1807,12 @@ type Query {
   attendances(where: AttendanceWhereInput! = {}, orderBy: [AttendanceOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AttendanceWhereUniqueInput): [Attendance!]
   attendance(where: AttendanceWhereUniqueInput!): Attendance
   attendancesCount(where: AttendanceWhereInput! = {}): Int
+  lineupProposals(where: LineupProposalWhereInput! = {}, orderBy: [LineupProposalOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: LineupProposalWhereUniqueInput): [LineupProposal!]
+  lineupProposal(where: LineupProposalWhereUniqueInput!): LineupProposal
+  lineupProposalsCount(where: LineupProposalWhereInput! = {}): Int
+  matchLineups(where: MatchLineupWhereInput! = {}, orderBy: [MatchLineupOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: MatchLineupWhereUniqueInput): [MatchLineup!]
+  matchLineup(where: MatchLineupWhereUniqueInput!): MatchLineup
+  matchLineupsCount(where: MatchLineupWhereInput! = {}): Int
   playTimeSessions(where: PlayTimeSessionWhereInput! = {}, orderBy: [PlayTimeSessionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PlayTimeSessionWhereUniqueInput): [PlayTimeSession!]
   playTimeSession(where: PlayTimeSessionWhereUniqueInput!): PlayTimeSession
   playTimeSessionsCount(where: PlayTimeSessionWhereInput! = {}): Int

@@ -21,6 +21,7 @@ model Trainer {
   teamId                          String?            @map("team")
   trainings                       Training[]         @relation("Training_trainer")
   sharedTrainings                 Training[]         @relation("Trainer_sharedTrainings")
+  from_LineupProposal_trainer     LineupProposal[]   @relation("LineupProposal_trainer")
   from_OefeningDatabank_createdBy OefeningDatabank[] @relation("OefeningDatabank_createdBy")
   from_Whiteboard_trainer         Whiteboard[]       @relation("Whiteboard_trainer")
 
@@ -59,24 +60,26 @@ model Player {
 }
 
 model Match {
-  id             String       @id @default(cuid())
-  opponent       String       @default("")
-  date           DateTime
-  location       String?      @default("home")
-  status         String?      @default("planned")
-  currentPeriod  Int?         @default(0)
-  periodStatus   String?      @default("idle")
-  scoreHome      Int?         @default(0)
-  scoreAway      Int?         @default(0)
-  matchStartTime DateTime?
-  team           Team?        @relation("Match_team", fields: [teamId], references: [id])
-  teamId         String?      @map("team")
-  attendances    Attendance[] @relation("Attendance_match")
-  periods        Period[]     @relation("Period_match")
-  goals          Goal[]       @relation("Goal_match")
-  weekTheme      WeekTheme?   @relation("Match_weekTheme", fields: [weekThemeId], references: [id])
-  weekThemeId    String?      @map("weekTheme")
-  evaluations    Evaluation[] @relation("Evaluation_match")
+  id              String           @id @default(cuid())
+  opponent        String           @default("")
+  date            DateTime
+  location        String?          @default("home")
+  status          String?          @default("planned")
+  currentPeriod   Int?             @default(0)
+  periodStatus    String?          @default("idle")
+  scoreHome       Int?             @default(0)
+  scoreAway       Int?             @default(0)
+  matchStartTime  DateTime?
+  team            Team?            @relation("Match_team", fields: [teamId], references: [id])
+  teamId          String?          @map("team")
+  attendances     Attendance[]     @relation("Attendance_match")
+  periods         Period[]         @relation("Period_match")
+  goals           Goal[]           @relation("Goal_match")
+  weekTheme       WeekTheme?       @relation("Match_weekTheme", fields: [weekThemeId], references: [id])
+  weekThemeId     String?          @map("weekTheme")
+  evaluations     Evaluation[]     @relation("Evaluation_match")
+  lineupProposals LineupProposal[] @relation("LineupProposal_match")
+  matchLineups    MatchLineup[]    @relation("MatchLineup_match")
 
   @@index([teamId])
   @@index([weekThemeId])
@@ -120,6 +123,30 @@ model Attendance {
   playTimeSessions PlayTimeSession[] @relation("PlayTimeSession_attendance")
 
   @@index([playerId])
+  @@index([matchId])
+}
+
+model LineupProposal {
+  id         String   @id @default(cuid())
+  match      Match?   @relation("LineupProposal_match", fields: [matchId], references: [id])
+  matchId    String?  @map("match")
+  trainer    Trainer? @relation("LineupProposal_trainer", fields: [trainerId], references: [id])
+  trainerId  String?  @map("trainer")
+  period     Int
+  assignment String   @default("")
+
+  @@index([matchId])
+  @@index([trainerId])
+}
+
+model MatchLineup {
+  id                String  @id @default(cuid())
+  match             Match?  @relation("MatchLineup_match", fields: [matchId], references: [id])
+  matchId           String? @map("match")
+  period            Int
+  assignment        String  @default("")
+  selectedPlayerIds String  @default("")
+
   @@index([matchId])
 }
 

@@ -59,6 +59,19 @@ export function matchScopedFilter({ session }: AccessArgs) {
   return { match: { team: { id: { equals: teamId } } } };
 }
 
+/** LineupProposal — LEZEN: alle voorstellen van de eigen ploeg (zodat beide
+ * trainers elkaars voorstel per kwart kunnen zien en vergelijken), maar
+ * SCHRIJVEN/VERWIJDEREN enkel het eigen voorstel (match uit eigen ploeg ÉN
+ * trainer = zichzelf) — zo kan de ene trainer nooit het voorstel van de
+ * andere aanpassen. */
+export function matchScopedOwnTrainerFilter({ session }: AccessArgs) {
+  if (!session) return false;
+  if (session.data.role === 'admin') return true;
+  const teamId = session.data.team?.id;
+  if (!teamId) return false;
+  return { match: { team: { id: { equals: teamId } } }, trainer: { id: { equals: session.data.id } } };
+}
+
 /** PlayTimeSession: via `attendance.match.team`. */
 export function attendanceScopedFilter({ session }: AccessArgs) {
   if (!session) return false;

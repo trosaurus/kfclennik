@@ -3,7 +3,7 @@ import { text, integer, relationship, timestamp, select, password } from '@keyst
 import type { Lists } from '.keystone/types';
 import {
   isSignedIn, isAdmin, anySignedInFilter, selfOrAdminFilter, ownTeamFilter,
-  teamOwnedFilter, matchScopedFilter, attendanceScopedFilter,
+  teamOwnedFilter, matchScopedFilter, attendanceScopedFilter, matchScopedOwnTrainerFilter,
   trainingOwnedFilter, exerciseScopedFilter, trainingVisibleFilter, exerciseVisibleFilter,
   selfOrAdminFieldRead,
   relationGuard,
@@ -167,6 +167,8 @@ export const lists: Lists = {
       goals:       relationship({ ref: 'Goal.match',       many: true }),
       weekTheme:   relationship({ ref: 'WeekTheme.matches', many: false }),
       evaluations: relationship({ ref: 'Evaluation.match',  many: true }),
+      lineupProposals: relationship({ ref: 'LineupProposal.match', many: true }),
+      matchLineups:    relationship({ ref: 'MatchLineup.match',    many: true }),
     },
     ui: { labelField: 'opponent' },
   }),
@@ -232,6 +234,60 @@ export const lists: Lists = {
       }),
       playTimeSessions: relationship({ ref: 'PlayTimeSession.attendance', many: true }),
     },
+  }),
+
+  // ── LineupProposal (voorkeursopstelling per kwart, per trainer — bij een
+  // ploeg met meerdere trainers kan elke trainer onafhankelijk een voorstel
+  // per kwart klaarzetten; op Matchday wordt achteraf gekozen welk voorstel
+  // effectief toegepast wordt) ──────────────────────────────────────────────
+  LineupProposal: list({
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: matchScopedFilter, update: matchScopedOwnTrainerFilter, delete: matchScopedOwnTrainerFilter },
+    },
+    hooks: {
+      validateInput: async (args: any) => {
+        await relationGuard({ field: 'match', list: 'Match' }, { field: 'trainer', list: 'Trainer' })(args);
+        // Een trainer mag enkel een voorstel onder de eigen naam aanmaken —
+        // anders zou trainer A een voorstel kunnen aanmaken "namens" trainer B.
+        const { resolvedData, operation, context, addValidationError } = args;
+        if (operation === 'create' && context.session?.data.role !== 'admin') {
+          const trainerId = resolvedData?.trainer?.connect?.id;
+          if (trainerId && trainerId !== context.session?.data.id) {
+            addValidationError('Je kan enkel een voorstel onder je eigen naam aanmaken.');
+          }
+        }
+      },
+    },
+    fields: {
+      match:      relationship({ ref: 'Match.lineupProposals', many: false }),
+      trainer:    relationship({ ref: 'Trainer', many: false }),   // maker, voor attributie + scoping — geen back-reference nodig
+      period:     integer({ validation: { isRequired: true } }),
+      assignment: text({ ui: { displayMode: 'textarea' }, defaultValue: '' }), // JSON-string: Record<posKey, playerId>
+    },
+    ui: { labelField: 'period' },
+  }),
+
+  // ── MatchLineup (de effectief BEVESTIGDE opstelling per kwart — vóór deze
+  // lijst zat dit enkel in localStorage van het toestel dat ze instelde, dus
+  // een andere trainer (of hetzelfde toestel na het wissen van sitegegevens)
+  // zag op Matchday een lege opstelling. Eén gedeelde rij per match+kwart, om
+  // het even welke trainer van de ploeg mag ze lezen/bijwerken — dit is
+  // bewust NIET per-trainer zoals LineupProposal hierboven, want dit ís de
+  // knoop die doorgehakt is over welk voorstel geldt.) ───────────────────────
+  MatchLineup: list({
+    access: {
+      operation: { query: isSignedIn, create: isSignedIn, update: isSignedIn, delete: isSignedIn },
+      filter: { query: matchScopedFilter, update: matchScopedFilter, delete: matchScopedFilter },
+    },
+    hooks: { validateInput: relationGuard({ field: 'match', list: 'Match' }) },
+    fields: {
+      match:             relationship({ ref: 'Match.matchLineups', many: false }),
+      period:            integer({ validation: { isRequired: true } }),
+      assignment:        text({ ui: { displayMode: 'textarea' }, defaultValue: '' }), // JSON: Record<posKey, playerId>
+      selectedPlayerIds: text({ ui: { displayMode: 'textarea' }, defaultValue: '' }), // JSON: string[]
+    },
+    ui: { labelField: 'period' },
   }),
 
   // ── PlayTimeSession ─────────────────────────────────────────────────────────

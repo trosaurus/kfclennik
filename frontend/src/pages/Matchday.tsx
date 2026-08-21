@@ -6,14 +6,16 @@ import {
   getPeriodsForMatch, createPeriod, updatePeriod,
   getGoalsForMatch, addGoal, removeGoal,
   getPeriodLineup, setPeriodLineup,
-  getFieldAssignment, setFieldAssignment,
+  getFieldAssignment, setFieldAssignment, hydrateMatchLineupsFromBackend,
   getTeamPlaytimeMap,
   updateSessionFieldPosition,
+  getTrainers, TrainerRecord,
   Match, Player, Attendance, PlayTimeSession, Period, Goal,
   formatDuration, POSITION_LABELS, TOTAL_PERIODS,
 } from '../lib/api';
 import './Matchday.css';
 import FieldView, { PositionTimeStats } from './FieldView';
+import VoorkeurOpstellingModal from './VoorkeurOpstellingModal';
 import { getPositionsForCategory, getPeriodDuration } from '../lib/teamConfig';
 import { useTeam } from '../lib/TeamContext';
 import { generateLineupPDF } from '../lib/generateLineupPDF';
@@ -56,11 +58,23 @@ export default function Matchday() {
   // kwart 2-4 blijven altijd intact (localStorage), maar zonder dit paneel was
   // er tijdens de match geen enkele manier meer om ze te bekijken of te wijzigen.
   const [showLineupPlanner, setShowLineupPlanner] = useState(false);
+  // Andere trainers van dezelfde ploeg — enkel gebruikt om de "Voorkeur"-knop
+  // (voorkeursopstelling per trainer, zie VoorkeurOpstellingModal) te tonen
+  // wanneer de ploeg effectief 2+ trainers heeft.
+  const [teammates, setTeammates] = useState<TrainerRecord[]>([]);
+  const [voorkeurOpen, setVoorkeurOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Boot ────────────────────────────────────────────────────────────────────
 
   useEffect(() => { boot(); return stopTimer; }, []);
+
+  // Ploeggenoten ophalen om te bepalen of de "Voorkeur"-knop relevant is
+  // (enkel zinvol bij 2+ trainers op dezelfde ploeg).
+  useEffect(() => {
+    if (!teamId || !trainer) { setTeammates([]); return; }
+    getTrainers().then(all => setTeammates(all.filter(t => t.team?.id === teamId && t.id !== trainer.id))).catch(() => setTeammates([]));
+  }, [teamId, trainer]);
 
   useEffect(() => {
     const playing = match?.periodStatus === 'playing' && sessions.some(s => s.active === 'true');
@@ -91,6 +105,10 @@ export default function Matchday() {
 
   async function loadMatch(m: Match, players?: Player[]) {
     setMatch(m);
+    // Eerst de backend-versie van de opstelling in de lokale cache zetten —
+    // anders zou een opstelling die een andere trainer op een ander toestel
+    // instelde/bevestigde hier als leeg binnenkomen (zie hydrateMatchLineupsFromBackend).
+    await hydrateMatchLineupsFromBackend(m.id);
     const [att, sess, per, gls] = await Promise.all([
       getAttendancesForMatch(m.id),
       getPlayTimeSessionsForMatch(m.id),
@@ -386,6 +404,18 @@ export default function Matchday() {
     });
   }
 
+  /** Past een gekozen voorkeursopstelling (van VoorkeurOpstellingModal) toe op
+   * dit kwart — vervangt de volledige toewijzing i.p.v. samen te voegen, zodat
+   * het gekozen voorstel exact overeenkomt met wat de trainer te zien kreeg. */
+  function applyLineupProposal(period: number, assignment: Record<string, string>) {
+    setFieldAssignments(prev => {
+      const next = { ...prev, [period]: { ...assignment } };
+      setFieldAssignment(m!.id, period, next[period]);
+      return next;
+    });
+    setVoorkeurOpen(false);
+  }
+
   // ── Goals ─────────────────────────────────────────────────────────────────
 
   async function handleAddGoal(ps: PlayerState) {
@@ -590,6 +620,11 @@ export default function Matchday() {
             {isPaused && curPeriod === TOTAL_PERIODS && (
               <button className="btn btn-danger" disabled={busy} onClick={endMatch}>
                 ■ Eindig match
+              </button>
+            )}
+            {isPlanned && teammates.length > 0 && squadPlayers.length > 0 && (
+              <button className="btn btn-outline btn-sm" onClick={() => setVoorkeurOpen(true)} title="Voorkeursopstelling per trainer vergelijken">
+                👥 Voorkeur
               </button>
             )}
             <button className="btn btn-outline btn-sm" onClick={handleGeneratePDF} title="Opstelling PDF downloaden">📄 PDF</button>
@@ -808,6 +843,20 @@ export default function Matchday() {
 
       {matchPicker && (
         <MatchPicker matches={allMatches} current={m!} onPick={async picked => { setMatchPicker(false); setLoading(true); await loadMatch(picked); }} onClose={() => setMatchPicker(false)} />
+      )}
+
+      {voorkeurOpen && trainer && (
+        <VoorkeurOpstellingModal
+          matchId={m!.id}
+          teamCategory={matchCategory}
+          squadPlayers={squadPlayers}
+          attendances={attendances}
+          currentTrainerId={trainer.id}
+          currentTrainerName={trainer.name}
+          teammates={teammates}
+          onApply={applyLineupProposal}
+          onClose={() => setVoorkeurOpen(false)}
+        />
       )}
     </div>
   );

@@ -701,7 +701,9 @@ export function getPositionSeconds(
   return total;
 }
 
-// Store field assignments per period in localStorage (before match starts)
+// Store field assignments per period in localStorage (before match starts) —
+// ook gespiegeld naar de backend (MatchLineup, zie verderop) zodat een andere
+// trainer op een ander toestel dezelfde opstelling ziet i.p.v. een lege.
 export function getFieldAssignment(matchId: string, period: number): Record<string, string> {
   try {
     const raw = localStorage.getItem(`field:${matchId}:${period}`);
@@ -711,6 +713,155 @@ export function getFieldAssignment(matchId: string, period: number): Record<stri
 
 export function setFieldAssignment(matchId: string, period: number, assignment: Record<string, string>): void {
   try { localStorage.setItem(`field:${matchId}:${period}`, JSON.stringify(assignment)); } catch { /**/ }
+  syncMatchLineupToBackend(matchId, period);
+}
+
+// ── Bevestigde opstelling per match+kwart (backend, gedeeld door alle trainers
+// van de ploeg) — de bovenstaande field:*/lineup:*-localStorage-sleutels zijn
+// intussen enkel nog een lokale cache; hydrateMatchLineupsFromBackend() vult
+// ze bij het laden van een match aan met wat een ANDERE trainer eerder al
+// instelde/bevestigde, en syncMatchLineupToBackend() stuurt elke lokale
+// wijziging meteen terug — zo blijft "de opstelling" gelijk op elk toestel.
+export interface MatchLineup {
+  id: string;
+  period: number;
+  assignment: string;         // JSON: Record<posKey, playerId>
+  selectedPlayerIds: string;  // JSON: string[]
+}
+
+const MATCH_LINEUP_FIELDS = `id period assignment selectedPlayerIds`;
+
+export async function getMatchLineups(matchId: string): Promise<MatchLineup[]> {
+  const data = await gql(
+    `query GetMatchLineups($matchId: ID!) {
+      matchLineups(where: { match: { id: { equals: $matchId } } }, take: 10) { ${MATCH_LINEUP_FIELDS} }
+    }`,
+    { matchId }
+  );
+  return data.matchLineups;
+}
+
+async function saveMatchLineup(matchId: string, period: number, assignment: string, selectedPlayerIds: string): Promise<void> {
+  const existing = await gql(
+    `query FindMatchLineup($matchId: ID!, $period: Int!) {
+      matchLineups(where: { match: { id: { equals: $matchId } }, period: { equals: $period } }, take: 1) { id }
+    }`,
+    { matchId, period }
+  );
+  const existingId: string | undefined = existing.matchLineups[0]?.id;
+  if (existingId) {
+    await gql(
+      `mutation UpdateMatchLineup($id: ID!, $assignment: String, $selectedPlayerIds: String) {
+        updateMatchLineup(where: { id: $id }, data: { assignment: $assignment, selectedPlayerIds: $selectedPlayerIds }) { id }
+      }`,
+      { id: existingId, assignment, selectedPlayerIds }
+    );
+    return;
+  }
+  await gql(
+    `mutation CreateMatchLineup($data: MatchLineupCreateInput!) {
+      createMatchLineup(data: $data) { id }
+    }`,
+    { data: { match: { connect: { id: matchId } }, period, assignment, selectedPlayerIds } }
+  );
+}
+
+/** Leest de huidige lokale (localStorage) veldopstelling + kwart-lineup voor
+ * deze match+kwart en stuurt ze — onafhankelijk van elkaar (welke van de twee
+ * de aanroeper ook wijzigde) — samen naar de backend. Bewust "fire and
+ * forget": de lokale state/localStorage is al bijgewerkt vóór dit aangeroepen
+ * wordt, dus de UI hoeft niet op het netwerk te wachten; lukt de sync niet
+ * (bv. offline), dan blijft de lokale opstelling gewoon werken. */
+function syncMatchLineupToBackend(matchId: string, period: number): void {
+  const assignment = JSON.stringify(getFieldAssignmentRaw(matchId, period));
+  const selectedPlayerIds = JSON.stringify(getPeriodLineupRaw(matchId, period));
+  saveMatchLineup(matchId, period, assignment, selectedPlayerIds).catch(() => { /* stil falen, lokaal blijft gelden */ });
+}
+
+function getFieldAssignmentRaw(matchId: string, period: number): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(`field:${matchId}:${period}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch { return {}; }
+}
+function getPeriodLineupRaw(matchId: string, period: number): string[] {
+  try {
+    const raw = localStorage.getItem(`lineup:${matchId}:${period}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+/** Haalt de backend-versie van alle 4 kwarten op en schrijft ze in de lokale
+ * cache (localStorage) — aan te roepen bij het laden van een match, VÓÓR de
+ * bestaande getFieldAssignment/getPeriodLineup-aanroepen die de state vullen,
+ * zodat een opstelling die een andere trainer eerder al instelde/bevestigde
+ * ook op dit toestel meteen zichtbaar is i.p.v. leeg te lijken. */
+export async function hydrateMatchLineupsFromBackend(matchId: string): Promise<void> {
+  try {
+    const rows = await getMatchLineups(matchId);
+    for (const row of rows) {
+      try { localStorage.setItem(`field:${matchId}:${row.period}`, row.assignment || '{}'); } catch { /**/ }
+      try { localStorage.setItem(`lineup:${matchId}:${row.period}`, row.selectedPlayerIds || '[]'); } catch { /**/ }
+    }
+  } catch { /* backend niet bereikbaar — lokale (mogelijk lege) cache blijft gelden */ }
+}
+
+// ── Voorkeursopstelling per trainer (backend-gesynchroniseerd, i.t.t. de
+// lokale fieldAssignment hierboven) — bij een ploeg met 2+ trainers kan elke
+// trainer onafhankelijk een voorstel per kwart klaarzetten; nadien wordt op
+// Matchday gekozen welk voorstel via setFieldAssignment effectief toegepast wordt.
+export interface LineupProposal {
+  id: string;
+  match: { id: string };
+  trainer: { id: string; name: string };
+  period: number;
+  assignment: string; // JSON: Record<posKey, playerId>
+}
+
+const LINEUP_PROPOSAL_FIELDS = `id period assignment trainer { id name } match { id }`;
+
+export async function getLineupProposals(matchId: string): Promise<LineupProposal[]> {
+  const data = await gql(
+    `query GetLineupProposals($matchId: ID!) {
+      lineupProposals(where: { match: { id: { equals: $matchId } } }, take: 200) { ${LINEUP_PROPOSAL_FIELDS} }
+    }`,
+    { matchId }
+  );
+  return data.lineupProposals;
+}
+
+/** Upsert: slaat het voorstel van deze trainer voor dit kwart op — de eerste
+ * keer wordt een nieuwe rij aangemaakt, nadien gewoon bijgewerkt. */
+export async function saveLineupProposal(
+  matchId: string, trainerId: string, period: number, assignment: Record<string, string>
+): Promise<LineupProposal> {
+  const existing = await gql(
+    `query FindLineupProposal($matchId: ID!, $trainerId: ID!, $period: Int!) {
+      lineupProposals(
+        where: { match: { id: { equals: $matchId } }, trainer: { id: { equals: $trainerId } }, period: { equals: $period } },
+        take: 1
+      ) { id }
+    }`,
+    { matchId, trainerId, period }
+  );
+  const json = JSON.stringify(assignment);
+  const existingId: string | undefined = existing.lineupProposals[0]?.id;
+  if (existingId) {
+    const data = await gql(
+      `mutation UpdateLineupProposal($id: ID!, $assignment: String) {
+        updateLineupProposal(where: { id: $id }, data: { assignment: $assignment }) { ${LINEUP_PROPOSAL_FIELDS} }
+      }`,
+      { id: existingId, assignment: json }
+    );
+    return data.updateLineupProposal;
+  }
+  const data = await gql(
+    `mutation CreateLineupProposal($data: LineupProposalCreateInput!) {
+      createLineupProposal(data: $data) { ${LINEUP_PROPOSAL_FIELDS} }
+    }`,
+    { data: { match: { connect: { id: matchId } }, trainer: { connect: { id: trainerId } }, period, assignment: json } }
+  );
+  return data.createLineupProposal;
 }
 
 
@@ -1681,10 +1832,12 @@ export function setPeriodLineup(matchId: string, period: number, playerIds: stri
   try {
     localStorage.setItem(`lineup:${matchId}:${period}`, JSON.stringify(playerIds));
   } catch { /* ignore */ }
+  syncMatchLineupToBackend(matchId, period);
 }
 
 export function clearPeriodLineup(matchId: string, period: number): void {
   try { localStorage.removeItem(`lineup:${matchId}:${period}`); } catch { /* ignore */ }
+  syncMatchLineupToBackend(matchId, period);
 }
 
 // ── Trainingen (voorbereiding — velden volgen Template_training_KFC) ──────────

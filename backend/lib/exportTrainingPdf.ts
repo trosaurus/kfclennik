@@ -59,8 +59,9 @@ function field(doc: PDFKit.PDFDocument, labelText: string, val: string) {
 }
 
 /** Eén rij van een tabel: gelijke kolombreedtes, een label boven een waarde
- * per cel, met een vaste celhoogte (tekst die niet past wordt afgekapt met
- * "…" i.p.v. de tabel — en dus de pagina — te laten uitdijen). */
+ * per cel. De aanroeper bepaalt rowHeight — geef die ruim genoeg (bv. via
+ * heightOfString) mee als de tekst nooit afgekapt mag worden; bij een krappe
+ * vaste hoogte (zoals de bovenste organisatie-tabel) knipt "…" wél nog af. */
 function drawTableRow(doc: PDFKit.PDFDocument, x: number, y: number, width: number, cells: { label: string; value: string }[], rowHeight: number) {
   const colWidth = width / cells.length;
   doc.lineWidth(0.75).strokeColor('#d0d0d0');
@@ -78,14 +79,18 @@ function drawTableRow(doc: PDFKit.PDFDocument, x: number, y: number, width: numb
   });
 }
 
-/** Bouwt exact één pagina voor deze oefening — elk tekstblok krijgt een vaste
- * hoogte (met "…" bij overflow) zodat de lay-out altijd op precies één A4-
- * pagina past, ongeacht hoe lang de trainer de velden invulde. */
+/** Bouwt de pagina('s) voor deze oefening. Beschrijving en Coaching/Maximaal
+ * actief/Fun tonen altijd de VOLLEDIGE tekst (geen "…"-afkapping meer) — hun
+ * hoogte wordt vooraf gemeten (heightOfString) en de tekening krijgt wat
+ * daarna overblijft. Dit past meestal nog op één pagina, maar bij een erg
+ * lange tekst verhuist de tekening + onderste rij bewust mee naar een nieuwe
+ * pagina i.p.v. tekst te laten verdwijnen. */
 async function addExercisePage(doc: PDFKit.PDFDocument, ex: ExportExercise) {
   doc.addPage();
   addHeaderLogo(doc);
   const left = doc.page.margins.left;
   const cw = contentWidth(doc);
+  const pageBottom = () => doc.page.height - doc.page.margins.bottom;
   let y = doc.page.margins.top;
 
   // Banner: "<FASE>: <naam>"
@@ -109,32 +114,55 @@ async function addExercisePage(doc: PDFKit.PDFDocument, ex: ExportExercise) {
   ], orgRowH);
   y += orgRowH + 12;
 
-  // Beschrijving — vast begrensd blok.
+  // Beschrijving — volledige tekst, hoogte volgt de effectieve inhoud.
+  const beschrijvingText = ex.beschrijving.trim() || '—';
   doc.fontSize(9).fillColor(DIM).font('Helvetica-Bold').text('BESCHRIJVING', left, y, { characterSpacing: 0.4 });
   y += 12;
-  const beschrijvingH = 48;
-  doc.fontSize(10).fillColor(DARK).font('Helvetica')
-    .text(ex.beschrijving.trim() || '—', left, y, { width: cw, height: beschrijvingH, ellipsis: true });
-  y += beschrijvingH + 12;
+  doc.fontSize(10).font('Helvetica');
+  const beschrijvingH = doc.heightOfString(beschrijvingText, { width: cw });
+  // Past de beschrijving zelf al niet meer op deze pagina: eerst een nieuwe
+  // pagina beginnen i.p.v. ze halverwege af te snijden.
+  if (y + beschrijvingH > pageBottom()) {
+    doc.addPage();
+    addHeaderLogo(doc);
+    y = doc.page.margins.top;
+  }
+  doc.fillColor(DARK).text(beschrijvingText, left, y, { width: cw });
+  y += beschrijvingH + 14;
 
-  // Tekening — krijgt de rest van de beschikbare hoogte tot aan de vaste
-  // onderste tabel, zodat het geheel altijd exact op deze ene pagina past.
-  const bottomRowH = 56;
-  const pageBottom = doc.page.height - doc.page.margins.bottom;
-  const imgBoxH = pageBottom - bottomRowH - 12 - y;
+  // Coaching / Maximaal actief / Fun — rijhoogte volgt de langste van de drie
+  // kolommen, zodat ook hier nooit tekst wordt afgekapt.
+  const bottomCells = [
+    { label: 'Coaching', value: ex.coachingPunten.trim() || '—' },
+    { label: 'Maximaal actief', value: ex.maximaalActief.trim() || '—' },
+    { label: 'Fun', value: ex.fun.trim() || '—' },
+  ];
+  const bottomColW = cw / bottomCells.length - 16;
+  doc.fontSize(10).font('Helvetica');
+  const bottomTextH = Math.max(...bottomCells.map(c => doc.heightOfString(c.value, { width: bottomColW })));
+  // +4pt marge t.o.v. de gemeten hoogte, tegen afrondingsverschillen tussen
+  // heightOfString() en de effectieve rendering (anders net-net afgekapt).
+  const bottomRowH = 24 + bottomTextH + 4;
+
+  // Tekening — krijgt de resterende ruimte tot aan de onderste rij. Is die
+  // ruimte te krap, dan verhuizen tekening + onderste rij samen naar een
+  // nieuwe pagina i.p.v. de tekening onbruikbaar klein te maken.
+  const MIN_IMG_H = 140;
+  let imgBoxH = pageBottom() - bottomRowH - 12 - y;
+  if (imgBoxH < MIN_IMG_H) {
+    doc.addPage();
+    addHeaderLogo(doc);
+    y = doc.page.margins.top;
+    imgBoxH = pageBottom() - bottomRowH - 12 - y;
+  }
   const imgBoxW = Math.min(320, cw);
   const imgX = left + (cw - imgBoxW) / 2;
   const scene = parseDrawingScene(ex.drawingData);
   const pngBuffer = await renderDrawingPng(scene);
   doc.image(pngBuffer, imgX, y, { fit: [imgBoxW, imgBoxH], align: 'center', valign: 'center' });
-  y = pageBottom - bottomRowH;
+  y += imgBoxH + 12;
 
-  // Coaching / Maximaal actief / Fun — vaste onderste tabelrij.
-  drawTableRow(doc, left, y, cw, [
-    { label: 'Coaching', value: ex.coachingPunten },
-    { label: 'Maximaal actief', value: ex.maximaalActief },
-    { label: 'Fun', value: ex.fun },
-  ], bottomRowH);
+  drawTableRow(doc, left, y, cw, bottomCells, bottomRowH);
 }
 
 /** Titelpagina met het clublogo in een rode kopbalk (zelfde stijl als de
