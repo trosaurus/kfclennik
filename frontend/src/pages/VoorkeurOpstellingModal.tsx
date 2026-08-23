@@ -3,7 +3,6 @@ import {
   Player, Attendance, LineupProposal,
   getLineupProposals, saveLineupProposal,
 } from '../lib/api';
-import { getPositionsForCategory } from '../lib/teamConfig';
 import FieldView from './FieldView';
 import './VoorkeurOpstellingModal.css';
 
@@ -65,16 +64,6 @@ export default function VoorkeurOpstellingModal({
     });
   }
 
-  function positionSummary(assignment: Record<string, string>): { pos: string; name: string }[] {
-    const positions = getPositionsForCategory(teamCategory);
-    return Object.entries(assignment).map(([posKey, playerId]) => {
-      const pos = positions.find(p => p.key === posKey);
-      const player = squadPlayers.find(p => p.id === playerId);
-      const name = player ? (player.number ? `#${player.number} ${player.name}` : player.name) : '?';
-      return { pos: pos?.label ?? posKey, name };
-    });
-  }
-
   const teammateProposals = teammates.map(tm => {
     const p = proposals.find(pr => pr.trainer.id === tm.id && pr.period === activePeriod);
     let assignment: Record<string, string> = {};
@@ -115,13 +104,15 @@ export default function VoorkeurOpstellingModal({
                   ✓ Toepassen
                 </button>
               </div>
-              <FieldView
-                matchId={matchId} period={activePeriod} periodStatus="idle" sessions={[]}
-                attendances={attendances} allPlayers={squadPlayers} tick={0} category={teamCategory}
-                onRefresh={async () => {}}
-                preAssignment={myAssignments[activePeriod] || {}}
-                onPreAssign={myPreAssign}
-              />
+              <div className="vo-field-compact">
+                <FieldView
+                  matchId={matchId} period={activePeriod} periodStatus="idle" sessions={[]}
+                  attendances={attendances} allPlayers={squadPlayers} tick={0} category={teamCategory}
+                  onRefresh={async () => {}}
+                  preAssignment={myAssignments[activePeriod] || {}}
+                  onPreAssign={myPreAssign}
+                />
+              </div>
             </div>
 
             {teammateProposals.map(({ trainer, assignment }) => (
@@ -138,11 +129,15 @@ export default function VoorkeurOpstellingModal({
                 {Object.keys(assignment).length === 0 ? (
                   <div className="vo-empty">Nog geen voorstel voor dit kwart.</div>
                 ) : (
-                  <ul className="vo-summary-list">
-                    {positionSummary(assignment).map((row, i) => (
-                      <li key={i}><span className="vo-summary-pos">{row.pos}</span>{row.name}</li>
-                    ))}
-                  </ul>
+                  <div className="vo-field-compact">
+                    <FieldView
+                      matchId={matchId} period={activePeriod} periodStatus="idle" sessions={[]}
+                      attendances={attendances} allPlayers={squadPlayers} tick={0} category={teamCategory}
+                      onRefresh={async () => {}}
+                      preAssignment={assignment}
+                      readOnly
+                    />
+                  </div>
                 )}
               </div>
             ))}

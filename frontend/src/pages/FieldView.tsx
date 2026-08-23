@@ -35,13 +35,16 @@ interface Props {
   onSessionStop?: (sessionId: string) => void;   // optimistic UI update callback
   preAssignment?: Record<string, string>;
   onPreAssign?: (posKey: string, playerId: string | null) => void;
+  /** Toont het veld puur ter info, zonder klik/sleep-interactie — voor het
+   * bekijken van een collega-trainer's voorkeursopstelling in VoorkeurOpstellingModal. */
+  readOnly?: boolean;
 }
 
 type DragState = { playerId: string; playerName: string; fromPos: string | null } | null;
 
 export default function FieldView({
   matchId, period, periodStatus, sessions, attendances, allPlayers,
-  tick, category, onRefresh, onSessionStop, preAssignment, onPreAssign,
+  tick, category, onRefresh, onSessionStop, preAssignment, onPreAssign, readOnly,
 }: Props) {
   const [dragState, setDragState] = useState<DragState>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -50,8 +53,8 @@ export default function FieldView({
 
   const isLive     = periodStatus === 'playing';
   const isPaused   = periodStatus === 'paused';
-  const isEditable = isLive || isPaused || periodStatus === 'idle';
-  const isPreMatch = periodStatus === 'idle' && !!onPreAssign;
+  const isEditable = !readOnly && (isLive || isPaused || periodStatus === 'idle');
+  const isPreMatch = periodStatus === 'idle' && preAssignment !== undefined;
 
   // Positions for this team's format
   const positions: FieldPos[] = getPositionsForCategory(category);
@@ -398,7 +401,7 @@ export default function FieldView({
           onDrop={e => { e.preventDefault(); onDropOnBench(); }}
         >
           <div className="fv-bench-title">
-            {isPreMatch ? 'Sleep naar veld' : 'Bank'}
+            {readOnly ? 'Niet opgesteld' : isPreMatch ? 'Sleep naar veld' : 'Bank'}
             <span className="fv-bench-count">{bench.length}</span>
           </div>
           <div className="fv-format-badge">{format.toUpperCase()}</div>

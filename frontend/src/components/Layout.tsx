@@ -27,6 +27,16 @@ export default function Layout() {
     ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: '⚙️' }] : []),
   ];
 
+  // NavLink's eigen isActive-check kijkt enkel naar `to` — voor de
+  // samengevoegde items (Team/Trainingen) moet het ook oplichten op de andere
+  // paden uit de groep (activePaths), dus die state berekenen we hier zelf.
+  function isItemActive(item: (typeof NAV_ITEMS)[number]): boolean {
+    const paths = item.activePaths ?? [item.to];
+    return item.end
+      ? paths.includes(location.pathname)
+      : paths.some(p => location.pathname.startsWith(p));
+  }
+
   async function handleLogout() {
     await logout();
     setTrainer(null);
@@ -49,7 +59,7 @@ export default function Layout() {
           <nav className="nav desktop-nav">
             {NAV_ITEMS.map(item => (
               <NavLink key={item.to} to={item.to} end={item.end}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''} ${item.resume ? 'nav-link-resume' : ''}`}>
+                className={`nav-link ${isItemActive(item) ? 'active' : ''} ${item.resume ? 'nav-link-resume' : ''}`}>
                 <span className="nav-icon">{item.icon}</span>
                 <span>{item.label}</span>
               </NavLink>
@@ -80,18 +90,13 @@ export default function Layout() {
       </main>
 
       <nav className="mobile-nav">
-        {NAV_ITEMS.map(item => {
-          const isActive = item.end
-            ? location.pathname === item.to
-            : location.pathname.startsWith(item.to);
-          return (
-            <NavLink key={item.to} to={item.to} end={item.end}
-              className={`mobile-nav-item ${isActive ? 'active' : ''} ${item.resume ? 'mobile-nav-item-resume' : ''}`}>
-              <span className="mobile-nav-icon">{item.icon}</span>
-              <span className="mobile-nav-label">{item.label}</span>
-            </NavLink>
-          );
-        })}
+        {NAV_ITEMS.map(item => (
+          <NavLink key={item.to} to={item.to} end={item.end}
+            className={`mobile-nav-item ${isItemActive(item) ? 'active' : ''} ${item.resume ? 'mobile-nav-item-resume' : ''}`}>
+            <span className="mobile-nav-icon">{item.icon}</span>
+            <span className="mobile-nav-label">{item.label}</span>
+          </NavLink>
+        ))}
       </nav>
     </div>
   );

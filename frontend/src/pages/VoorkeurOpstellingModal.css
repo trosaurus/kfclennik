@@ -21,8 +21,8 @@
 .vo-tab.active { background: var(--red); color: white; }
 
 .vo-columns {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;
-  max-height: 65vh; overflow-y: auto; padding-right: 4px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;
+  max-height: 75vh; overflow-y: auto; padding-right: 4px;
 }
 .vo-column {
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px;
@@ -34,16 +34,9 @@
 
 .vo-empty { font-size: 13px; color: var(--text-dim); padding: 20px 0; text-align: center; }
 
-.vo-summary-list { display: flex; flex-direction: column; gap: 6px; list-style: none; padding: 0; margin: 0; }
-.vo-summary-list li {
-  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-  background: var(--bg-elevated); border-radius: var(--radius); font-size: 13px;
-}
-.vo-summary-pos {
-  flex-shrink: 0; min-width: 28px; padding: 2px 6px; text-align: center;
-  background: var(--red); color: white; border-radius: var(--radius);
-  font-family: var(--font-heading); font-size: 11px; font-weight: 700;
-}
+/* Veld altijd smal/gestapeld tonen binnen een kolom — de bank hoort onder het
+ * veld i.p.v. ernaast, ongeacht viewportbreedte, want de kolom zelf is smal. */
+.vo-field-compact .fv-layout { grid-template-columns: 1fr; }
 
 @media (max-width: 700px) {
   .vo-columns { grid-template-columns: 1fr; max-height: none; }
