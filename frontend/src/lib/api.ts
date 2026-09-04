@@ -741,6 +741,24 @@ export async function getMatchLineups(matchId: string): Promise<MatchLineup[]> {
   return data.matchLineups;
 }
 
+/** Ketent async upserts per sleutel na elkaar i.p.v. gelijktijdig. Zonder dit
+ * ziet elke aanroep die snel na elkaar gebeurt (bv. een speler per klik op het
+ * veld zetten, of autoAssignLeastPlayed dat alle posities in een tight loop
+ * doorloopt) onafhankelijk "nog geen bestaande rij" vóór de eerste create is
+ * geland — met dubbele rijen tot gevolg. Een latere lezing (op een ander
+ * toestel) heeft geen garantie welke van die dubbels ze binnenkrijgt, en kan
+ * zo op een vroege/onvolledige snapshot uitkomen i.p.v. de uiteindelijke volledige
+ * opstelling — dít verklaart een bevestigde opstelling die op een ander toestel
+ * leeg of onvolledig lijkt terwijl ze op het toestel dat ze instelde prima oogt
+ * (daar leest de UI immers de lokale React-state, niet de backend-rij terug). */
+const upsertChains = new Map<string, Promise<unknown>>();
+function serializedUpsert<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const prev = upsertChains.get(key) ?? Promise.resolve();
+  const result = prev.then(run, run);
+  upsertChains.set(key, result.then(() => undefined, () => undefined));
+  return result;
+}
+
 async function saveMatchLineup(matchId: string, period: number, assignment: string, selectedPlayerIds: string): Promise<void> {
   const existing = await gql(
     `query FindMatchLineup($matchId: ID!, $period: Int!) {
@@ -771,11 +789,14 @@ async function saveMatchLineup(matchId: string, period: number, assignment: stri
  * de aanroeper ook wijzigde) — samen naar de backend. Bewust "fire and
  * forget": de lokale state/localStorage is al bijgewerkt vóór dit aangeroepen
  * wordt, dus de UI hoeft niet op het netwerk te wachten; lukt de sync niet
- * (bv. offline), dan blijft de lokale opstelling gewoon werken. */
+ * (bv. offline), dan blijft de lokale opstelling gewoon werken. Geserialiseerd
+ * per match+kwart (zie serializedUpsert) zodat snel opeenvolgende wijzigingen
+ * geen dubbele MatchLineup-rijen opleveren. */
 function syncMatchLineupToBackend(matchId: string, period: number): void {
   const assignment = JSON.stringify(getFieldAssignmentRaw(matchId, period));
   const selectedPlayerIds = JSON.stringify(getPeriodLineupRaw(matchId, period));
-  saveMatchLineup(matchId, period, assignment, selectedPlayerIds).catch(() => { /* stil falen, lokaal blijft gelden */ });
+  serializedUpsert(`matchLineup:${matchId}:${period}`, () => saveMatchLineup(matchId, period, assignment, selectedPlayerIds))
+    .catch(() => { /* stil falen, lokaal blijft gelden */ });
 }
 
 function getFieldAssignmentRaw(matchId: string, period: number): Record<string, string> {
@@ -831,37 +852,44 @@ export async function getLineupProposals(matchId: string): Promise<LineupProposa
 }
 
 /** Upsert: slaat het voorstel van deze trainer voor dit kwart op — de eerste
- * keer wordt een nieuwe rij aangemaakt, nadien gewoon bijgewerkt. */
-export async function saveLineupProposal(
+ * keer wordt een nieuwe rij aangemaakt, nadien gewoon bijgewerkt. Geserialiseerd
+ * per match+trainer+kwart (zie serializedUpsert hierboven) — anders leidt snel
+ * na elkaar meerdere spelers naar het veld slepen tot dubbele voorstel-rijen
+ * (elke klik checkt onafhankelijk "bestaat er al een rij", vóór de vorige create
+ * geland is), waarna een latere lezing een willekeurige (mogelijk onvolledige)
+ * rij kan terugkrijgen i.p.v. het uiteindelijke voorstel. */
+export function saveLineupProposal(
   matchId: string, trainerId: string, period: number, assignment: Record<string, string>
 ): Promise<LineupProposal> {
-  const existing = await gql(
-    `query FindLineupProposal($matchId: ID!, $trainerId: ID!, $period: Int!) {
-      lineupProposals(
-        where: { match: { id: { equals: $matchId } }, trainer: { id: { equals: $trainerId } }, period: { equals: $period } },
-        take: 1
-      ) { id }
-    }`,
-    { matchId, trainerId, period }
-  );
-  const json = JSON.stringify(assignment);
-  const existingId: string | undefined = existing.lineupProposals[0]?.id;
-  if (existingId) {
-    const data = await gql(
-      `mutation UpdateLineupProposal($id: ID!, $assignment: String) {
-        updateLineupProposal(where: { id: $id }, data: { assignment: $assignment }) { ${LINEUP_PROPOSAL_FIELDS} }
+  return serializedUpsert(`lineupProposal:${matchId}:${trainerId}:${period}`, async () => {
+    const existing = await gql(
+      `query FindLineupProposal($matchId: ID!, $trainerId: ID!, $period: Int!) {
+        lineupProposals(
+          where: { match: { id: { equals: $matchId } }, trainer: { id: { equals: $trainerId } }, period: { equals: $period } },
+          take: 1
+        ) { id }
       }`,
-      { id: existingId, assignment: json }
+      { matchId, trainerId, period }
     );
-    return data.updateLineupProposal;
-  }
-  const data = await gql(
-    `mutation CreateLineupProposal($data: LineupProposalCreateInput!) {
-      createLineupProposal(data: $data) { ${LINEUP_PROPOSAL_FIELDS} }
-    }`,
-    { data: { match: { connect: { id: matchId } }, trainer: { connect: { id: trainerId } }, period, assignment: json } }
-  );
-  return data.createLineupProposal;
+    const json = JSON.stringify(assignment);
+    const existingId: string | undefined = existing.lineupProposals[0]?.id;
+    if (existingId) {
+      const data = await gql(
+        `mutation UpdateLineupProposal($id: ID!, $assignment: String) {
+          updateLineupProposal(where: { id: $id }, data: { assignment: $assignment }) { ${LINEUP_PROPOSAL_FIELDS} }
+        }`,
+        { id: existingId, assignment: json }
+      );
+      return data.updateLineupProposal;
+    }
+    const data = await gql(
+      `mutation CreateLineupProposal($data: LineupProposalCreateInput!) {
+        createLineupProposal(data: $data) { ${LINEUP_PROPOSAL_FIELDS} }
+      }`,
+      { data: { match: { connect: { id: matchId } }, trainer: { connect: { id: trainerId } }, period, assignment: json } }
+    );
+    return data.createLineupProposal;
+  });
 }
 
 

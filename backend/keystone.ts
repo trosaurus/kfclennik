@@ -32,7 +32,12 @@ export default withAuth(
     extendGraphqlSchema,
     server: {
       cors: {
-        origin: ['http://localhost:5173'],
+        // Komma-gescheiden lijst van toegestane frontend-origins — zonder dit
+        // env var blokkeert de browser elke credentialed cross-origin request
+        // (login/sessie inbegrepen) zodra frontend en backend online op
+        // verschillende domeinen/poorten draaien, ook al lijkt de rest van de
+        // app dan soms nog te werken vanuit de al-geladen React state.
+        origin: process.env.CORS_ORIGIN?.split(',').map(o => o.trim()) ?? ['http://localhost:5173'],
         credentials: true,
       },
       port: 3000,
