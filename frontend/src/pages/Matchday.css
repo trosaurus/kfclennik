@@ -173,6 +173,13 @@
 }
 .md-period-manual-edit:hover { color: var(--text-mid); }
 
+/* ── Doelpuntenmakers-editor (afgelopen wedstrijd) ── */
+.md-goal-step { display: inline-flex; align-items: center; gap: 4px; }
+.md-goal-step .md-score-btn { width: 24px; height: 24px; font-size: 15px; border-radius: 6px; }
+.md-goal-step .md-score-btn:disabled { opacity: 0.35; cursor: default; }
+.md-goal-step .md-score-btn:disabled:hover { transform: none; }
+.md-goal-step-val { font-family: var(--font-display); font-size: 16px; min-width: 16px; text-align: center; color: var(--white); }
+
 /* ── Live speeltijden tabel ── */
 .md-playtime-summary { margin-top: 24px; }
 .md-playtime-bar { width: 100%; height: 3px; background: var(--bg-elevated); border-radius: 2px; overflow: hidden; margin-top: 3px; }

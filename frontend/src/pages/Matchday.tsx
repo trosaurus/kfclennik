@@ -303,6 +303,16 @@ export default function Matchday() {
     if (updated) setMatch(updated);
   }
 
+  /** Zoals savePeriodScore, maar geadresseerd via kwartnummer — maakt de
+   * Period-rij aan als die nog niet bestaat. Nodig om achteraf de stand van
+   * een kwart aan te passen dat tijdens de wedstrijd nooit apart gestart is. */
+  async function savePeriodScoreByNumber(periodNumber: number, home: number, away: number) {
+    if (!match) return;
+    let period = periods.find(p => p.periodNumber === periodNumber);
+    if (!period) period = await createPeriod(match.id, periodNumber);
+    await savePeriodScore(period.id, home, away);
+  }
+
   // ── Player time ────────────────────────────────────────────────────────────
 
   // Only count the live (ticking) portion when the session is truly active.
@@ -458,15 +468,22 @@ export default function Matchday() {
 
   // ── Goals ─────────────────────────────────────────────────────────────────
 
-  async function handleAddGoal(ps: PlayerState) {
+  /** Doelpunt registreren voor een speler in een bepaald kwart. Zonder
+   * kwartnummer valt het terug op het lopende kwart (live gebruik); met
+   * kwartnummer bruikbaar om achteraf een doelpuntenmaker te corrigeren. */
+  async function addGoalForPlayer(playerId: string, periodNumber: number) {
     if (!match) return;
-    setBusyPlayer(ps.player.id);
+    setBusyPlayer(playerId);
     try {
-      await addGoal(match.id, ps.player.id, match.currentPeriod || 1, match.location);
+      await addGoal(match.id, playerId, periodNumber, match.location);
       // Refresh both sessions/periods (score changed) and match totals
       await refresh();
       await refreshMatch();
     } finally { setBusyPlayer(null); }
+  }
+
+  async function handleAddGoal(ps: PlayerState) {
+    await addGoalForPlayer(ps.player.id, match?.currentPeriod || 1);
   }
 
   async function handleRemoveGoal(goalId: string, periodNumber: number) {
@@ -845,7 +862,14 @@ export default function Matchday() {
 
       {/* ── FINISHED: summary ── */}
       {isFinished && (
-        <MatchSummary playerStates={playerStates} sessions={sessions} periods={periods} goals={goals} location={m!.location} onSetManualPlaytime={handleSetManualPlaytime} />
+        <MatchSummary
+          playerStates={playerStates} sessions={sessions} periods={periods} goals={goals}
+          location={m!.location}
+          onSetManualPlaytime={handleSetManualPlaytime}
+          onAddGoal={addGoalForPlayer}
+          onRemoveGoal={handleRemoveGoal}
+          onEditScores={() => setScoreModal(true)}
+        />
       )}
 
       {/* ── POSITIE SPEELTIJDEN (afgelopen wedstrijd) ── */}
@@ -891,7 +915,7 @@ export default function Matchday() {
 
       {/* ── Score edit modal (for finished) ── */}
       {scoreModal && (
-        <ScoreModal match={m!} periods={periods} onSave={savePeriodScore} onClose={() => setScoreModal(false)} />
+        <ScoreModal match={m!} periods={periods} onSave={savePeriodScoreByNumber} onClose={() => setScoreModal(false)} />
       )}
 
       {matchPicker && (
@@ -1076,9 +1100,12 @@ function PlayerRow({ ps, isPlaying, busy, onToggle, onSub, periodSec, playerGoal
 
 // ── MatchSummary ──────────────────────────────────────────────────────────────
 
-function MatchSummary({ playerStates, sessions, periods, goals, location, onSetManualPlaytime }: {
+function MatchSummary({ playerStates, sessions, periods, goals, location, onSetManualPlaytime, onAddGoal, onRemoveGoal, onEditScores }: {
   playerStates: PlayerState[]; sessions: PlayTimeSession[]; periods: Period[]; goals: Goal[]; location: string;
   onSetManualPlaytime: (attendanceId: string, minutes: number | null) => Promise<void>;
+  onAddGoal: (playerId: string, periodNumber: number) => Promise<void>;
+  onRemoveGoal: (goalId: string, periodNumber: number) => Promise<void>;
+  onEditScores: () => void;
 }) {
   // p.scoreHome/scoreAway zijn de letterlijke thuis-/uitploeg-kolommen — welke
   // daarvan "ons" is hangt af van match.location (zie ook addGoal in lib/api.ts).
@@ -1093,7 +1120,10 @@ function MatchSummary({ playerStates, sessions, periods, goals, location, onSetM
       <div className="md-summary-score-card card" style={{ marginBottom: 20 }}>
         <div className="md-summary-score-header">
           <span>Eindstand</span>
-          <span className="md-summary-final">{totalOwn} – {totalOpp}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span className="md-summary-final">{totalOwn} – {totalOpp}</span>
+            <button className="btn btn-outline btn-sm" onClick={onEditScores} title="Kwart- en eindstand handmatig aanpassen">✏️ Standen aanpassen</button>
+          </span>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table className="data-table">
@@ -1120,7 +1150,95 @@ function MatchSummary({ playerStates, sessions, periods, goals, location, onSetM
         </div>
       </div>
 
+      <GoalsEditor playerStates={playerStates} goals={goals} onAddGoal={onAddGoal} onRemoveGoal={onRemoveGoal} />
+
       <PlayerSummaryTable playerStates={playerStates} sessions={sessions} periods={periods} goals={goals} title="Speeltijden per speler" onSetManualPlaytime={onSetManualPlaytime} />
+    </div>
+  );
+}
+
+// ── GoalsEditor (afgelopen wedstrijd — doelpuntenmakers per kwart corrigeren) ──
+
+function GoalsEditor({ playerStates, goals, onAddGoal, onRemoveGoal }: {
+  playerStates: PlayerState[]; goals: Goal[];
+  onAddGoal: (playerId: string, periodNumber: number) => Promise<void>;
+  onRemoveGoal: (goalId: string, periodNumber: number) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  const quarters = [1, 2, 3, 4];
+
+  async function run(fn: () => Promise<void>) {
+    if (busy) return;
+    setBusy(true);
+    try { await fn(); } finally { setBusy(false); }
+  }
+
+  // Rijen: alle geselecteerde spelers + eventuele doelpuntenmakers die (niet
+  // meer) in de selectie zitten, zodat hun doelpunten nooit onzichtbaar worden.
+  const known = new Map<string, { id: string; name: string; number: number | null }>(
+    playerStates.map(ps => [ps.player.id, ps.player])
+  );
+  for (const g of goals) if (!known.has(g.player.id)) known.set(g.player.id, g.player);
+  const players = Array.from(known.values());
+  const goalCount = (pid: string) => goals.filter(g => g.player.id === pid).length;
+  const sorted = [...players].sort((a, b) => {
+    const d = goalCount(b.id) - goalCount(a.id);
+    if (d !== 0) return d;
+    return (a.number ?? 99) - (b.number ?? 99);
+  });
+
+  return (
+    <div className="md-playtime-summary">
+      <div className="md-section-header" style={{ marginBottom: 12 }}>
+        <span className="md-section-title">Doelpuntenmakers</span>
+        <span className="md-section-count">{goals.length}</span>
+      </div>
+      <div className="card" style={{ overflowX: 'auto' }}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Speler</th>
+              {quarters.map(n => <th key={n} style={{ textAlign: 'center' }}>K{n}</th>)}
+              <th style={{ textAlign: 'center' }}>Totaal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(p => {
+              const total = goalCount(p.id);
+              return (
+                <tr key={p.id}>
+                  <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {p.number ? `#${p.number} ` : ''}{p.name}
+                  </td>
+                  {quarters.map(n => {
+                    const qGoals = goals.filter(g => g.player.id === p.id && g.periodNumber === n);
+                    return (
+                      <td key={n} style={{ textAlign: 'center' }}>
+                        <div className="md-goal-step">
+                          <button className="md-score-btn md-score-minus" disabled={busy || qGoals.length === 0}
+                            title="Doelpunt verwijderen"
+                            onClick={() => run(() => onRemoveGoal(qGoals[qGoals.length - 1].id, n))}>−</button>
+                          <span className="md-goal-step-val">{qGoals.length}</span>
+                          <button className="md-score-btn md-score-plus" disabled={busy}
+                            title="Doelpunt toevoegen"
+                            onClick={() => run(() => onAddGoal(p.id, n))}>+</button>
+                        </div>
+                      </td>
+                    );
+                  })}
+                  <td style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 20, color: total > 0 ? 'var(--red)' : 'var(--text-dim)' }}>{total}</td>
+                </tr>
+              );
+            })}
+            {sorted.length === 0 && (
+              <tr><td colSpan={quarters.length + 2} style={{ color: 'var(--text-dim)', fontSize: 13, padding: 16 }}>Geen spelers in de selectie.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="md-lineup-info" style={{ marginTop: 8 }}>
+        ⓘ Elk doelpunt telt automatisch mee in de kwart- en eindstand. Tegendoelpunten pas je aan via "Standen aanpassen".
+      </div>
     </div>
   );
 }
@@ -1251,11 +1369,18 @@ function PlayerSummaryTable({ playerStates, sessions, periods, goals = [], title
 
 function ScoreModal({ match, periods, onSave, onClose }: {
   match: Match; periods: Period[];
-  onSave: (id: string, h: number, a: number) => void; onClose: () => void;
+  onSave: (periodNumber: number, h: number, a: number) => void | Promise<void>; onClose: () => void;
 }) {
-  const [scores, setScores] = useState<Record<string, { home: number; away: number }>>(
-    Object.fromEntries(periods.map(p => [p.id, { home: p.scoreHome, away: p.scoreAway }]))
+  // Toon altijd alle kwarten (ook die zonder Period-rij) — die worden bij het
+  // opslaan aangemaakt. Geïndexeerd op kwartnummer i.p.v. Period-id.
+  const quarters = Array.from({ length: TOTAL_PERIODS }, (_, i) => i + 1);
+  const [scores, setScores] = useState<Record<number, { home: number; away: number }>>(
+    Object.fromEntries(quarters.map(n => {
+      const p = periods.find(pr => pr.periodNumber === n);
+      return [n, { home: p?.scoreHome ?? 0, away: p?.scoreAway ?? 0 }];
+    }))
   );
+  const [saving, setSaving] = useState(false);
   // scoreHome/scoreAway in de data zijn de letterlijke thuis-/uitploeg-kolommen —
   // toon "KFC Lennik" hier altijd links, ongeacht welk letterlijk veld dat is,
   // zodat de volgorde overeenkomt met de banner erboven (zie ownScore/oppScore).
@@ -1263,39 +1388,56 @@ function ScoreModal({ match, periods, onSave, onClose }: {
   const ownKey: 'home' | 'away' = ownIsHome ? 'home' : 'away';
   const oppKey: 'home' | 'away' = ownIsHome ? 'away' : 'home';
 
+  const totalOwn = quarters.reduce((s, n) => s + (scores[n]?.[ownKey] ?? 0), 0);
+  const totalOpp = quarters.reduce((s, n) => s + (scores[n]?.[oppKey] ?? 0), 0);
+
   async function handleSave() {
-    for (const [id, sc] of Object.entries(scores)) {
-      onSave(id, sc.home, sc.away);
-    }
-    onClose();
+    setSaving(true);
+    try {
+      // Sequentieel: elke oproep herberekent de eindstand uit alle kwarten.
+      for (const n of quarters) {
+        const p = periods.find(pr => pr.periodNumber === n);
+        const sc = scores[n];
+        if (p && p.scoreHome === sc.home && p.scoreAway === sc.away) continue; // ongewijzigd
+        await onSave(n, sc.home, sc.away);
+      }
+      onClose();
+    } finally { setSaving(false); }
   }
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
-        <div className="modal-title">Score per kwart</div>
+        <div className="modal-title">Standen per kwart</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 4, fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-dim)' }}>
           <span style={{ width: 60, textAlign: 'center' }}>KFC Lennik</span>
           <span style={{ width: 16 }} />
           <span style={{ width: 60, textAlign: 'center' }}>{match.opponent}</span>
         </div>
-        {periods.map(p => (
-          <div key={p.id} className="form-group">
-            <label className="input-label">Kwart {p.periodNumber}</label>
+        {quarters.map(n => (
+          <div key={n} className="form-group">
+            <label className="input-label">Kwart {n}</label>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input type="number" min={0} className="input-field" style={{ width: 60, textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 22 }}
-                value={scores[p.id]?.[ownKey] ?? 0}
-                onChange={e => setScores(s => ({ ...s, [p.id]: { ...s[p.id], [ownKey]: +e.target.value } }))} />
+                value={scores[n]?.[ownKey] ?? 0}
+                onChange={e => setScores(s => ({ ...s, [n]: { ...s[n], [ownKey]: Math.max(0, +e.target.value) } }))} />
               <span style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--text-dim)' }}>–</span>
               <input type="number" min={0} className="input-field" style={{ width: 60, textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 22 }}
-                value={scores[p.id]?.[oppKey] ?? 0}
-                onChange={e => setScores(s => ({ ...s, [p.id]: { ...s[p.id], [oppKey]: +e.target.value } }))} />
+                value={scores[n]?.[oppKey] ?? 0}
+                onChange={e => setScores(s => ({ ...s, [n]: { ...s[n], [oppKey]: Math.max(0, +e.target.value) } }))} />
             </div>
           </div>
         ))}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+          <span>Eindstand</span>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--red)', letterSpacing: 2 }}>{totalOwn} – {totalOpp}</span>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)' }}>
+          ⓘ Doelpuntenmakers van KFC pas je aan in de tabel "Doelpuntenmakers" — dat past de stand mee aan.
+        </div>
         <div className="modal-actions">
-          <button className="btn btn-outline" onClick={onClose}>Annuleer</button>
-          <button className="btn btn-primary" onClick={handleSave}>Opslaan</button>
+          <button className="btn btn-outline" onClick={onClose} disabled={saving}>Annuleer</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? 'Opslaan...' : 'Opslaan'}</button>
         </div>
       </div>
     </div>
