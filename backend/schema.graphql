@@ -790,6 +790,7 @@ type Attendance {
   selected: String
   playTimeSessions(where: PlayTimeSessionWhereInput! = {}, orderBy: [PlayTimeSessionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PlayTimeSessionWhereUniqueInput): [PlayTimeSession!]
   playTimeSessionsCount(where: PlayTimeSessionWhereInput! = {}): Int
+  manualSeconds: Int
 }
 
 input AttendanceWhereUniqueInput {
@@ -806,6 +807,7 @@ input AttendanceWhereInput {
   present: StringNullableFilter
   selected: StringNullableFilter
   playTimeSessions: PlayTimeSessionManyRelationFilter
+  manualSeconds: IntNullableFilter
 }
 
 input PlayTimeSessionManyRelationFilter {
@@ -818,6 +820,7 @@ input AttendanceOrderByInput {
   id: OrderDirection
   present: OrderDirection
   selected: OrderDirection
+  manualSeconds: OrderDirection
 }
 
 input AttendanceUpdateInput {
@@ -826,6 +829,7 @@ input AttendanceUpdateInput {
   present: String
   selected: String
   playTimeSessions: PlayTimeSessionRelateToManyForUpdateInput
+  manualSeconds: Int
 }
 
 input PlayTimeSessionRelateToManyForUpdateInput {
@@ -846,6 +850,7 @@ input AttendanceCreateInput {
   present: String
   selected: String
   playTimeSessions: PlayTimeSessionRelateToManyForCreateInput
+  manualSeconds: Int
 }
 
 input PlayTimeSessionRelateToManyForCreateInput {
@@ -1766,6 +1771,8 @@ type Mutation {
   exportTrainingPdf(id: ID!): String
   uploadTeamManual(teamId: ID!, filename: String!, contentBase64: String!): Team
   removeTeamManual(teamId: ID!): Team
+  upsertMatchLineup(matchId: ID!, period: Int!, assignment: String!, selectedPlayerIds: String!): MatchLineupResult
+  upsertLineupProposal(matchId: ID!, period: Int!, assignment: String!): LineupProposalResult
 }
 
 union TrainerAuthenticationWithPasswordResult = TrainerAuthenticationWithPasswordSuccess | TrainerAuthenticationWithPasswordFailure
@@ -1940,4 +1947,19 @@ type KeystoneAdminUISort {
 enum KeystoneAdminUISortDirection {
   ASC
   DESC
+}
+
+type MatchLineupResult {
+  id: ID!
+  period: Int!
+  assignment: String!
+  selectedPlayerIds: String!
+}
+
+type LineupProposalResult {
+  id: ID!
+  period: Int!
+  assignment: String!
+  trainerId: ID!
+  trainerName: String!
 }

@@ -27,6 +27,24 @@ function requireOwnTeamOrAdmin(context: any, teamId: string): void {
   }
 }
 
+/** Ketent async werk per sleutel na elkaar i.p.v. gelijktijdig — gebruikt door
+ * upsertMatchLineup/upsertLineupProposal hieronder. Zonder dit ziet elke
+ * upsert-aanroep die snel na elkaar binnenkomt (bv. een speler per klik op het
+ * veld zetten, of twee trainers die zowat gelijktijdig opslaan vanaf hun eigen
+ * toestel) onafhankelijk "bestaat er al een rij" vóór de vorige create geland
+ * is — met dubbele rijen tot gevolg, waarna een latere lezing een willekeurige
+ * (mogelijk onvolledige) rij kan terugkrijgen i.p.v. de uiteindelijke volledige
+ * opstelling. Dit leeft in de ene backend-procesruimte, dus — anders dan een
+ * per-tabblad lock in de browser — geldt de serialisatie voor ALLE clients
+ * samen, ongeacht van welk toestel de aanroep komt. */
+const mutationChains = new Map<string, Promise<unknown>>();
+function withKeyLock<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const prev = mutationChains.get(key) ?? Promise.resolve();
+  const result = prev.then(run, run);
+  mutationChains.set(key, result.then(() => undefined, () => undefined));
+  return result;
+}
+
 const TRAINING_QUERY = `
   id titel date jaarplanLabel
   coachNaam tijdstip leeftijdscategorie niveau
@@ -92,16 +110,109 @@ export function extendGraphqlSchema(schema: GraphQLSchema): GraphQLSchema {
   return mergeSchemas({
     schemas: [schema],
     typeDefs: `
+      # Losstaande resultaattypes i.p.v. de bestaande MatchLineup/LineupProposal
+      # types hergebruiken: die laatste hebben zelf al veldresolvers (o.a. voor
+      # de trainer-relatie) die Keystone er telkens overheen zou draaien zodra
+      # een object van dat type ergens in de respons voorkomt — ook als het,
+      # zoals hier, al een kant-en-klaar (via context.query opgehaald) resultaat
+      # is. Dat botst: Keystone's resolver verwacht dan zelf nog een relatie te
+      # moeten oplossen op een object dat dat al ís, wat crashte op het
+      # trainer-veld ("results.map is not a function"). Platte, aparte types
+      # zonder relatievelden omzeilen dat volledig.
+      type MatchLineupResult {
+        id: ID!
+        period: Int!
+        assignment: String!
+        selectedPlayerIds: String!
+      }
+      type LineupProposalResult {
+        id: ID!
+        period: Int!
+        assignment: String!
+        trainerId: ID!
+        trainerName: String!
+      }
       type Mutation {
         exportTrainingPptx(id: ID!): String
         exportExercisePptx(id: ID!): String
         exportTrainingPdf(id: ID!): String
         uploadTeamManual(teamId: ID!, filename: String!, contentBase64: String!): Team
         removeTeamManual(teamId: ID!): Team
+        upsertMatchLineup(matchId: ID!, period: Int!, assignment: String!, selectedPlayerIds: String!): MatchLineupResult
+        upsertLineupProposal(matchId: ID!, period: Int!, assignment: String!): LineupProposalResult
       }
     `,
     resolvers: {
       Mutation: {
+        // Vervangt de vroegere aanpak waarbij de frontend zelf "bestaat er al een
+        // rij" opzocht en dan create/update koos — dat is een klassieke
+        // check-then-act race: bij snel na elkaar opslaan (meerdere posities
+        // instellen, of twee trainers op hun eigen toestel) zagen meerdere
+        // aanroepen tegelijk "nog geen rij", met dubbele MatchLineup-rijen tot
+        // gevolg. Een latere lezing (bv. een ander toestel dat de match opent)
+        // kreeg dan een willekeurige — mogelijk verouderde/onvolledige — rij
+        // terug i.p.v. de laatst bevestigde opstelling. Hier zit diezelfde
+        // find-dan-create/update-logica, maar geserialiseerd per match+kwart via
+        // withKeyLock zodat ze nooit meer gelijktijdig kan lopen, ongeacht
+        // hoeveel toestellen tegelijk opslaan.
+        upsertMatchLineup: async (
+          _root: unknown,
+          { matchId, period, assignment, selectedPlayerIds }: { matchId: string; period: number; assignment: string; selectedPlayerIds: string },
+          context: any
+        ) => {
+          requireSignedIn(context);
+          const row = await withKeyLock(`matchLineup:${matchId}:${period}`, async () => {
+            const existing = await context.query.MatchLineup.findMany({
+              where: { match: { id: { equals: matchId } }, period: { equals: period } },
+              query: 'id',
+              take: 1,
+            });
+            if (existing[0]) {
+              return context.query.MatchLineup.updateOne({
+                where: { id: existing[0].id },
+                data: { assignment, selectedPlayerIds },
+                query: 'id period assignment selectedPlayerIds',
+              });
+            }
+            return context.query.MatchLineup.createOne({
+              data: { match: { connect: { id: matchId } }, period, assignment, selectedPlayerIds },
+              query: 'id period assignment selectedPlayerIds',
+            });
+          });
+          return { id: row.id, period: row.period, assignment: row.assignment, selectedPlayerIds: row.selectedPlayerIds };
+        },
+        // Zelfde upsert-race als hierboven, maar dan voor de per-trainer
+        // voorkeursopstelling — geserialiseerd per match+trainer+kwart. De
+        // trainer wordt altijd uit de sessie gehaald (nooit een client-
+        // aangeleverd trainerId), zodat een trainer nooit onder een andere
+        // naam een voorstel kan aanmaken of bijwerken.
+        upsertLineupProposal: async (
+          _root: unknown,
+          { matchId, period, assignment }: { matchId: string; period: number; assignment: string },
+          context: any
+        ) => {
+          requireSignedIn(context);
+          const trainerId = context.session.data.id;
+          const row = await withKeyLock(`lineupProposal:${matchId}:${trainerId}:${period}`, async () => {
+            const existing = await context.query.LineupProposal.findMany({
+              where: { match: { id: { equals: matchId } }, trainer: { id: { equals: trainerId } }, period: { equals: period } },
+              query: 'id',
+              take: 1,
+            });
+            if (existing[0]) {
+              return context.query.LineupProposal.updateOne({
+                where: { id: existing[0].id },
+                data: { assignment },
+                query: 'id period assignment trainer { id name }',
+              });
+            }
+            return context.query.LineupProposal.createOne({
+              data: { match: { connect: { id: matchId } }, trainer: { connect: { id: trainerId } }, period, assignment },
+              query: 'id period assignment trainer { id name }',
+            });
+          });
+          return { id: row.id, period: row.period, assignment: row.assignment, trainerId: row.trainer.id, trainerName: row.trainer.name };
+        },
         uploadTeamManual: async (
           _root: unknown,
           { teamId, filename, contentBase64 }: { teamId: string; filename: string; contentBase64: string },

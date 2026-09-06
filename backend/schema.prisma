@@ -121,6 +121,7 @@ model Attendance {
   present          String?           @default("false")
   selected         String?           @default("false")
   playTimeSessions PlayTimeSession[] @relation("PlayTimeSession_attendance")
+  manualSeconds    Int?
 
   @@index([playerId])
   @@index([matchId])

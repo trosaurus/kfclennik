@@ -1,9 +1,7 @@
-.vo-modal {
-  max-width: 960px; width: 100%;
+.vo-panel {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 20px; margin-bottom: 20px;
 }
-
-.vo-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
-.vo-header .modal-title { margin-bottom: 0; }
 
 .vo-hint { font-size: 13px; color: var(--text-dim); line-height: 1.5; margin-bottom: 16px; }
 
@@ -25,7 +23,7 @@
   max-height: 75vh; overflow-y: auto; padding-right: 4px;
 }
 .vo-column {
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px;
+  background: var(--bg-elevated); border: 1px solid var(--border-soft); border-radius: var(--radius-lg); padding: 12px;
 }
 .vo-column-header {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;

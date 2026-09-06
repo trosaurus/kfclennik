@@ -1,12 +1,11 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import {
-  getMatches, getPlayers, getAttendancesForMatch, setAttendance,
+  getMatches, getPlayers, getAttendancesForMatch, setAttendance, setManualPlaytime,
   getPlayTimeSessionsForMatch, startPlayTimeSession, stopPlayTimeSession,
   updateMatch, getMatchOfTheWeek,
   getPeriodsForMatch, createPeriod, updatePeriod,
   getGoalsForMatch, addGoal, removeGoal,
-  getPeriodLineup, setPeriodLineup,
-  getFieldAssignment, setFieldAssignment, hydrateMatchLineupsFromBackend,
+  getMatchLineups, upsertMatchLineup,
   getTeamPlaytimeMap,
   updateSessionFieldPosition,
   getTrainers, TrainerRecord,
@@ -15,7 +14,7 @@ import {
 } from '../lib/api';
 import './Matchday.css';
 import FieldView, { PositionTimeStats } from './FieldView';
-import VoorkeurOpstellingModal from './VoorkeurOpstellingModal';
+import VoorkeurOpstellingPanel from './VoorkeurOpstellingPanel';
 import { getPositionsForCategory, getPeriodDuration } from '../lib/teamConfig';
 import { useTeam } from '../lib/TeamContext';
 import { generateLineupPDF } from '../lib/generateLineupPDF';
@@ -45,24 +44,35 @@ export default function Matchday() {
   const [busy, setBusy]                 = useState(false);
   const [busyPlayer, setBusyPlayer]     = useState<string | null>(null);
 
-  const [fieldAssignments, setFieldAssignments] = useState<Record<number, Record<string, string>>>(() => {
-    // Will be populated from localStorage once matchId is known
-    return { 1: {}, 2: {}, 3: {}, 4: {} };
-  });
+  // fieldAssignments (posities per kwart) en periodLineups (geselecteerde
+  // spelers per kwart) leven UITSLUITEND in React-state, geladen vanuit de
+  // backend (MatchLineup) bij het openen van de match — er is geen lokale
+  // (localStorage) kopie meer die kan verouderen of per toestel kan verschillen.
+  const [fieldAssignments, setFieldAssignments] = useState<Record<number, Record<string, string>>>({ 1: {}, 2: {}, 3: {}, 4: {} });
+  const [periodLineups, setPeriodLineups] = useState<Record<number, string[]>>({ 1: [], 2: [], 3: [], 4: [] });
+  // Refs die synchroon met fieldAssignments/periodLineups meelopen: React-state
+  // wordt pas na afloop van de huidige functie gecommit, maar persistMatchLineup
+  // (zie verderop) combineert bij élke wijziging de opstelling MET de kwart-
+  // lineup in één MatchLineup-rij. Bij een snelle opeenvolging van aanroepen
+  // binnen dezelfde tick (bv. autoAssignLeastPlayed dat tientallen posities
+  // ná elkaar zet) zou lezen uit de React-state-closure dan een verouderde
+  // waarde van het ANDERE veld meesturen en zo net-geschreven data overschrijven
+  // — de refs geven hier altijd de meest recente waarde, ongeacht batching.
+  const fieldAssignmentsRef = useRef<Record<number, Record<string, string>>>({ 1: {}, 2: {}, 3: {}, 4: {} });
+  const periodLineupsRef = useRef<Record<number, string[]>>({ 1: [], 2: [], 3: [], 4: [] });
   const [tick, setTick]                 = useState(0);
   const [subModal, setSubModal]         = useState<PlayerState | null>(null);
   const [matchPicker, setMatchPicker]   = useState(false);
   const [scoreModal, setScoreModal]     = useState(false);
   // De opstelling-planner (kwart 1-4) blijft na de aftrap enkel INklapbaar
   // bereikbaar i.p.v. volledig te verdwijnen — de opgeslagen opstellingen voor
-  // kwart 2-4 blijven altijd intact (localStorage), maar zonder dit paneel was
+  // kwart 2-4 blijven altijd intact (in de backend), maar zonder dit paneel was
   // er tijdens de match geen enkele manier meer om ze te bekijken of te wijzigen.
   const [showLineupPlanner, setShowLineupPlanner] = useState(false);
-  // Andere trainers van dezelfde ploeg — enkel gebruikt om de "Voorkeur"-knop
-  // (voorkeursopstelling per trainer, zie VoorkeurOpstellingModal) te tonen
+  // Andere trainers van dezelfde ploeg — enkel gebruikt om de "Voorkeur
+  // trainers"-tab (zie LineupPlanningSection/VoorkeurOpstellingPanel) te tonen
   // wanneer de ploeg effectief 2+ trainers heeft.
   const [teammates, setTeammates] = useState<TrainerRecord[]>([]);
-  const [voorkeurOpen, setVoorkeurOpen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Boot ────────────────────────────────────────────────────────────────────
@@ -105,25 +115,31 @@ export default function Matchday() {
 
   async function loadMatch(m: Match, players?: Player[]) {
     setMatch(m);
-    // Eerst de backend-versie van de opstelling in de lokale cache zetten —
-    // anders zou een opstelling die een andere trainer op een ander toestel
-    // instelde/bevestigde hier als leeg binnenkomen (zie hydrateMatchLineupsFromBackend).
-    await hydrateMatchLineupsFromBackend(m.id);
-    const [att, sess, per, gls] = await Promise.all([
+    const [att, sess, per, gls, lineupRows] = await Promise.all([
       getAttendancesForMatch(m.id),
       getPlayTimeSessionsForMatch(m.id),
       getPeriodsForMatch(m.id),
       getGoalsForMatch(m.id),
+      getMatchLineups(m.id),
     ]);
     setAttendances(att);
     setSessions(sess);
     setPeriods(per);
     setGoals(gls);
     if (players) setAllPlayers(players);
-    // Load per-period field assignments from localStorage
-    const fas: Record<number, Record<string, string>> = {};
-    for (let p = 1; p <= 4; p++) fas[p] = getFieldAssignment(m.id, p);
+    // Opstelling per kwart rechtstreeks uit de backend — dit ís de enige bron
+    // van waarheid, dus wat een andere trainer op een ander toestel eerder al
+    // instelde/bevestigde komt hier gewoon mee binnen.
+    const fas: Record<number, Record<string, string>> = { 1: {}, 2: {}, 3: {}, 4: {} };
+    const lus: Record<number, string[]> = { 1: [], 2: [], 3: [], 4: [] };
+    for (const row of lineupRows) {
+      try { fas[row.period] = JSON.parse(row.assignment) || {}; } catch { /* ongeldige data — leeg blijft */ }
+      try { lus[row.period] = JSON.parse(row.selectedPlayerIds) || []; } catch { /* ongeldige data — leeg blijft */ }
+    }
     setFieldAssignments(fas);
+    setPeriodLineups(lus);
+    fieldAssignmentsRef.current = fas;
+    periodLineupsRef.current = lus;
     setLoading(false);
   }
 
@@ -169,7 +185,7 @@ export default function Matchday() {
       // Determine which players to put on field for this period.
       // Use saved per-period lineup if available, otherwise fall back to prev period sessions.
       const selectedAtts = attendances.filter(a => a.selected === 'true');
-      const savedLineup = getPeriodLineup(match.id, periodNumber);
+      const savedLineup = periodLineups[periodNumber] || [];
 
       let onFieldAtts: Attendance[];
       if (savedLineup.length > 0) {
@@ -293,6 +309,11 @@ export default function Matchday() {
   // A player on the bench has no active session — their timer shows completed seconds only.
   function getLiveSeconds(attId: string): number {
     void tick;
+    // Een handmatige override (zie manualSeconds op Attendance) vervangt de
+    // automatisch opgetelde speeltijd volledig — bedoeld voor wedstrijden waar
+    // de live-timer niet (volledig) gebruikt werd, of om achteraf te corrigeren.
+    const manual = attendances.find(a => a.id === attId)?.manualSeconds;
+    if (manual != null) return manual;
     const attSess = sessions.filter(s => s.attendance.id === attId);
     // Sum all completed sessions
     let total = attSess
@@ -337,7 +358,7 @@ export default function Matchday() {
     const quarterData = [1, 2, 3, 4].map(periodNum => {
       // Get field assignment for this quarter
       const assignment: Record<string, import('../lib/api').Player | null> = {};
-      const fieldAssign = fieldAssignments[periodNum] || getFieldAssignment(match.id, periodNum);
+      const fieldAssign = fieldAssignments[periodNum] || {};
 
       Object.entries(fieldAssign).forEach(([posKey, playerId]) => {
         const player = allPlayers.find(p => p.id === playerId) ?? null;
@@ -389,31 +410,50 @@ export default function Matchday() {
 
   // ── Field assignment ──────────────────────────────────────────────────────
 
-  function handlePreAssign(period: number, posKey: string, playerId: string | null) {
-    setFieldAssignments(prev => {
-      const next = { ...prev, [period]: { ...prev[period] } };
-      if (playerId === null) {
-        delete next[period][posKey];
-      } else {
-        // Remove player from any other position in this period
-        Object.keys(next[period]).forEach(k => { if (next[period][k] === playerId) delete next[period][k]; });
-        next[period][posKey] = playerId;
-      }
-      setFieldAssignment(m!.id, period, next[period]);
-      return next;
-    });
+  /** Stuurt de huidige opstelling voor dit kwart naar de backend (MatchLineup)
+   * — de enige plek waar dit heen gaat; er is geen lokale cache meer om uit
+   * de pas te lopen met wat er echt is opgeslagen. "Fire and forget" qua UI
+   * (niet awaited door de aanroepers): de React-state is al bijgewerkt vóór
+   * dit aangeroepen wordt, dus de gebruiker hoeft niet op het netwerk te
+   * wachten. De backend zelf serialiseert gelijktijdige upserts per match+
+   * kwart (zie upsertMatchLineup in customSchema.ts), dus snel na elkaar
+   * posities zetten kan hier niet meer tot dubbele/verouderde rijen leiden. */
+  function persistMatchLineup(period: number, assignment: Record<string, string>, selectedPlayerIds: string[]) {
+    if (!match) return;
+    upsertMatchLineup(match.id, period, assignment, selectedPlayerIds)
+      .catch(err => console.error('Kon opstelling niet opslaan:', err));
   }
 
-  /** Past een gekozen voorkeursopstelling (van VoorkeurOpstellingModal) toe op
+  function handleSetPeriodLineup(period: number, playerIds: string[]) {
+    const next = { ...periodLineupsRef.current, [period]: playerIds };
+    periodLineupsRef.current = next;
+    setPeriodLineups(next);
+    persistMatchLineup(period, fieldAssignmentsRef.current[period] || {}, playerIds);
+  }
+
+  function handlePreAssign(period: number, posKey: string, playerId: string | null) {
+    const nextForPeriod = { ...fieldAssignmentsRef.current[period] };
+    if (playerId === null) {
+      delete nextForPeriod[posKey];
+    } else {
+      // Remove player from any other position in this period
+      Object.keys(nextForPeriod).forEach(k => { if (nextForPeriod[k] === playerId) delete nextForPeriod[k]; });
+      nextForPeriod[posKey] = playerId;
+    }
+    const next = { ...fieldAssignmentsRef.current, [period]: nextForPeriod };
+    fieldAssignmentsRef.current = next;
+    setFieldAssignments(next);
+    persistMatchLineup(period, nextForPeriod, periodLineupsRef.current[period] || []);
+  }
+
+  /** Past een gekozen voorkeursopstelling (van VoorkeurOpstellingPanel) toe op
    * dit kwart — vervangt de volledige toewijzing i.p.v. samen te voegen, zodat
    * het gekozen voorstel exact overeenkomt met wat de trainer te zien kreeg. */
   function applyLineupProposal(period: number, assignment: Record<string, string>) {
-    setFieldAssignments(prev => {
-      const next = { ...prev, [period]: { ...assignment } };
-      setFieldAssignment(m!.id, period, next[period]);
-      return next;
-    });
-    setVoorkeurOpen(false);
+    const next = { ...fieldAssignmentsRef.current, [period]: { ...assignment } };
+    fieldAssignmentsRef.current = next;
+    setFieldAssignments(next);
+    persistMatchLineup(period, next[period], periodLineupsRef.current[period] || []);
   }
 
   // ── Goals ─────────────────────────────────────────────────────────────────
@@ -434,6 +474,13 @@ export default function Matchday() {
     await removeGoal(goalId, match.id, periodNumber, match.location);
     await refresh();
     await refreshMatch();
+  }
+
+  /** Handmatige speeltijd-override instellen (minutes) of wissen (null, om
+   * terug te schakelen naar de automatisch bijgehouden speeltijd). */
+  async function handleSetManualPlaytime(attendanceId: string, minutes: number | null) {
+    await setManualPlaytime(attendanceId, minutes == null ? null : Math.round(minutes * 60));
+    await refresh();
   }
 
   // Find a free field-position slot for the current period, preferring the
@@ -622,11 +669,6 @@ export default function Matchday() {
                 ■ Eindig match
               </button>
             )}
-            {isPlanned && teammates.length > 0 && squadPlayers.length > 0 && (
-              <button className="btn btn-outline btn-sm" onClick={() => setVoorkeurOpen(true)} title="Voorkeursopstelling per trainer vergelijken">
-                👥 Voorkeur
-              </button>
-            )}
             <button className="btn btn-outline btn-sm" onClick={handleGeneratePDF} title="Opstelling PDF downloaden">📄 PDF</button>
             <button className="btn btn-outline btn-sm" onClick={() => setMatchPicker(true)}>📋</button>
           </div>
@@ -658,18 +700,23 @@ export default function Matchday() {
 
       {/* ── PLANNED: per-period lineup selector, altijd zichtbaar vóór de aftrap ── */}
       {isPlanned && (
-        <PeriodLineupSelector
+        <LineupPlanningSection
           matchId={m!.id}
-          allPlayers={squadPlayers}
+          squadPlayers={squadPlayers}
           attendances={attendances}
           fieldAssignments={fieldAssignments}
+          periodLineups={periodLineups}
           onPreAssign={handlePreAssign}
+          onSetPeriodLineup={handleSetPeriodLineup}
           teamCategory={matchCategory}
           teamId={teamId}
           onToggleAttendance={async (playerId, sel) => {
             await setAttendance(m!.id, playerId, true, sel);
             await refresh();
           }}
+          teammates={teammates}
+          trainer={trainer}
+          onApplyProposal={applyLineupProposal}
         />
       )}
 
@@ -682,12 +729,14 @@ export default function Matchday() {
             {showLineupPlanner ? '▲ Verberg opstelling per kwart' : '▼ Opstelling per kwart bekijken/wijzigen'}
           </button>
           {showLineupPlanner && (
-            <PeriodLineupSelector
+            <LineupPlanningSection
               matchId={m!.id}
-              allPlayers={squadPlayers}
+              squadPlayers={squadPlayers}
               attendances={attendances}
               fieldAssignments={fieldAssignments}
+              periodLineups={periodLineups}
               onPreAssign={handlePreAssign}
+              onSetPeriodLineup={handleSetPeriodLineup}
               teamCategory={matchCategory}
               teamId={teamId}
               initialPeriod={Math.min(curPeriod + 1, TOTAL_PERIODS)}
@@ -695,6 +744,9 @@ export default function Matchday() {
                 await setAttendance(m!.id, playerId, true, sel);
                 await refresh();
               }}
+              teammates={teammates}
+              trainer={trainer}
+              onApplyProposal={applyLineupProposal}
             />
           )}
         </div>
@@ -776,6 +828,7 @@ export default function Matchday() {
           periods={periods}
           goals={goals}
           title="Speeltijden selectie"
+          onSetManualPlaytime={handleSetManualPlaytime}
         />
       )}
 
@@ -792,7 +845,7 @@ export default function Matchday() {
 
       {/* ── FINISHED: summary ── */}
       {isFinished && (
-        <MatchSummary playerStates={playerStates} sessions={sessions} periods={periods} goals={goals} location={m!.location} />
+        <MatchSummary playerStates={playerStates} sessions={sessions} periods={periods} goals={goals} location={m!.location} onSetManualPlaytime={handleSetManualPlaytime} />
       )}
 
       {/* ── POSITIE SPEELTIJDEN (afgelopen wedstrijd) ── */}
@@ -845,19 +898,6 @@ export default function Matchday() {
         <MatchPicker matches={allMatches} current={m!} onPick={async picked => { setMatchPicker(false); setLoading(true); await loadMatch(picked); }} onClose={() => setMatchPicker(false)} />
       )}
 
-      {voorkeurOpen && trainer && (
-        <VoorkeurOpstellingModal
-          matchId={m!.id}
-          teamCategory={matchCategory}
-          squadPlayers={squadPlayers}
-          attendances={attendances}
-          currentTrainerId={trainer.id}
-          currentTrainerName={trainer.name}
-          teammates={teammates}
-          onApply={applyLineupProposal}
-          onClose={() => setVoorkeurOpen(false)}
-        />
-      )}
     </div>
   );
 }
@@ -1036,8 +1076,9 @@ function PlayerRow({ ps, isPlaying, busy, onToggle, onSub, periodSec, playerGoal
 
 // ── MatchSummary ──────────────────────────────────────────────────────────────
 
-function MatchSummary({ playerStates, sessions, periods, goals, location }: {
+function MatchSummary({ playerStates, sessions, periods, goals, location, onSetManualPlaytime }: {
   playerStates: PlayerState[]; sessions: PlayTimeSession[]; periods: Period[]; goals: Goal[]; location: string;
+  onSetManualPlaytime: (attendanceId: string, minutes: number | null) => Promise<void>;
 }) {
   // p.scoreHome/scoreAway zijn de letterlijke thuis-/uitploeg-kolommen — welke
   // daarvan "ons" is hangt af van match.location (zie ook addGoal in lib/api.ts).
@@ -1079,19 +1120,35 @@ function MatchSummary({ playerStates, sessions, periods, goals, location }: {
         </div>
       </div>
 
-      <PlayerSummaryTable playerStates={playerStates} sessions={sessions} periods={periods} goals={goals} title="Speeltijden per speler" />
+      <PlayerSummaryTable playerStates={playerStates} sessions={sessions} periods={periods} goals={goals} title="Speeltijden per speler" onSetManualPlaytime={onSetManualPlaytime} />
     </div>
   );
 }
 
 // ── PlayerSummaryTable ────────────────────────────────────────────────────────
 
-function PlayerSummaryTable({ playerStates, sessions, periods, goals = [], title = "Speeltijden selectie" }: {
+function PlayerSummaryTable({ playerStates, sessions, periods, goals = [], title = "Speeltijden selectie", onSetManualPlaytime }: {
   playerStates: PlayerState[]; sessions: PlayTimeSession[]; periods: Period[];
   goals?: Goal[]; title?: string;
+  onSetManualPlaytime: (attendanceId: string, minutes: number | null) => Promise<void>;
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+
   if (playerStates.length === 0) return null;
   const sorted = [...playerStates].sort((a, b) => b.totalSeconds - a.totalSeconds);
+
+  function startEdit(ps: PlayerState) {
+    setEditingId(ps.attendance.id);
+    setEditValue(String(Math.round(ps.totalSeconds / 60)));
+  }
+
+  async function saveEdit(attendanceId: string) {
+    const minutes = Number(editValue.trim());
+    if (!Number.isFinite(minutes) || minutes < 0) return;
+    setEditingId(null);
+    await onSetManualPlaytime(attendanceId, minutes);
+  }
 
   return (
     <div className="md-playtime-summary">
@@ -1151,9 +1208,34 @@ function PlayerSummaryTable({ playerStates, sessions, periods, goals = [], title
                     })()}
                   </td>
                   <td style={{ textAlign: 'right' }}>
-                    <span style={{ fontFamily: 'var(--font-display)', fontSize: 20, color: 'var(--white)', letterSpacing: 1 }}>
-                      {formatDuration(ps.totalSeconds)}
-                    </span>
+                    {editingId === ps.attendance.id ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                        <input
+                          type="number" min={0} autoFocus
+                          className="input-field md-score-inp" style={{ width: 56 }}
+                          value={editValue}
+                          onChange={e => setEditValue(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveEdit(ps.attendance.id); if (e.key === 'Escape') setEditingId(null); }}
+                        />
+                        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>min</span>
+                        <button className="btn btn-primary btn-sm" onClick={() => saveEdit(ps.attendance.id)}>✓</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => setEditingId(null)}>✕</button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                        {ps.attendance.manualSeconds != null && (
+                          <button className="btn btn-ghost btn-sm" title="Terug naar automatisch bijgehouden speeltijd"
+                            onClick={() => onSetManualPlaytime(ps.attendance.id, null)} style={{ fontSize: 11 }}>↺</button>
+                        )}
+                        <span
+                          style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: 1, color: ps.attendance.manualSeconds != null ? 'var(--yellow)' : 'var(--white)' }}
+                          title={ps.attendance.manualSeconds != null ? 'Handmatig ingegeven speeltijd' : undefined}
+                        >
+                          {formatDuration(ps.totalSeconds)}
+                        </span>
+                        <button className="btn btn-ghost btn-sm" title="Speeltijd handmatig ingeven" onClick={() => startEdit(ps)}>✏️</button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               );
@@ -1220,73 +1302,133 @@ function ScoreModal({ match, periods, onSave, onClose }: {
   );
 }
 
+// ── LineupPlanningSection ────────────────────────────────────────────────────
+
+/** Splitst de opstelling-planning in twee tabs: de DEFINITIEVE opstelling
+ * (PeriodLineupSelector — dit ís wat effectief gebruikt wordt bij het starten
+ * van een kwart) en de VOORKEURSOPSTELLINGEN van de trainers (VoorkeurOpstellingPanel
+ * — elke trainer zet onafhankelijk een voorstel klaar; "Toepassen" op een
+ * voorstel maakt het meteen de definitieve opstelling voor dat kwart, waarna
+ * automatisch teruggeschakeld wordt naar de "Definitief"-tab zodat het
+ * resultaat meteen zichtbaar is). De voorkeur-tab verschijnt enkel wanneer de
+ * ploeg effectief 2+ trainers heeft — bij een ploeg met 1 trainer is er niets
+ * om te vergelijken en blijft enkel de definitieve opstelling zichtbaar,
+ * exact zoals voorheen. */
+function LineupPlanningSection({
+  matchId, squadPlayers, attendances, fieldAssignments, periodLineups, onPreAssign, onSetPeriodLineup,
+  onToggleAttendance, teamCategory, teamId, initialPeriod, teammates, trainer, onApplyProposal,
+}: {
+  matchId: string;
+  squadPlayers: Player[];
+  attendances: Attendance[];
+  fieldAssignments: Record<number, Record<string, string>>;
+  periodLineups: Record<number, string[]>;
+  onPreAssign: (period: number, posKey: string, playerId: string | null) => void;
+  onSetPeriodLineup: (period: number, playerIds: string[]) => void;
+  onToggleAttendance: (playerId: string, selected: boolean) => Promise<void>;
+  teamCategory?: string;
+  teamId: string | null;
+  initialPeriod?: number;
+  teammates: { id: string; name: string }[];
+  trainer: { id: string; name: string } | null;
+  onApplyProposal: (period: number, assignment: Record<string, string>) => void;
+}) {
+  const [tab, setTab] = useState<'definitief' | 'voorkeur'>('definitief');
+  const showTabs = !!trainer && teammates.length > 0 && squadPlayers.length > 0;
+
+  return (
+    <div>
+      {showTabs && (
+        <div className="md-plan-tabs">
+          <button className={`md-plan-tab ${tab === 'definitief' ? 'active' : ''}`} onClick={() => setTab('definitief')}>
+            📋 Definitieve opstelling
+          </button>
+          <button className={`md-plan-tab ${tab === 'voorkeur' ? 'active' : ''}`} onClick={() => setTab('voorkeur')}>
+            👥 Voorkeur trainers
+          </button>
+        </div>
+      )}
+      {tab === 'voorkeur' && showTabs && trainer ? (
+        <VoorkeurOpstellingPanel
+          matchId={matchId}
+          teamCategory={teamCategory ?? 'U13'}
+          squadPlayers={squadPlayers}
+          attendances={attendances}
+          currentTrainerId={trainer.id}
+          currentTrainerName={trainer.name}
+          teammates={teammates}
+          onApply={(period, assignment) => { onApplyProposal(period, assignment); setTab('definitief'); }}
+        />
+      ) : (
+        <PeriodLineupSelector
+          matchId={matchId}
+          allPlayers={squadPlayers}
+          attendances={attendances}
+          fieldAssignments={fieldAssignments}
+          periodLineups={periodLineups}
+          onPreAssign={onPreAssign}
+          onSetPeriodLineup={onSetPeriodLineup}
+          teamCategory={teamCategory}
+          teamId={teamId}
+          initialPeriod={initialPeriod}
+          onToggleAttendance={onToggleAttendance}
+        />
+      )}
+    </div>
+  );
+}
+
 // ── PeriodLineupSelector ─────────────────────────────────────────────────────
 
-function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignments, onPreAssign, onToggleAttendance, teamCategory, teamId, initialPeriod }: {
+function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignments, periodLineups, onPreAssign, onSetPeriodLineup, onToggleAttendance, teamCategory, teamId, initialPeriod }: {
   matchId: string;
   allPlayers: Player[];
   attendances: Attendance[];
   fieldAssignments: Record<number, Record<string, string>>;
+  periodLineups: Record<number, string[]>;
   onPreAssign: (period: number, posKey: string, playerId: string | null) => void;
+  onSetPeriodLineup: (period: number, playerIds: string[]) => void;
   onToggleAttendance: (playerId: string, selected: boolean) => Promise<void>;
   teamCategory?: string;
   teamId: string | null;
   initialPeriod?: number;
 }) {
   const [activePeriod, setActivePeriod] = useState(initialPeriod ?? 1);
-  const [lineups, setLineups] = useState<Record<number, Set<string>>>(() => {
-    const init: Record<number, Set<string>> = {};
-    for (let p = 1; p <= 4; p++) {
-      init[p] = new Set(getPeriodLineup(matchId, p));
-    }
-    // If no lineups saved yet, pre-fill period 1 from current selected attendances
-    if ([1,2,3,4].every(p => init[p].size === 0)) {
-      const sel = attendances.filter(a => a.selected === 'true').map(a => a.player.id);
-      sel.forEach(id => { for(let p=1;p<=4;p++) init[p].add(id); });
-    }
-    return init;
-  });
   const [saving, setSaving] = useState(false);
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [lineupView, setLineupView] = useState<'list' | 'field'>('field');
   const [filter, setFilter] = useState('');
   const [search, setSearch] = useState('');
 
+  // periodLineups komt rechtstreeks van de backend (via Matchday's state) —
+  // zolang er voor GEEN enkel kwart al iets opgeslagen is, tonen we bij wijze
+  // van startpunt alvast alle voor deze wedstrijd geselecteerde spelers (maar
+  // dat wordt pas echt opgeslagen zodra de trainer effectief iets aanpast).
+  const lineups: Record<number, Set<string>> = (() => {
+    const allEmpty = [1, 2, 3, 4].every(p => (periodLineups[p]?.length ?? 0) === 0);
+    const fallback = allEmpty ? attendances.filter(a => a.selected === 'true').map(a => a.player.id) : null;
+    const result: Record<number, Set<string>> = {};
+    for (let p = 1; p <= 4; p++) result[p] = new Set(fallback ?? periodLineups[p] ?? []);
+    return result;
+  })();
+
   function togglePlayer(playerId: string) {
-    setLineups(prev => {
-      const next = { ...prev, [activePeriod]: new Set(prev[activePeriod]) };
-      if (next[activePeriod].has(playerId)) next[activePeriod].delete(playerId);
-      else next[activePeriod].add(playerId);
-      setPeriodLineup(matchId, activePeriod, Array.from(next[activePeriod]));
-      return next;
-    });
+    const next = new Set(lineups[activePeriod]);
+    if (next.has(playerId)) next.delete(playerId); else next.add(playerId);
+    onSetPeriodLineup(activePeriod, Array.from(next));
   }
 
   function copyFromPrev() {
     if (activePeriod <= 1) return;
-    setLineups(prev => {
-      const src = new Set(prev[activePeriod - 1]);
-      const next = { ...prev, [activePeriod]: src };
-      setPeriodLineup(matchId, activePeriod, Array.from(src));
-      return next;
-    });
+    onSetPeriodLineup(activePeriod, Array.from(lineups[activePeriod - 1]));
   }
 
   function selectAll() {
-    const ids = allPlayers.map(p => p.id);
-    setLineups(prev => {
-      const next = { ...prev, [activePeriod]: new Set(ids) };
-      setPeriodLineup(matchId, activePeriod, ids);
-      return next;
-    });
+    onSetPeriodLineup(activePeriod, allPlayers.map(p => p.id));
   }
 
   function clearAll() {
-    setLineups(prev => {
-      const next = { ...prev, [activePeriod]: new Set<string>() };
-      setPeriodLineup(matchId, activePeriod, []);
-      return next;
-    });
+    onSetPeriodLineup(activePeriod, []);
   }
 
   async function autoAssignLeastPlayed() {
@@ -1345,16 +1487,9 @@ function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignmen
         });
       }
 
-      // 7. Update lineups state so tab counters are correct
+      // 7. Update lineups so tab counters are correct
       const assignedIds = Object.values(newAssignment);
-      setLineups(prev => {
-        const next = { ...prev };
-        for (let p = 1; p <= 4; p++) {
-          next[p] = new Set(assignedIds);
-          setPeriodLineup(matchId, p, assignedIds);
-        }
-        return next;
-      });
+      for (let p = 1; p <= 4; p++) onSetPeriodLineup(p, assignedIds);
     } finally { setAutoAssigning(false); }
   }
 
@@ -1375,19 +1510,14 @@ function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignmen
         await onToggleAttendance(p.id, selectedIds.has(p.id));
       }
 
-      // Also sync lineups state so the tab counters reflect field assignments
-      setLineups(prev => {
-        const next = { ...prev };
-        for (let p = 1; p <= 4; p++) {
-          const fieldIds = Object.values(fieldAssignments[p] || {});
-          if (fieldIds.length > 0) {
-            const merged = new Set([...prev[p], ...fieldIds]);
-            next[p] = merged;
-            setPeriodLineup(matchId, p, Array.from(merged));
-          }
+      // Also sync lineups so the tab counters reflect field assignments
+      for (let p = 1; p <= 4; p++) {
+        const fieldIds = Object.values(fieldAssignments[p] || {});
+        if (fieldIds.length > 0) {
+          const merged = new Set([...lineups[p], ...fieldIds]);
+          onSetPeriodLineup(p, Array.from(merged));
         }
-        return next;
-      });
+      }
     } finally { setSaving(false); }
   }
 
@@ -1459,25 +1589,22 @@ function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignmen
             preAssignment={fieldAssignments[activePeriod] || {}}
             onPreAssign={(posKey, playerId) => {
               onPreAssign(activePeriod, posKey, playerId);
-              // Sync the lineups state so tab counter updates immediately
-              setLineups(prev => {
-                const next = { ...prev, [activePeriod]: new Set(prev[activePeriod]) };
-                if (playerId) {
-                  // Remove from any other position first (already handled by onPreAssign)
-                  next[activePeriod].add(playerId);
-                } else {
-                  // Find which player was at this position and remove them
-                  const removedId = fieldAssignments[activePeriod]?.[posKey];
-                  if (removedId) {
-                    // Only remove if they're not at another position
-                    const otherPositions = Object.entries(fieldAssignments[activePeriod] || {})
-                      .filter(([k, v]) => k !== posKey && v === removedId);
-                    if (otherPositions.length === 0) next[activePeriod].delete(removedId);
-                  }
+              // Sync de lineup zodat de tab-teller meteen bijwerkt
+              const next = new Set(lineups[activePeriod]);
+              if (playerId) {
+                // Remove from any other position first (already handled by onPreAssign)
+                next.add(playerId);
+              } else {
+                // Find which player was at this position and remove them
+                const removedId = fieldAssignments[activePeriod]?.[posKey];
+                if (removedId) {
+                  // Only remove if they're not at another position
+                  const otherPositions = Object.entries(fieldAssignments[activePeriod] || {})
+                    .filter(([k, v]) => k !== posKey && v === removedId);
+                  if (otherPositions.length === 0) next.delete(removedId);
                 }
-                setPeriodLineup(matchId, activePeriod, Array.from(next[activePeriod]));
-                return next;
-              });
+              }
+              onSetPeriodLineup(activePeriod, Array.from(next));
             }}
           />
           <div className="md-lineup-info" style={{ marginTop: 8 }}>

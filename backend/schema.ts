@@ -233,6 +233,13 @@ export const lists: Lists = {
         ],
       }),
       playTimeSessions: relationship({ ref: 'PlayTimeSession.attendance', many: true }),
+      // Handmatige speeltijd-override in seconden voor deze speler in deze
+      // wedstrijd — null betekent "geen override, toon de automatisch
+      // opgetelde speeltijd (playTimeSessions)". Bedoeld voor wedstrijden waar
+      // de live-timer niet (volledig) gebruikt werd, of om die achteraf te
+      // corrigeren; overschrijft enkel het GETOONDE totaal op Matchday, de
+      // onderliggende playTimeSessions blijven ongewijzigd.
+      manualSeconds: integer({ validation: { min: 0 } }),
     },
   }),
 

@@ -87,6 +87,7 @@ export interface Attendance {
   match: { id: string };
   present: string;
   selected: string;
+  manualSeconds: number | null; // handmatige speeltijd-override voor deze wedstrijd, null = automatisch (playTimeSessions)
 }
 
 export interface PlayTimeSession {
@@ -393,12 +394,26 @@ export async function getAttendancesForMatch(matchId: string): Promise<Attendanc
   const data = await gql(
     `query GetAttendances($matchId: ID!) {
        attendances(where: { match: { id: { equals: $matchId } } }, take: 1000) {
-         id player { id name number position active } match { id } present selected
+         id player { id name number position active } match { id } present selected manualSeconds
        }
      }`,
     { matchId }
   );
   return data.attendances;
+}
+
+/** Zet (of wist, bij null) de handmatige speeltijd-override voor deze speler
+ * in deze wedstrijd — zie Attendance.manualSeconds in schema.ts. */
+export async function setManualPlaytime(attendanceId: string, seconds: number | null): Promise<Attendance> {
+  const data = await gql(
+    `mutation SetManualPlaytime($id: ID!, $manualSeconds: Int) {
+       updateAttendance(where: { id: $id }, data: { manualSeconds: $manualSeconds }) {
+         id player { id name number position active } match { id } present selected manualSeconds
+       }
+     }`,
+    { id: attendanceId, manualSeconds: seconds }
+  );
+  return data.updateAttendance;
 }
 
 export async function setAttendance(matchId: string, playerId: string, present: boolean, selected: boolean) {
@@ -701,27 +716,19 @@ export function getPositionSeconds(
   return total;
 }
 
-// Store field assignments per period in localStorage (before match starts) —
-// ook gespiegeld naar de backend (MatchLineup, zie verderop) zodat een andere
-// trainer op een ander toestel dezelfde opstelling ziet i.p.v. een lege.
-export function getFieldAssignment(matchId: string, period: number): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(`field:${matchId}:${period}`);
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
-}
-
-export function setFieldAssignment(matchId: string, period: number, assignment: Record<string, string>): void {
-  try { localStorage.setItem(`field:${matchId}:${period}`, JSON.stringify(assignment)); } catch { /**/ }
-  syncMatchLineupToBackend(matchId, period);
-}
-
-// ── Bevestigde opstelling per match+kwart (backend, gedeeld door alle trainers
-// van de ploeg) — de bovenstaande field:*/lineup:*-localStorage-sleutels zijn
-// intussen enkel nog een lokale cache; hydrateMatchLineupsFromBackend() vult
-// ze bij het laden van een match aan met wat een ANDERE trainer eerder al
-// instelde/bevestigde, en syncMatchLineupToBackend() stuurt elke lokale
-// wijziging meteen terug — zo blijft "de opstelling" gelijk op elk toestel.
+// ── Opstelling per match+kwart (MatchLineup) — de backend-rij ís de opstelling,
+// er is geen lokale (localStorage) kopie meer. Een eerdere opzet hield de
+// opstelling bij in localStorage en spiegelde wijzigingen "fire and forget"
+// naar de backend via een apart find-dan-create/update upsert-stap; dat bleek
+// niet race-vrij te maken vanaf de client (elk toestel/tabblad heeft zijn eigen
+// geheugen, dus twee trainers die na elkaar opslaan kunnen elkaars "bestaat er
+// al een rij"-check nog steeds voor zijn), en liet bovendien elk toestel zijn
+// eigen — mogelijk verouderde — cache tonen. upsertMatchLineup hieronder roept
+// één server-side mutatie aan (zie backend/customSchema.ts) die het
+// find-dan-create/update wél atomisch per match+kwart serialiseert (voor ÁLLE
+// toestellen tegelijk, niet enkel het eigen tabblad) — de backend is nu de
+// enige bron van waarheid, gelezen bij het laden van de match (getMatchLineups)
+// en bijgewerkt bij elke wijziging (upsertMatchLineup).
 export interface MatchLineup {
   id: string;
   period: number;
@@ -741,96 +748,23 @@ export async function getMatchLineups(matchId: string): Promise<MatchLineup[]> {
   return data.matchLineups;
 }
 
-/** Ketent async upserts per sleutel na elkaar i.p.v. gelijktijdig. Zonder dit
- * ziet elke aanroep die snel na elkaar gebeurt (bv. een speler per klik op het
- * veld zetten, of autoAssignLeastPlayed dat alle posities in een tight loop
- * doorloopt) onafhankelijk "nog geen bestaande rij" vóór de eerste create is
- * geland — met dubbele rijen tot gevolg. Een latere lezing (op een ander
- * toestel) heeft geen garantie welke van die dubbels ze binnenkrijgt, en kan
- * zo op een vroege/onvolledige snapshot uitkomen i.p.v. de uiteindelijke volledige
- * opstelling — dít verklaart een bevestigde opstelling die op een ander toestel
- * leeg of onvolledig lijkt terwijl ze op het toestel dat ze instelde prima oogt
- * (daar leest de UI immers de lokale React-state, niet de backend-rij terug). */
-const upsertChains = new Map<string, Promise<unknown>>();
-function serializedUpsert<T>(key: string, run: () => Promise<T>): Promise<T> {
-  const prev = upsertChains.get(key) ?? Promise.resolve();
-  const result = prev.then(run, run);
-  upsertChains.set(key, result.then(() => undefined, () => undefined));
-  return result;
-}
-
-async function saveMatchLineup(matchId: string, period: number, assignment: string, selectedPlayerIds: string): Promise<void> {
-  const existing = await gql(
-    `query FindMatchLineup($matchId: ID!, $period: Int!) {
-      matchLineups(where: { match: { id: { equals: $matchId } }, period: { equals: $period } }, take: 1) { id }
+export async function upsertMatchLineup(
+  matchId: string, period: number, assignment: Record<string, string>, selectedPlayerIds: string[]
+): Promise<MatchLineup> {
+  const data = await gql(
+    `mutation UpsertMatchLineup($matchId: ID!, $period: Int!, $assignment: String!, $selectedPlayerIds: String!) {
+      upsertMatchLineup(matchId: $matchId, period: $period, assignment: $assignment, selectedPlayerIds: $selectedPlayerIds) { ${MATCH_LINEUP_FIELDS} }
     }`,
-    { matchId, period }
+    { matchId, period, assignment: JSON.stringify(assignment), selectedPlayerIds: JSON.stringify(selectedPlayerIds) }
   );
-  const existingId: string | undefined = existing.matchLineups[0]?.id;
-  if (existingId) {
-    await gql(
-      `mutation UpdateMatchLineup($id: ID!, $assignment: String, $selectedPlayerIds: String) {
-        updateMatchLineup(where: { id: $id }, data: { assignment: $assignment, selectedPlayerIds: $selectedPlayerIds }) { id }
-      }`,
-      { id: existingId, assignment, selectedPlayerIds }
-    );
-    return;
-  }
-  await gql(
-    `mutation CreateMatchLineup($data: MatchLineupCreateInput!) {
-      createMatchLineup(data: $data) { id }
-    }`,
-    { data: { match: { connect: { id: matchId } }, period, assignment, selectedPlayerIds } }
-  );
+  return data.upsertMatchLineup;
 }
 
-/** Leest de huidige lokale (localStorage) veldopstelling + kwart-lineup voor
- * deze match+kwart en stuurt ze — onafhankelijk van elkaar (welke van de twee
- * de aanroeper ook wijzigde) — samen naar de backend. Bewust "fire and
- * forget": de lokale state/localStorage is al bijgewerkt vóór dit aangeroepen
- * wordt, dus de UI hoeft niet op het netwerk te wachten; lukt de sync niet
- * (bv. offline), dan blijft de lokale opstelling gewoon werken. Geserialiseerd
- * per match+kwart (zie serializedUpsert) zodat snel opeenvolgende wijzigingen
- * geen dubbele MatchLineup-rijen opleveren. */
-function syncMatchLineupToBackend(matchId: string, period: number): void {
-  const assignment = JSON.stringify(getFieldAssignmentRaw(matchId, period));
-  const selectedPlayerIds = JSON.stringify(getPeriodLineupRaw(matchId, period));
-  serializedUpsert(`matchLineup:${matchId}:${period}`, () => saveMatchLineup(matchId, period, assignment, selectedPlayerIds))
-    .catch(() => { /* stil falen, lokaal blijft gelden */ });
-}
-
-function getFieldAssignmentRaw(matchId: string, period: number): Record<string, string> {
-  try {
-    const raw = localStorage.getItem(`field:${matchId}:${period}`);
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
-}
-function getPeriodLineupRaw(matchId: string, period: number): string[] {
-  try {
-    const raw = localStorage.getItem(`lineup:${matchId}:${period}`);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-
-/** Haalt de backend-versie van alle 4 kwarten op en schrijft ze in de lokale
- * cache (localStorage) — aan te roepen bij het laden van een match, VÓÓR de
- * bestaande getFieldAssignment/getPeriodLineup-aanroepen die de state vullen,
- * zodat een opstelling die een andere trainer eerder al instelde/bevestigde
- * ook op dit toestel meteen zichtbaar is i.p.v. leeg te lijken. */
-export async function hydrateMatchLineupsFromBackend(matchId: string): Promise<void> {
-  try {
-    const rows = await getMatchLineups(matchId);
-    for (const row of rows) {
-      try { localStorage.setItem(`field:${matchId}:${row.period}`, row.assignment || '{}'); } catch { /**/ }
-      try { localStorage.setItem(`lineup:${matchId}:${row.period}`, row.selectedPlayerIds || '[]'); } catch { /**/ }
-    }
-  } catch { /* backend niet bereikbaar — lokale (mogelijk lege) cache blijft gelden */ }
-}
-
-// ── Voorkeursopstelling per trainer (backend-gesynchroniseerd, i.t.t. de
-// lokale fieldAssignment hierboven) — bij een ploeg met 2+ trainers kan elke
-// trainer onafhankelijk een voorstel per kwart klaarzetten; nadien wordt op
-// Matchday gekozen welk voorstel via setFieldAssignment effectief toegepast wordt.
+// ── Voorkeursopstelling per trainer (LineupProposal) — bij een ploeg met 2+
+// trainers kan elke trainer onafhankelijk een voorstel per kwart klaarzetten;
+// nadien wordt op Matchday gekozen welk voorstel via upsertMatchLineup
+// effectief toegepast wordt. Zelfde upsert-aanpak als MatchLineup hierboven:
+// één server-side mutatie i.p.v. een client-side find-dan-create/update.
 export interface LineupProposal {
   id: string;
   match: { id: string };
@@ -851,45 +785,23 @@ export async function getLineupProposals(matchId: string): Promise<LineupProposa
   return data.lineupProposals;
 }
 
-/** Upsert: slaat het voorstel van deze trainer voor dit kwart op — de eerste
- * keer wordt een nieuwe rij aangemaakt, nadien gewoon bijgewerkt. Geserialiseerd
- * per match+trainer+kwart (zie serializedUpsert hierboven) — anders leidt snel
- * na elkaar meerdere spelers naar het veld slepen tot dubbele voorstel-rijen
- * (elke klik checkt onafhankelijk "bestaat er al een rij", vóór de vorige create
- * geland is), waarna een latere lezing een willekeurige (mogelijk onvolledige)
- * rij kan terugkrijgen i.p.v. het uiteindelijke voorstel. */
-export function saveLineupProposal(
-  matchId: string, trainerId: string, period: number, assignment: Record<string, string>
+/** Slaat het voorstel van de ingelogde trainer voor dit kwart op — welke
+ * trainer het is, bepaalt de backend zelf op basis van de sessie (zie
+ * upsertLineupProposal in customSchema.ts), dus die kan hier niet vervalst
+ * worden door een client-aangeleverd trainerId. */
+export async function saveLineupProposal(
+  matchId: string, period: number, assignment: Record<string, string>
 ): Promise<LineupProposal> {
-  return serializedUpsert(`lineupProposal:${matchId}:${trainerId}:${period}`, async () => {
-    const existing = await gql(
-      `query FindLineupProposal($matchId: ID!, $trainerId: ID!, $period: Int!) {
-        lineupProposals(
-          where: { match: { id: { equals: $matchId } }, trainer: { id: { equals: $trainerId } }, period: { equals: $period } },
-          take: 1
-        ) { id }
-      }`,
-      { matchId, trainerId, period }
-    );
-    const json = JSON.stringify(assignment);
-    const existingId: string | undefined = existing.lineupProposals[0]?.id;
-    if (existingId) {
-      const data = await gql(
-        `mutation UpdateLineupProposal($id: ID!, $assignment: String) {
-          updateLineupProposal(where: { id: $id }, data: { assignment: $assignment }) { ${LINEUP_PROPOSAL_FIELDS} }
-        }`,
-        { id: existingId, assignment: json }
-      );
-      return data.updateLineupProposal;
-    }
-    const data = await gql(
-      `mutation CreateLineupProposal($data: LineupProposalCreateInput!) {
-        createLineupProposal(data: $data) { ${LINEUP_PROPOSAL_FIELDS} }
-      }`,
-      { data: { match: { connect: { id: matchId } }, trainer: { connect: { id: trainerId } }, period, assignment: json } }
-    );
-    return data.createLineupProposal;
-  });
+  const data = await gql(
+    `mutation UpsertLineupProposal($matchId: ID!, $period: Int!, $assignment: String!) {
+      upsertLineupProposal(matchId: $matchId, period: $period, assignment: $assignment) {
+        id period assignment trainerId trainerName
+      }
+    }`,
+    { matchId, period, assignment: JSON.stringify(assignment) }
+  );
+  const r = data.upsertLineupProposal;
+  return { id: r.id, period: r.period, assignment: r.assignment, match: { id: matchId }, trainer: { id: r.trainerId, name: r.trainerName } };
 }
 
 
@@ -1844,28 +1756,6 @@ function parseCSV(text: string): string[][] {
     result.push(cur);
     return result;
   }).filter(r => r.length > 0);
-}
-
-// ── Per-period lineup (stored in localStorage) ────────────────────────────────
-
-export function getPeriodLineup(matchId: string, period: number): string[] {
-  try {
-    const key = `lineup:${matchId}:${period}`;
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-
-export function setPeriodLineup(matchId: string, period: number, playerIds: string[]): void {
-  try {
-    localStorage.setItem(`lineup:${matchId}:${period}`, JSON.stringify(playerIds));
-  } catch { /* ignore */ }
-  syncMatchLineupToBackend(matchId, period);
-}
-
-export function clearPeriodLineup(matchId: string, period: number): void {
-  try { localStorage.removeItem(`lineup:${matchId}:${period}`); } catch { /* ignore */ }
-  syncMatchLineupToBackend(matchId, period);
 }
 
 // ── Trainingen (voorbereiding — velden volgen Template_training_KFC) ──────────

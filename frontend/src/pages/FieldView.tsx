@@ -36,7 +36,7 @@ interface Props {
   preAssignment?: Record<string, string>;
   onPreAssign?: (posKey: string, playerId: string | null) => void;
   /** Toont het veld puur ter info, zonder klik/sleep-interactie — voor het
-   * bekijken van een collega-trainer's voorkeursopstelling in VoorkeurOpstellingModal. */
+   * bekijken van een collega-trainer's voorkeursopstelling in VoorkeurOpstellingPanel. */
   readOnly?: boolean;
 }
 
