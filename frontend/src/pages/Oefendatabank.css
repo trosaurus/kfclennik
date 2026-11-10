@@ -8,7 +8,7 @@
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-soft);
 }
-.od-result-count { font-family: var(--font-heading); font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); }
+.od-result-count { font-family: var(--font-heading); font-size: 12px; font-weight: 700; letter-spacing: 0.01em; color: var(--text-dim); }
 
 /* ── Groepering per trainingsonderdeel ── */
 .od-groups { display: flex; flex-direction: column; gap: 20px; }
@@ -19,7 +19,7 @@
   font-family: inherit; color: inherit;
 }
 .od-group-header:hover { filter: brightness(1.15); }
-.od-group-title { font-family: var(--font-heading); font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+.od-group-title { font-family: var(--font-heading); font-size: 13px; font-weight: 700; letter-spacing: 0.01em; }
 .od-group-count { font-family: var(--font-heading); font-size: 12px; font-weight: 700; opacity: 0.75; }
 .od-group-chevron { margin-left: auto; font-size: 10px; opacity: 0.75; }
 

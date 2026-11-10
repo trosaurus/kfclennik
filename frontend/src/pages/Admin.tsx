@@ -524,7 +524,7 @@ export default function Admin() {
                     </div>
                     <div className="adm-trc-actions">
                       <button className="btn btn-ghost btn-sm" onClick={() => openTrainerEdit(tr)}>✏️ Bewerken</button>
-                      {!isSelf && <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => setConfirmDelete(tr)}>🗑️ Verwijderen</button>}
+                      {!isSelf && <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => setConfirmDelete(tr)}>🗑️ Verwijderen</button>}
                     </div>
                   </div>
                 );
@@ -1177,7 +1177,7 @@ export default function Admin() {
             </p>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setThemeConfirmDelete(null)}>Annuleer</button>
-              <button className="btn btn-primary" style={{ background: 'var(--red-dark)' }}
+              <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
                 onClick={() => handleDeleteTheme(themeConfirmDelete)}>Verwijderen</button>
             </div>
           </div>
@@ -1191,11 +1191,11 @@ export default function Admin() {
             <div className="modal-title">Trainer verwijderen?</div>
             <p style={{ color: 'var(--text-mid)', marginBottom: 24, lineHeight: 1.7 }}>
               <strong style={{ color: 'var(--white)' }}>{confirmDelete.name}</strong> ({confirmDelete.email}) verwijderen?
-              {confirmDelete.team && <><br/>Gekoppeld aan <strong style={{ color: 'var(--red)' }}>{confirmDelete.team.name}</strong>.</>}
+              {confirmDelete.team && <><br/>Gekoppeld aan <strong style={{ color: 'var(--accent)' }}>{confirmDelete.team.name}</strong>.</>}
             </p>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setConfirmDelete(null)}>Annuleer</button>
-              <button className="btn btn-primary" style={{ background: 'var(--red-dark)' }}
+              <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
                 onClick={() => handleDeleteTrainer(confirmDelete)}>Verwijderen</button>
             </div>
           </div>
@@ -1212,7 +1212,7 @@ export default function Admin() {
             </p>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setPlayerConfirmDelete(null)}>Annuleer</button>
-              <button className="btn btn-primary" style={{ background: 'var(--red-dark)' }}
+              <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
                 onClick={() => handleDeletePlayer(playerConfirmDelete)}>Verwijderen</button>
             </div>
           </div>

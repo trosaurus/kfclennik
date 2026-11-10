@@ -2,7 +2,7 @@
 .te-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
 .te-block { padding: 18px 20px; margin-bottom: 16px; }
-.te-block-title { font-family: var(--font-display); font-size: 20px; letter-spacing: 1px; margin-bottom: 14px; }
+.te-block-title { font-family: var(--font-display); font-weight: 800; font-size: 20px; letter-spacing: 0.01em; margin-bottom: 14px; }
 .te-block-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
 .te-block-title-row .te-block-title { margin-bottom: 0; }
 
@@ -13,8 +13,8 @@
 .te-block-header-btn .te-block-title { margin-bottom: 0; }
 .te-block-header-btn .te-chevron { font-size: 13px; color: var(--text-dim); flex-shrink: 0; margin-left: 12px; }
 
-.te-jaarplan-label { font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--red); margin-bottom: 12px; }
-.te-extra-badge { font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); background: var(--bg-elevated); padding: 2px 7px; border-radius: 3px; margin-left: 8px; vertical-align: middle; }
+.te-jaarplan-label { font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 0.01em; color: var(--accent); margin-bottom: 12px; }
+.te-extra-badge { font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: 0.01em; color: var(--text-dim); background: var(--bg-elevated); padding: 2px 7px; border-radius: 3px; margin-left: 8px; vertical-align: middle; }
 
 .te-row-5 { grid-template-columns: repeat(5, 1fr); }
 @media (max-width: 900px) { .te-row-5 { grid-template-columns: 1fr 1fr; } }
@@ -26,7 +26,7 @@
 .te-su-field { display: flex; flex-direction: column; gap: 4px; }
 .te-su-pill {
   display: inline-block; align-self: flex-start;
-  font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: 0.01em;
   background: var(--bg-elevated); color: var(--text-mid); padding: 2px 8px; border-radius: 10px; margin-bottom: 0;
 }
 
@@ -36,11 +36,11 @@
 
 .te-pct-label { font-family: var(--font-heading); font-size: 12px; font-weight: 700; }
 .te-pct-label.ok   { color: var(--green); }
-.te-pct-label.warn { color: var(--red); }
+.te-pct-label.warn { color: var(--accent); }
 .te-pct-bar { height: 10px; }
 .te-bar-ok   { background: linear-gradient(90deg, var(--green), #16a34a) !important; }
-.te-bar-warn { background: linear-gradient(90deg, var(--red-dark), var(--red)) !important; }
-.te-pct-warning { font-size: 12px; color: var(--red); margin-top: 8px; }
+.te-bar-warn { background: linear-gradient(90deg, var(--accent-strong), var(--accent)) !important; }
+.te-pct-warning { font-size: 12px; color: var(--accent); margin-top: 8px; }
 
 .te-krachtige-leeromgeving { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-soft); }
 .te-kl-list { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-mid); line-height: 1.7; }

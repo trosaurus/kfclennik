@@ -13,10 +13,10 @@
 .vo-tab {
   flex: 1; padding: 8px 12px; background: none; border: none; border-radius: var(--radius);
   font-family: var(--font-heading); font-size: 13px; font-weight: 700;
-  letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); cursor: pointer; transition: all .12s;
+  letter-spacing: 0.01em; color: var(--text-dim); cursor: pointer; transition: all .12s;
 }
 .vo-tab:hover { color: var(--text); }
-.vo-tab.active { background: var(--red); color: white; }
+.vo-tab.active { background: var(--accent); color: white; }
 
 .vo-columns {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;

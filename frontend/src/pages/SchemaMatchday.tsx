@@ -49,7 +49,7 @@ function dropTargetAt(x: number, y: number): string | null {
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString('nl-BE', { weekday: 'short', day: 'numeric', month: 'short' });
 
-export default function SchemaMatchday() {
+export default function SchemaMatchday({ matchId: fixedMatchId }: { matchId?: string } = {}) {
   const { teamId, category } = useTeam();
   const [matches, setMatches] = useState<Match[]>([]);
   const [match, setMatch] = useState<Match | null>(null);
@@ -113,7 +113,7 @@ export default function SchemaMatchday() {
     };
   }, [matchId]);
 
-  useEffect(() => { boot(); }, [teamId]);
+  useEffect(() => { boot(); }, [teamId, fixedMatchId]);
 
   async function boot() {
     setLoading(true);
@@ -121,8 +121,9 @@ export default function SchemaMatchday() {
     try {
       const all = await getMatches(teamId ?? undefined);
       setMatches(all);
+      const fixed = fixedMatchId ? all.find(m => m.id === fixedMatchId) : undefined;
       const saved = all.find(m => m.id === readLS(MATCH_KEY));
-      const pick = saved ?? getMatchOfTheWeek(all);
+      const pick = fixedMatchId ? fixed : (saved ?? getMatchOfTheWeek(all));
       if (pick) await loadMatch(pick);
       else setMatch(null);
     } catch (e) {
@@ -421,7 +422,7 @@ export default function SchemaMatchday() {
       {/* ── Kop: wedstrijd + scorebord ── */}
       <div className="card smd-head">
         <div className="smd-head-top">
-          {matchSelect}
+          {fixedMatchId ? <span className="smd-match-fixed">vs. {match.opponent}</span> : matchSelect}
           <span className={`smd-status ${finished ? 'done' : ''}`}>{finished ? 'Afgesloten' : match.location === 'home' ? 'Thuis' : 'Uit'}</span>
         </div>
 

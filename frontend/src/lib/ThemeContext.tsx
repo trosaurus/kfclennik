@@ -2,7 +2,9 @@ import { createContext, useContext, useState, ReactNode } from 'react';
 
 export type Theme = 'dark' | 'light';
 
-const STORAGE_KEY = 'kfcl-theme';
+// Nieuwe sleutel voor het nieuwe design: iedereen start in de lichte modus,
+// ook wie in de oude app de donkere modus had gekozen.
+export const THEME_STORAGE_KEY = 'vt-theme';
 
 interface ThemeContextValue {
   theme: Theme;
@@ -10,23 +12,26 @@ interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: 'dark',
+  theme: 'light',
   toggleTheme: () => {},
 });
 
-function applyTheme(theme: Theme) {
+export function readStoredTheme(): Theme {
+  try { return localStorage.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light'; }
+  catch { return 'light'; }
+}
+
+export function applyTheme(theme: Theme) {
   document.documentElement.setAttribute('data-theme', theme);
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(STORAGE_KEY) as Theme) || 'dark'
-  );
+  const [theme, setTheme] = useState<Theme>(readStoredTheme);
 
   function toggleTheme() {
     const next: Theme = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
-    localStorage.setItem(STORAGE_KEY, next);
+    try { localStorage.setItem(THEME_STORAGE_KEY, next); } catch { /* opslag niet beschikbaar */ }
     applyTheme(next);
   }
 

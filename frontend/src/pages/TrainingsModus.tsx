@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { getTraining, updateTraining, Training, EXERCISE_FASE_LABELS, parseDrawingScene } from '../lib/api';
 import DrawingCanvas from '../components/DrawingCanvas';
 import { NAV_ITEMS } from '../lib/navItems';
+import { NavIcon } from '../components/icons/NavIcons';
 import { setActiveTraining, clearActiveTraining } from '../lib/activeTraining';
 import './TrainingsModus.css';
 
@@ -218,7 +219,7 @@ export default function TrainingsModus() {
             </div>
             {NAV_ITEMS.map(item => (
               <Link key={item.to} to={item.to} className="tm-nav-drawer-item" onClick={() => setNavOpen(false)}>
-                <span>{item.icon}</span>
+                <NavIcon name={item.icon} size={18} />
                 <span>{item.label}</span>
               </Link>
             ))}

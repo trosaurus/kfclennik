@@ -1,190 +1,103 @@
-.layout {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  /* Room for mobile bottom nav */
-  padding-bottom: 0;
-}
-@media (max-width: 768px) {
-  .layout { padding-bottom: 64px; }
+/* ── App-schil ─────────────────────────────────────────────────────────── */
+.app-shell { min-height: 100vh; display: flex; }
+.main-content { flex: 1; min-width: 0; margin-left: var(--sidebar-w); }
+
+/* ── Zijbalk ── */
+.sidebar {
+  position: fixed; top: 0; bottom: 0; left: 0; z-index: 300;
+  width: var(--sidebar-w);
+  display: flex; flex-direction: column;
+  background: var(--bg-sidebar); color: #E6EFE9;
+  padding: 18px 14px;
 }
 
-/* ── Header ── */
-.header {
-  background: var(--bg-card);
-  border-bottom: 2px solid var(--red-dark);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  box-shadow: 0 2px 16px rgba(0,0,0,0.3);
+.sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 6px 8px 18px; }
+.sidebar-logo { width: 38px; height: 38px; object-fit: contain; flex-shrink: 0; }
+.sidebar-brand-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.sidebar-brand-name { font-family: var(--font-display); font-weight: 800; font-size: 17px; color: #fff; }
+.sidebar-brand-sub {
+  font-size: 12px; color: rgba(230,239,233,0.6);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-.header-inner {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
-  height: 60px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.sidebar-resume {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 4px 14px; padding: 10px 12px; border-radius: 12px;
+  background: #22C55E; color: #06200F;
 }
-@media (max-width: 480px) {
-  .header-inner { padding: 0 14px; height: 54px; }
+.sidebar-resume-icon {
+  width: 28px; height: 28px; border-radius: 50%; background: rgba(6,32,15,0.15);
+  display: grid; place-items: center; flex-shrink: 0;
 }
+.sidebar-resume-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.sidebar-resume-label { font-size: 11px; font-weight: 600; opacity: 0.75; }
+.sidebar-resume-title { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* ── Brand ── */
-.header-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
+.sidebar-nav { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+.sidebar-group { display: flex; flex-direction: column; gap: 2px; }
+.sidebar-group-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: rgba(230,239,233,0.42); padding: 0 12px 6px;
 }
+.sidebar-link {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 10px;
+  font-size: 14.5px; font-weight: 500; color: rgba(230,239,233,0.78);
+  transition: background .12s, color .12s;
+}
+.sidebar-link:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.sidebar-link.active { background: rgba(34,197,94,0.16); color: #4ADE80; font-weight: 600; }
 
-.brand-logo {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
+.sidebar-footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 14px 6px 0; margin-top: 12px; border-top: 1px solid rgba(255,255,255,0.08);
 }
-@media (max-width: 480px) {
-  .brand-logo { width: 34px; height: 34px; }
+.sidebar-user { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.sidebar-avatar {
+  width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-items: center;
+  background: #22C55E; color: #06200F; font-size: 12px; font-weight: 700;
 }
+.sidebar-user-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-footer-actions { display: flex; gap: 2px; }
+.sidebar-icon-btn {
+  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+  background: transparent; color: rgba(230,239,233,0.7);
+}
+.sidebar-icon-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
 
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1;
-}
+/* ── Topbalk (alleen telefoon) ── */
+.topbar { display: none; }
+.sidebar-scrim, .sidebar-close { display: none; }
 
-.brand-name {
-  font-family: var(--font-display);
-  font-size: 20px;
-  letter-spacing: 2px;
-  color: var(--white);
-}
-@media (max-width: 360px) {
-  .brand-name { font-size: 17px; }
-}
+@media (max-width: 900px) {
+  .app-shell { flex-direction: column; }
+  .main-content { margin-left: 0; }
 
-.brand-number {
-  font-family: var(--font-heading);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 3px;
-  color: var(--red);
-  text-transform: uppercase;
-}
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    position: sticky; top: 0; z-index: 200;
+    height: 56px; padding: 0 8px;
+    background: var(--bg-sidebar); color: #fff;
+  }
+  .topbar-menu, .topbar-resume, .topbar-spacer {
+    width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+    background: transparent; color: #fff;
+  }
+  .topbar-resume { background: #22C55E; color: #06200F; width: 36px; height: 36px; margin-right: 4px; }
+  .topbar-brand { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 800; font-size: 16px; }
+  .topbar-brand img { width: 30px; height: 30px; object-fit: contain; }
 
-/* ── Desktop nav ── */
-.desktop-nav {
-  display: flex;
-  gap: 4px;
+  .sidebar {
+    transform: translateX(-100%); transition: transform .22s ease;
+    width: min(300px, 84vw); box-shadow: 8px 0 40px rgba(0,0,0,0.3);
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+  .sidebar.open { transform: none; }
+  .sidebar-scrim { display: block; position: fixed; inset: 0; z-index: 250; background: rgba(0,0,0,0.45); }
+  .sidebar-close {
+    display: grid; place-items: center; position: fixed; z-index: 310;
+    top: 12px; left: min(300px, 84vw); margin-left: 10px;
+    width: 40px; height: 40px; border-radius: 50%; background: #fff; color: #0B1A11;
+  }
 }
-@media (max-width: 768px) {
-  .desktop-nav { display: none; }
-}
-
-.nav-link {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 14px;
-  border-radius: var(--radius);
-  font-family: var(--font-heading);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--text-mid);
-  transition: all 0.15s;
-  position: relative;
-  white-space: nowrap;
-}
-.nav-link:hover  { color: var(--white); background: var(--bg-hover); }
-.nav-link.active { color: var(--white); background: rgba(204,26,26,0.18); }
-.nav-link.active::after {
-  content: '';
-  position: absolute;
-  bottom: -2px; left: 0; right: 0;
-  height: 2px; background: var(--red); border-radius: 1px;
-}
-.nav-icon { font-size: 15px; }
-
-/* "Terug naar de actieve trainingsmodus" — bewust opvallend, staat los van de
- * gewone navigatie-items omdat het een tijdelijke, contextuele snelkoppeling is. */
-.nav-link-resume, .nav-link-resume:hover {
-  color: white; background: var(--red); max-width: 160px;
-  overflow: hidden; text-overflow: ellipsis;
-}
-.nav-link-resume.active::after { display: none; }
-
-/* ── Main ── */
-.main-content { flex: 1; }
-
-/* ── Mobile bottom nav ── */
-.mobile-nav {
-  display: none;
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  height: 64px;
-  background: var(--bg-card);
-  border-top: 1px solid var(--border);
-  box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
-  z-index: 200;
-  padding-bottom: env(safe-area-inset-bottom);
-}
-@media (max-width: 768px) {
-  .mobile-nav { display: flex; }
-}
-
-.mobile-nav-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 8px 4px;
-  color: var(--text-dim);
-  transition: color 0.12s;
-  position: relative;
-}
-.mobile-nav-item.active { color: var(--red); }
-.mobile-nav-item.active::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 20%; right: 20%;
-  height: 2px;
-  background: var(--red);
-  border-radius: 0 0 2px 2px;
-}
-
-.mobile-nav-icon  { font-size: 22px; line-height: 1; }
-.mobile-nav-label {
-  font-family: var(--font-heading);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 64px;
-}
-
-.mobile-nav-item-resume, .mobile-nav-item-resume.active { color: var(--red); }
-.mobile-nav-item-resume::before {
-  content: ''; position: absolute; top: 0; left: 20%; right: 20%;
-  height: 2px; background: var(--red); border-radius: 0 0 2px 2px;
-}
-
-/* ── Header user / logout ── */
-.header-user {
-  display: flex; align-items: center; gap: 8px;
-  margin-left: auto;
-  flex-shrink: 0;
-}
-.header-trainer-name {
-  font-family: var(--font-heading); font-size: 12px; font-weight: 700;
-  letter-spacing: 0.5px; color: var(--text-dim);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px;
-}
-@media (max-width: 600px) { .header-trainer-name { display: none; } }

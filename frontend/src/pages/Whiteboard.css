@@ -12,7 +12,7 @@
   border: 2px solid transparent;
 }
 .wb-item:hover { border-color: var(--border); }
-.wb-item.active { border-color: var(--red); }
+.wb-item.active { border-color: var(--accent); }
 .wb-item-name { font-family: var(--font-heading); font-weight: 700; font-size: 13px; }
 .wb-item-date { font-size: 12px; color: var(--text-dim); }
 .wb-item-delete { padding: 4px 8px; }
@@ -26,4 +26,4 @@
   background: var(--bg); border: 2px solid var(--border); border-radius: var(--radius);
   font-family: var(--font-heading); font-size: 14px; font-weight: 700; color: var(--text);
 }
-.wb-name-input:focus { outline: none; border-color: var(--red); }
+.wb-name-input:focus { outline: none; border-color: var(--accent); }

@@ -361,7 +361,7 @@ export default function Oefendatabank() {
             </p>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setConfirmDelete(null)}>Annuleer</button>
-              <button className="btn btn-primary" style={{ background: 'var(--red-dark)' }}
+              <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
                 onClick={() => handleDelete(confirmDelete)}>Verwijderen</button>
             </div>
           </div>
@@ -377,7 +377,7 @@ export default function Oefendatabank() {
             </p>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setManualConfirmDelete(false)}>Annuleer</button>
-              <button className="btn btn-primary" style={{ background: 'var(--red-dark)' }}
+              <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
                 onClick={handleManualRemove}>Verwijderen</button>
             </div>
           </div>
@@ -503,7 +503,7 @@ function OefeningCard({ isNew, draft, setDraft, saving, onSave, onCancel, onOpen
           <button className="btn btn-outline btn-sm" onClick={onCancel}>Annuleer</button>
           <button className="btn btn-primary btn-sm" disabled={saving} onClick={onSave}>{saving ? 'Opslaan...' : '💾 Opslaan'}</button>
         </div>
-        {onDelete && <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={onDelete}>🗑️ Verwijderen</button>}
+        {onDelete && <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={onDelete}>🗑️ Verwijderen</button>}
       </div>
     </div>
   );

@@ -1,0 +1,55 @@
+.wf { display: flex; flex-direction: column; min-height: 100%; }
+
+.wf-header {
+  padding: 28px 36px 0; max-width: 1240px; width: 100%; margin: 0 auto;
+}
+@media (max-width: 768px) { .wf-header { padding: 16px 16px 0; } }
+
+.wf-back { font-size: 14px; font-weight: 500; color: var(--text-mid); }
+.wf-back:hover { color: var(--accent); }
+
+.wf-title-row { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin: 8px 0 18px; }
+.wf-title {
+  font-family: var(--font-display); font-weight: 800; font-size: 30px;
+  letter-spacing: -0.02em; color: var(--white); line-height: 1.1;
+}
+.wf-meta { font-size: 14px; color: var(--text-mid); text-transform: capitalize; }
+
+/* ── Stappen ── */
+.wf-steps {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  counter-reset: step;
+}
+.wf-step {
+  position: relative; display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-radius: 14px;
+  background: var(--bg-card); border: 1.5px solid var(--border-soft);
+  font-weight: 600; font-size: 14px; color: var(--text-mid);
+  transition: border-color .12s, color .12s, background .12s;
+}
+.wf-step:hover { color: var(--text); border-color: var(--border); }
+.wf-step-num {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-items: center; font-size: 13px; font-weight: 700;
+  background: var(--bg-elevated); color: var(--text-mid);
+}
+.wf-step.done .wf-step-num { background: var(--accent-soft); color: var(--accent); }
+.wf-step.active { border-color: var(--accent); color: var(--white); background: var(--bg-card); box-shadow: 0 0 0 4px var(--accent-soft); }
+.wf-step.active .wf-step-num { background: var(--accent); color: var(--accent-ink); }
+@media (max-width: 640px) {
+  .wf-steps { gap: 4px; }
+  .wf-step { flex-direction: column; gap: 4px; padding: 8px 4px; font-size: 12px; text-align: center; }
+}
+
+.wf-live-mode { margin-top: 14px; }
+
+.wf-body { flex: 1; }
+/* De ingebedde schermen brengen hun eigen .page mee — bovenaan niet nog eens
+ * de volle paginamarge, want de flow-kop staat er al boven. */
+.wf-body > .page { padding-top: 20px; }
+
+.wf-footer {
+  display: flex; gap: 10px; align-items: center;
+  padding: 0 36px 32px; max-width: 1240px; width: 100%; margin: 0 auto;
+}
+@media (max-width: 768px) { .wf-footer { padding: 0 16px 24px; } }

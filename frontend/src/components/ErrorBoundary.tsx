@@ -26,7 +26,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (!error) return this.props.children;
     return (
       <div className="page">
-        <div className="card" style={{ padding: 20, borderTop: '3px solid var(--red)' }}>
+        <div className="card" style={{ padding: 20, borderTop: '3px solid var(--danger)' }}>
           <h2 style={{ fontFamily: 'var(--font-heading)', marginBottom: 8 }}>Er ging iets mis op deze pagina</h2>
           <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, color: 'var(--text-mid)', marginBottom: 12 }}>
             {error.message}

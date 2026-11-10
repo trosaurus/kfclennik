@@ -1,41 +1,32 @@
 import ErrorBoundary from './ErrorBoundary';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { logout } from '../lib/auth';
 import { useTeam } from '../lib/TeamContext';
 import { useTheme } from '../lib/ThemeContext';
-import { useFont } from '../lib/FontContext';
-import { NAV_ITEMS as BASE_NAV_ITEMS } from '../lib/navItems';
+import { NAV_GROUPS, NavItem } from '../lib/navItems';
 import { getActiveTraining } from '../lib/activeTraining';
+import { NavIcon } from './icons/NavIcons';
 import logo from '../assets/Logo-KFC-Lennik.png';
 import './Layout.css';
 
+// App-schil: vaste zijbalk op tablet/desktop, op telefoon een bovenbalk met
+// een uitschuifmenu (dezelfde zijbalk als drawer).
 export default function Layout() {
-  const { trainer, setTrainer, isAdmin, category } = useTeam();
+  const { trainer, setTrainer, isAdmin } = useTeam();
   const { theme, toggleTheme } = useTheme();
-  const { font, toggleFont } = useFont();
   const location = useLocation();
-  // Gelezen bij het mounten van Layout — Layout wordt altijd opnieuw gemount
-  // wanneer je de (aparte, standalone) trainingsmodus-route verlaat, dus dit
-  // pikt een intussen gestarte sessie steeds correct op.
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Gelezen bij het mounten — Layout wordt opnieuw gemount wanneer je de
+  // (standalone) trainingsmodus verlaat, dus een gestarte sessie wordt opgepikt.
   const [activeTraining] = useState(() => getActiveTraining());
 
-  const NAV_ITEMS = [
-    ...BASE_NAV_ITEMS,
-    ...(activeTraining
-      ? [{ to: `/trainingen/${activeTraining.id}/modus`, label: activeTraining.titel, icon: '▶', resume: true }]
-      : []),
-    ...(isAdmin ? [{ to: '/admin', label: 'Admin', icon: '⚙️' }] : []),
-  ];
+  // Menu sluiten na navigatie (mobiel).
+  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
 
-  // NavLink's eigen isActive-check kijkt enkel naar `to` — voor de
-  // samengevoegde items (Wedstrijden/Team/Trainingen) moet het ook oplichten op de andere
-  // paden uit de groep (activePaths), dus die state berekenen we hier zelf.
-  function isItemActive(item: (typeof NAV_ITEMS)[number]): boolean {
+  function isActive(item: NavItem): boolean {
     const paths = item.activePaths ?? [item.to];
-    return item.end
-      ? paths.includes(location.pathname)
-      : paths.some(p => location.pathname.startsWith(p));
+    return paths.some(p => location.pathname === p || location.pathname.startsWith(p + '/'));
   }
 
   async function handleLogout() {
@@ -43,62 +34,102 @@ export default function Layout() {
     setTrainer(null);
   }
 
-  return (
-    <div className="layout">
-      <header className="header">
-        <div className="header-inner">
-          <Link to="/" className="header-brand">
-            <img src={logo} alt="KFC Lennik" className="brand-logo" />
-            <div className="brand-text">
-              <span className="brand-name">KFC Lennik</span>
-              <span className="brand-number">
-                {trainer?.team ? `${trainer.team.name} · ${trainer.team.category}` : '4157'}
-              </span>
-            </div>
-          </Link>
+  const initials = (trainer?.name ?? '?')
+    .split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]!.toUpperCase()).join('');
 
-          <nav className="nav desktop-nav">
-            {NAV_ITEMS.map(item => (
-              <NavLink key={item.to} to={item.to} end={item.end}
-                className={`nav-link ${isItemActive(item) ? 'active' : ''} ${item.resume ? 'nav-link-resume' : ''}`}>
-                <span className="nav-icon">{item.icon}</span>
+  const sidebar = (
+    <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
+      <Link to="/trainingen" className="sidebar-brand">
+        <img src={logo} alt="" className="sidebar-logo" />
+        <div className="sidebar-brand-text">
+          <span className="sidebar-brand-name">KFC Lennik</span>
+          <span className="sidebar-brand-sub">
+            {trainer?.team ? `${trainer.team.name} · ${trainer.team.category}` : 'Voetbaltraining'}
+          </span>
+        </div>
+      </Link>
+
+      {activeTraining && (
+        <Link to={`/trainingen/${activeTraining.id}/modus`} className="sidebar-resume">
+          <span className="sidebar-resume-icon"><NavIcon name="play" size={16} /></span>
+          <span className="sidebar-resume-text">
+            <span className="sidebar-resume-label">Training bezig</span>
+            <span className="sidebar-resume-title">{activeTraining.titel}</span>
+          </span>
+        </Link>
+      )}
+
+      <nav className="sidebar-nav">
+        {NAV_GROUPS.map(group => (
+          <div key={group.label} className="sidebar-group">
+            <div className="sidebar-group-label">{group.label}</div>
+            {group.items.map(item => (
+              <NavLink key={item.to} to={item.to}
+                className={`sidebar-link ${isActive(item) ? 'active' : ''}`}>
+                <NavIcon name={item.icon} />
                 <span>{item.label}</span>
               </NavLink>
             ))}
-          </nav>
-
-          <div className="header-user">
-            <button className="btn btn-ghost btn-icon" onClick={toggleTheme}
-              title={theme === 'dark' ? 'Lichte modus' : 'Donkere modus'}>
-              {theme === 'dark' ? '☀️' : '🌙'}
-            </button>
-            <button className="btn btn-ghost btn-icon" onClick={toggleFont}
-              title={font === 'default' ? 'Poppins lettertype' : 'Standaard lettertype'}
-              style={{
-                fontFamily: font === 'default' ? "'Poppins', sans-serif" : 'var(--font-body)',
-                textTransform: 'none', letterSpacing: 0,
-              }}>
-              Aa
-            </button>
-            <span className="header-trainer-name">{trainer?.name}</span>
-            <button className="btn btn-ghost btn-sm" onClick={handleLogout} title="Afmelden">↩ Afmelden</button>
           </div>
+        ))}
+        {isAdmin && (
+          <div className="sidebar-group">
+            <div className="sidebar-group-label">Beheer</div>
+            <NavLink to="/admin" className={`sidebar-link ${location.pathname.startsWith('/admin') ? 'active' : ''}`}>
+              <NavIcon name="admin" />
+              <span>Admin</span>
+            </NavLink>
+          </div>
+        )}
+      </nav>
+
+      <div className="sidebar-footer">
+        <div className="sidebar-user">
+          <span className="sidebar-avatar">{initials}</span>
+          <span className="sidebar-user-name">{trainer?.name}</span>
         </div>
+        <div className="sidebar-footer-actions">
+          <button className="sidebar-icon-btn" onClick={toggleTheme}
+            title={theme === 'dark' ? 'Lichte modus' : 'Donkere modus'}
+            aria-label={theme === 'dark' ? 'Lichte modus' : 'Donkere modus'}>
+            <NavIcon name={theme === 'dark' ? 'zon' : 'maan'} size={18} />
+          </button>
+          <button className="sidebar-icon-btn" onClick={handleLogout} title="Afmelden" aria-label="Afmelden">
+            <NavIcon name="uit" size={18} />
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+
+  return (
+    <div className="app-shell">
+      <header className="topbar">
+        <button className="topbar-menu" onClick={() => setMenuOpen(true)} aria-label="Menu openen">
+          <NavIcon name="menu" />
+        </button>
+        <Link to="/trainingen" className="topbar-brand">
+          <img src={logo} alt="" />
+          <span>KFC Lennik</span>
+        </Link>
+        {activeTraining ? (
+          <Link to={`/trainingen/${activeTraining.id}/modus`} className="topbar-resume" aria-label="Training hervatten">
+            <NavIcon name="play" size={16} />
+          </Link>
+        ) : <span className="topbar-spacer" />}
       </header>
+
+      {sidebar}
+      {menuOpen && <div className="sidebar-scrim" onClick={() => setMenuOpen(false)} />}
+      {menuOpen && (
+        <button className="sidebar-close" onClick={() => setMenuOpen(false)} aria-label="Menu sluiten">
+          <NavIcon name="sluit" />
+        </button>
+      )}
 
       <main className="main-content">
         <ErrorBoundary resetKey={location.pathname}><Outlet /></ErrorBoundary>
       </main>
-
-      <nav className="mobile-nav">
-        {NAV_ITEMS.map(item => (
-          <NavLink key={item.to} to={item.to} end={item.end}
-            className={`mobile-nav-item ${isItemActive(item) ? 'active' : ''} ${item.resume ? 'mobile-nav-item-resume' : ''}`}>
-            <span className="mobile-nav-icon">{item.icon}</span>
-            <span className="mobile-nav-label">{item.label}</span>
-          </NavLink>
-        ))}
-      </nav>
     </div>
   );
 }

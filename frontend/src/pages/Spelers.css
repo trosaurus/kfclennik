@@ -1,0 +1,48 @@
+.sp-notice {
+  background: var(--accent-soft); color: var(--accent); border-radius: var(--radius);
+  padding: 10px 14px; font-size: 14px; margin-bottom: 16px; cursor: pointer;
+}
+.sp-notice-error { background: var(--danger-soft); color: var(--danger); }
+
+.sp-quick {
+  display: grid; grid-template-columns: 76px 1fr 180px auto; gap: 10px;
+  padding: 12px; margin-bottom: 18px; align-items: center;
+}
+@media (max-width: 640px) {
+  .sp-quick { grid-template-columns: 70px 1fr; }
+  .sp-quick-pos, .sp-quick .btn { grid-column: span 1; }
+  .sp-quick .btn { grid-column: 1 / -1; }
+  .sp-quick-pos { grid-column: 1 / -1; }
+}
+.sp-quick-num { text-align: center; }
+
+.sp-toggle {
+  display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+  font-size: 14px; color: var(--text-mid); margin-bottom: 16px;
+}
+.sp-toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+.sp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.sp-card {
+  display: flex; align-items: center; gap: 14px; text-align: left;
+  padding: 12px 14px; border-radius: var(--radius-lg);
+  background: var(--bg-card); border: 1px solid var(--border-soft); box-shadow: var(--shadow-sm);
+  color: var(--text); transition: border-color .12s, transform .12s;
+}
+.sp-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.sp-card.inactive { opacity: 0.55; }
+
+.sp-shirt {
+  width: 44px; height: 44px; flex-shrink: 0; border-radius: 12px;
+  display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: 800; font-size: 18px; color: #fff;
+  background: var(--text-dim);
+}
+.sp-shirt.pos-keeper     { background: var(--chart-role-keeper); }
+.sp-shirt.pos-defender   { background: var(--chart-role-defender); }
+.sp-shirt.pos-midfielder { background: var(--chart-role-midfielder); }
+.sp-shirt.pos-forward    { background: var(--chart-role-forward); }
+
+.sp-info { display: flex; flex-direction: column; min-width: 0; }
+.sp-name { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-pos { font-size: 13px; color: var(--text-mid); }

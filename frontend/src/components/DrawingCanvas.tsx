@@ -1503,7 +1503,7 @@ function renderShape(el: DrawingElement, cx: number, cy: number) {
     return (
       <>
         <line x1={cx} y1={cy-12} x2={cx} y2={cy+12} stroke="white" strokeWidth="1.5" />
-        <path d={`M ${cx} ${cy-12} L ${cx+12} ${cy-8} L ${cx} ${cy-4} Z`} fill="var(--red, #CC1A1A)" />
+        <path d={`M ${cx} ${cy-12} L ${cx+12} ${cy-8} L ${cx} ${cy-4} Z`} fill="var(--accent, #16a34a)" />
       </>
     );
   }
@@ -1566,7 +1566,7 @@ function renderRotateHandle(cx: number, cy: number, rotation: number, scale: num
   return (
     <g className="dc-rotate-handle">
       <line x1={ix} y1={iy} x2={hx} y2={hy} stroke="white" strokeWidth="1.5" strokeOpacity="0.8" />
-      <circle cx={hx} cy={hy} r="6" fill="white" stroke="var(--red, #CC1A1A)" strokeWidth="1.5"
+      <circle cx={hx} cy={hy} r="6" fill="white" stroke="var(--accent, #16a34a)" strokeWidth="1.5"
         style={{ cursor: 'grab', touchAction: 'none' }} onPointerDown={onPointerDown} />
     </g>
   );
@@ -1581,7 +1581,7 @@ function renderResizeHandle(cx: number, cy: number, rotation: number, scale: num
   return (
     <g className="dc-resize-handle">
       <line x1={ix} y1={iy} x2={hx} y2={hy} stroke="white" strokeWidth="1.5" strokeOpacity="0.8" />
-      <rect x={hx - 5} y={hy - 5} width="10" height="10" fill="white" stroke="var(--red, #CC1A1A)" strokeWidth="1.5"
+      <rect x={hx - 5} y={hy - 5} width="10" height="10" fill="white" stroke="var(--accent, #16a34a)" strokeWidth="1.5"
         style={{ cursor: 'nwse-resize', touchAction: 'none' }} onPointerDown={onPointerDown} />
     </g>
   );
@@ -1654,7 +1654,7 @@ function renderCurveHandle(el: { x: number; y: number; x2?: number; y2?: number;
        * ongeluk de hele lijn i.p.v. de kromming aan te passen. */}
       <circle cx={peakX} cy={peakY} r="18" fill="transparent"
         style={{ cursor: 'grab', touchAction: 'none' }} onPointerDown={onPointerDown} />
-      <circle cx={peakX} cy={peakY} r="6" fill="white" stroke="var(--red, #CC1A1A)" strokeWidth="1.5" style={{ pointerEvents: 'none' }} />
+      <circle cx={peakX} cy={peakY} r="6" fill="white" stroke="var(--accent, #16a34a)" strokeWidth="1.5" style={{ pointerEvents: 'none' }} />
     </g>
   );
 }

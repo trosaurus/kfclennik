@@ -25,9 +25,20 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
 };
 
 type View = 'list' | 'detail';
-type DetailTab = 'selectie' | 'wisselschema' | 'evaluatie';
+export type DetailTab = 'selectie' | 'wisselschema' | 'evaluatie';
 
-export default function WedstrijdBeheer() {
+interface WedstrijdBeheerProps {
+  /** Ingebed in de wedstrijdflow: open meteen deze wedstrijd (zonder eigen tabs/breadcrumb). */
+  matchId?: string;
+  /** Welke stap van de flow getoond wordt (enkel samen met matchId). */
+  tab?: DetailTab;
+  /** Lijstweergave: een wedstrijd openen gebeurt via de flow (route) i.p.v. intern. */
+  onOpenMatch?: (m: Match) => void;
+  /** Ingebed: de wedstrijd werd verwijderd — terug naar de lijst. */
+  onClosed?: () => void;
+}
+
+export default function WedstrijdBeheer({ matchId, tab, onOpenMatch, onClosed }: WedstrijdBeheerProps = {}) {
   const { teamId } = useTeam();
   const [matches, setMatches] = useState<Match[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -71,6 +82,22 @@ export default function WedstrijdBeheer() {
 
   useEffect(() => { loadAll(); }, []);
 
+  // Ingebed in de wedstrijdflow: de gevraagde wedstrijd openen zodra de lijst er is.
+  useEffect(() => {
+    if (!matchId || loading) return;
+    if (selectedMatch?.id === matchId) return;
+    const m = matches.find(x => x.id === matchId);
+    if (m) openDetail(m);
+  }, [matchId, loading, matches]);
+
+  // De stap (tab) volgt de route van de flow.
+  useEffect(() => { if (tab) setDetailTab(tab); }, [tab]);
+
+  function openMatch(m: Match) {
+    if (onOpenMatch) onOpenMatch(m);
+    else openDetail(m);
+  }
+
   async function loadAll() {
     setLoading(true);
     try {
@@ -90,7 +117,7 @@ export default function WedstrijdBeheer() {
 
   async function openDetail(m: Match) {
     setSelectedMatch(m);
-    setDetailTab('selectie');
+    setDetailTab(tab ?? 'selectie');
     setEditMatchForm({
       opponent: m.opponent,
       date: m.date ? new Date(m.date).toISOString().slice(0, 16) : '',
@@ -205,6 +232,7 @@ export default function WedstrijdBeheer() {
     await deleteMatch(m.id);
     setConfirmDelete(null);
     if (view === 'detail') { setView('list'); setSelectedMatch(null); }
+    if (matchId) { onClosed?.(); return; }
     await loadAll();
   }
 
@@ -314,6 +342,13 @@ export default function WedstrijdBeheer() {
   // ─────────────────────────────────────────────────────────────────────────
   // LIST VIEW
   // ─────────────────────────────────────────────────────────────────────────
+  if (matchId && view === 'list') {
+    if (!loading && !matches.some(x => x.id === matchId)) {
+      return <div className="empty-state">Deze wedstrijd bestaat niet (meer) of je hebt er geen toegang toe.</div>;
+    }
+    return <div className="loading-spinner">Laden...</div>;
+  }
+
   if (view === 'list') return (
     <div className="page">
       <div className="wb-header">
@@ -367,7 +402,7 @@ export default function WedstrijdBeheer() {
               {displayed.map(m => {
                 const sm = STATUS_META[m.status] ?? STATUS_META.planned;
                 return (
-                  <tr key={m.id} className="wb-row" onClick={() => openDetail(m)}>
+                  <tr key={m.id} className="wb-row" onClick={() => openMatch(m)}>
                     <td className="wb-date">{fmtShort(m.date)}</td>
                     <td className="wb-opponent">{m.opponent}</td>
                     <td><span className={`tag ${m.location === 'home' ? 'tag-red' : 'tag-black'}`}>{m.location === 'home' ? 'Thuis' : 'Uit'}</span></td>
@@ -375,7 +410,7 @@ export default function WedstrijdBeheer() {
                     <td><span className={`tag ${sm.cls}`}>{sm.label}</span></td>
                     <td onClick={e => e.stopPropagation()}>
                       <div className="wb-actions">
-                        <button className="btn btn-ghost btn-sm" onClick={() => openDetail(m)}>✏️</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => openMatch(m)}>✏️</button>
                         <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(m)}>🗑️</button>
                       </div>
                     </td>
@@ -389,7 +424,7 @@ export default function WedstrijdBeheer() {
             {displayed.map(m => {
               const sm = STATUS_META[m.status] ?? STATUS_META.planned;
               return (
-                <div key={m.id} className="wb-mobile-card" onClick={() => openDetail(m)}>
+                <div key={m.id} className="wb-mobile-card" onClick={() => openMatch(m)}>
                   <div className="wb-mobile-card-top">
                     <span className={`tag ${sm.cls}`}>{sm.label}</span>
                     <span className={`tag ${m.location === 'home' ? 'tag-red' : 'tag-black'}`}>{m.location === 'home' ? 'Thuis' : 'Uit'}</span>
@@ -400,7 +435,7 @@ export default function WedstrijdBeheer() {
                     <span>{fmtShort(m.date)}</span>
                   </div>
                   <div className="wb-mobile-actions" onClick={e => e.stopPropagation()}>
-                    <button className="btn btn-ghost btn-sm" onClick={() => openDetail(m)}>✏️ Bewerken</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => openMatch(m)}>✏️ Bewerken</button>
                     <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(m)}>🗑️</button>
                   </div>
                 </div>
@@ -421,7 +456,7 @@ export default function WedstrijdBeheer() {
             </p>
             {importResult.errors.length > 0 && (
               <div style={{ marginTop: 12 }}>
-                <p style={{ color: 'var(--red)', marginBottom: 6, fontFamily: 'var(--font-heading)', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' }}>
+                <p style={{ color: 'var(--danger)', marginBottom: 6, fontFamily: 'var(--font-heading)', fontSize: 12, letterSpacing: 0 }}>
                   {importResult.errors.length} fout{importResult.errors.length !== 1 ? 'en' : ''}:
                 </p>
                 <div style={{ background: 'var(--bg-elevated)', borderRadius: 4, padding: '10px 12px', maxHeight: 160, overflowY: 'auto' }}>
@@ -493,7 +528,7 @@ export default function WedstrijdBeheer() {
             </p>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setConfirmDelete(null)}>Annuleer</button>
-              <button className="btn btn-primary" style={{ background: 'var(--red-dark)' }}
+              <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
                 onClick={() => handleDeleteMatch(confirmDelete)}>Verwijderen</button>
             </div>
           </div>
@@ -513,10 +548,12 @@ export default function WedstrijdBeheer() {
 
   return (
     <div className="page">
-      {/* Breadcrumb */}
-      <button className="breadcrumb-link" onClick={() => { setView('list'); setSelectedMatch(null); }}>
-        ← Wedstrijden
-      </button>
+      {/* Breadcrumb (niet ingebed: de flow heeft een eigen terugknop) */}
+      {!matchId && (
+        <button className="breadcrumb-link" onClick={() => { setView('list'); setSelectedMatch(null); }}>
+          ← Wedstrijden
+        </button>
+      )}
 
       {/* Match hero */}
       <div className="wb-detail-hero">
@@ -537,7 +574,8 @@ export default function WedstrijdBeheer() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs (niet ingebed: de flow toont de stappen zelf) */}
+      {!matchId && (
       <div className="wb-tabs">
         <button className={`wb-tab ${detailTab === 'selectie' ? 'active' : ''}`} onClick={() => setDetailTab('selectie')}>
           ⚽ Selectie
@@ -549,6 +587,7 @@ export default function WedstrijdBeheer() {
           🎯 Evaluatie{evaluations.length > 0 ? ` (${evaluations.length})` : ''}
         </button>
       </div>
+      )}
 
       {/* Two-column layout: selection panel + selected list */}
       {detailTab === 'selectie' && (
@@ -876,7 +915,7 @@ export default function WedstrijdBeheer() {
             </p>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setConfirmDelete(null)}>Annuleer</button>
-              <button className="btn btn-primary" style={{ background: 'var(--red-dark)' }}
+              <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
                 onClick={() => handleDeleteMatch(confirmDelete)}>Verwijderen</button>
             </div>
           </div>

@@ -32,13 +32,29 @@ export default function Login() {
 
   return (
     <div className="login-page">
-      <div className="login-bg" />
-      <div className="login-card">
-        <div className="login-logo">
-          <img src={logo} alt="KFC Lennik" />
+      <aside className="login-hero" aria-hidden="true">
+        <div className="login-pitch">
+          <span className="pitch-line pitch-mid" />
+          <span className="pitch-circle" />
+          <span className="pitch-box pitch-box-top" />
+          <span className="pitch-box pitch-box-bottom" />
         </div>
-        <div className="login-title">KFC Lennik</div>
-        <div className="login-subtitle">Trainer portaal</div>
+        <div className="login-hero-text">
+          <img src={logo} alt="" className="login-hero-logo" />
+          <h1>Trainen, coachen,<br />speeltijd eerlijk verdelen.</h1>
+          <p>Trainingen · Oefeningen · Tekentool · Tactiek · Wedstrijd live</p>
+        </div>
+      </aside>
+
+      <div className="login-card">
+        <div className="login-brand">
+          <img src={logo} alt="KFC Lennik" />
+          <div>
+            <div className="login-title">KFC Lennik</div>
+            <div className="login-subtitle">Voetbaltraining · trainersportaal</div>
+          </div>
+        </div>
+        <h2 className="login-heading">Aanmelden</h2>
 
         <form onSubmit={handleSubmit} className="login-form">
           <div className="form-group">
@@ -67,7 +83,7 @@ export default function Login() {
 
           {error && (
             <div className="login-error">
-              ⚠ {error}
+              {error}
             </div>
           )}
 

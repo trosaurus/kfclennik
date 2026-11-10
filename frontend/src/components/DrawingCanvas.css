@@ -42,43 +42,43 @@
   font-size: 16px; color: var(--text); cursor: pointer; transition: all .12s;
 }
 .dc-tool:hover:not(:disabled) { background: var(--bg-hover); }
-.dc-tool.active { background: var(--red); border-color: var(--red); color: white; }
+.dc-tool.active { background: var(--accent); border-color: var(--accent); color: white; }
 .dc-tool:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .dc-bg-btn {
   padding: 7px 12px; background: none; border: 2px solid var(--border);
   border-radius: var(--radius); font-family: var(--font-heading); font-size: 12px;
-  font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+  font-weight: 700; letter-spacing: 0.01em;
   color: var(--text-dim); cursor: pointer; transition: all .12s;
 }
 .dc-bg-btn:hover { color: var(--text); border-color: var(--text-dim); }
-.dc-bg-btn.active { background: var(--red); border-color: var(--red); color: white; }
+.dc-bg-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
 .dc-bg-imported-group { display: flex; align-items: center; gap: 8px; margin-right: auto; flex-wrap: wrap; }
 .dc-bg-imported {
-  font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
-  text-transform: uppercase; color: var(--text-dim); padding: 0 4px;
+  font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 0.01em;
+  color: var(--text-dim); padding: 0 4px;
 }
 .dc-bg-remove-btn {
-  padding: 6px 10px; background: none; border: 2px solid var(--red); border-radius: var(--radius);
-  font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
-  text-transform: uppercase; color: var(--red); cursor: pointer; transition: all .12s; white-space: nowrap;
+  padding: 6px 10px; background: none; border: 2px solid var(--accent); border-radius: var(--radius);
+  font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 0.01em;
+  color: var(--accent); cursor: pointer; transition: all .12s; white-space: nowrap;
 }
-.dc-bg-remove-btn:hover { background: var(--red); color: white; }
+.dc-bg-remove-btn:hover { background: var(--accent); color: white; }
 
 .dc-color-toolbar { display: flex; align-items: center; gap: 8px; padding: 4px 2px; }
-.dc-color-label { font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-dim); }
+.dc-color-label { font-family: var(--font-heading); font-size: 11px; font-weight: 700; letter-spacing: 0.01em; color: var(--text-dim); }
 .dc-swatch {
   width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--border);
   cursor: pointer; padding: 0; transition: all .12s;
 }
-.dc-swatch.active { border-color: white; box-shadow: 0 0 0 2px var(--red); }
+.dc-swatch.active { border-color: white; box-shadow: 0 0 0 2px var(--accent); }
 
 .dc-number-input {
   width: 56px; padding: 6px 8px; background: var(--bg); border: 2px solid var(--border);
   border-radius: var(--radius); font-family: var(--font-heading); font-size: 14px;
   font-weight: 700; color: var(--text); text-align: center;
 }
-.dc-number-input:focus { outline: none; border-color: var(--red); }
+.dc-number-input:focus { outline: none; border-color: var(--accent); }
 
 .dc-number-list {
   display: flex; gap: 4px; flex-wrap: nowrap; overflow-x: auto;
@@ -92,7 +92,7 @@
   color: var(--text-dim); cursor: pointer; transition: all .12s;
 }
 .dc-number-chip:hover { color: var(--text); border-color: var(--text-dim); }
-.dc-number-chip.active { background: var(--red); border-color: var(--red); color: white; }
+.dc-number-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
 
 .dc-anim-toolbar {
   display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
@@ -108,7 +108,7 @@
   color: var(--text-dim); cursor: pointer; transition: all .12s;
 }
 .dc-anim-frame:hover { color: var(--text); border-color: var(--text-dim); }
-.dc-anim-frame.active { background: var(--red); border-color: var(--red); color: white; }
+.dc-anim-frame.active { background: var(--accent); border-color: var(--accent); color: white; }
 .dc-anim-hint {
   font-size: 11px; color: var(--text-dim); padding: 0 2px; margin-top: -4px;
 }

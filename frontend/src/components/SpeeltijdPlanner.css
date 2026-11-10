@@ -59,7 +59,7 @@
 .spt-name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .spt-tag {
   display: inline-block; min-width: 26px; padding: 1px 5px; border-radius: 3px; text-align: center;
-  font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: .5px;
+  font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: 0.01em;
   background: var(--spt-c, var(--bg-elevated)); color: #fff;
 }
 .spt-tag:not([class*="spt-l-"]) { color: var(--text-mid); }
@@ -73,14 +73,14 @@
 .spt-total { display: flex; align-items: center; gap: 8px; font-family: var(--font-heading); font-weight: 700; }
 .spt-total > span:first-child { min-width: 38px; text-align: right; }
 .spt-bar { display: inline-block; width: 70px; height: 6px; border-radius: 3px; background: var(--bg-elevated); overflow: hidden; }
-.spt-bar > span { display: block; height: 100%; background: var(--red); }
+.spt-bar > span { display: block; height: 100%; background: var(--accent); }
 .spt-absent-note { padding: 10px 14px; font-size: 12px; color: var(--text-dim); border-top: 1px solid var(--border-soft); }
 
 /* Kaarten per blok */
 .spt-blocks { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 .spt-block { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
 .spt-block-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
-.spt-block-title { font-family: var(--font-heading); font-size: 14px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.spt-block-title { font-family: var(--font-heading); font-size: 14px; font-weight: 700; letter-spacing: 0.01em; }
 .spt-block-time { font-family: var(--font-heading); font-size: 12px; color: var(--text-dim); }
 .spt-block-line { display: flex; align-items: baseline; gap: 8px; font-size: 13px; line-height: 1.4; }
 .spt-block-line .spt-tag { flex-shrink: 0; }
@@ -90,7 +90,7 @@
   font-size: 12px; color: var(--text-mid); display: flex; flex-direction: column; gap: 2px;
 }
 .spt-in  { color: var(--green); font-weight: 700; }
-.spt-out { color: var(--red); font-weight: 700; }
+.spt-out { color: var(--accent); font-weight: 700; }
 
 /* Voorrang (★) in chips: hoofdknop = aanwezig/afwezig, ster = voorrang */
 .spt-chip { padding: 0; gap: 0; }

@@ -448,7 +448,7 @@ export default function FieldView({
           <div className="modal">
             <div className="modal-title">
               Positie {showPlayerPicker}
-              <span style={{ color: 'var(--red)', marginLeft: 8, fontSize: 16 }}>
+              <span style={{ color: 'var(--accent)', marginLeft: 8, fontSize: 16 }}>
                 ({positions.find(p => p.key === showPlayerPicker)?.role})
               </span>
             </div>
@@ -546,7 +546,7 @@ export function PositionTimeStats({ sessions, attendances, allPlayers, tick, cat
               return (
                 <tr key={player.id}>
                   <td>
-                    <span style={{ color: 'var(--red)', fontFamily: 'var(--font-display)', fontSize: 14, marginRight: 6 }}>
+                    <span style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)', fontSize: 14, marginRight: 6 }}>
                       {player.number ? `#${player.number}` : '—'}
                     </span>
                     <span style={{ fontWeight: 500 }}>{player.name}</span>

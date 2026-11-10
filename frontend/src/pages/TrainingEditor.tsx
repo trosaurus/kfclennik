@@ -854,7 +854,7 @@ export default function TrainingEditor() {
                         <PowerPointIcon size={14} /> {exportingExerciseId === ex.id ? 'Exporteren...' : 'Exporteer oefening'}
                       </button>
                     </div>
-                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} onClick={() => removeExercise(ex.id)}>🗑️ Verwijderen</button>
+                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => removeExercise(ex.id)}>🗑️ Verwijderen</button>
                   </div>
                 </div>
               )}

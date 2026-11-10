@@ -1,39 +1,38 @@
-// Gedeelde hoofdnavigatie-lijst — gebruikt door zowel Layout (de normale
-// header/mobiele nav) als TrainingsModus (het navigatiemenu daar), zodat er
-// maar één plek is om bij te werken wanneer een rubriek toegevoegd/hernoemd wordt.
-//
-// Wedstrijden/Matchday, Spelers/Seizoen en Trainingen/Oefeningen/Whiteboard zijn elk
-// samengevoegd tot 1 navigatie-item (linkt naar de eerste van de groep) —
-// de onderlinge pagina's zelf blijven gewoon aparte routes, maar krijgen een
-// tabstrip erboven (zie App.tsx's SectionTabs) om tussen elkaar te wisselen.
-// Dat houdt de bottom nav op mobiel bruikbaar (5 items i.p.v. 9).
+// Gedeelde hoofdnavigatie — gebruikt door de zijbalk (Layout) en het menu in
+// de trainingsmodus, zodat er maar één plek is om een rubriek toe te voegen.
+import type { NavIconName } from '../components/icons/NavIcons';
 
 export interface NavItem {
   to: string;
   label: string;
-  icon: string;
-  end?: boolean;
-  /** Speciaal opgemaakt "terug naar de actieve trainingsmodus"-item (Layout.tsx). */
-  resume?: boolean;
-  /** Extra routepaden waaronder dit item ook als actief moet gelden — voor een
-   * samengevoegd item linkt `to` naar de eerste pagina van de groep, maar het
-   * item moet ook actief oplichten wanneer je op een van de andere zit. */
+  icon: NavIconName;
+  /** Extra routepaden waaronder dit item ook als actief moet gelden. */
   activePaths?: string[];
 }
 
-export const NAV_ITEMS: NavItem[] = [
-  { to: '/',           label: 'Start',       icon: '🏠', end: true },
+export interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+export const NAV_GROUPS: NavGroup[] = [
   {
-    to: '/wedstrijden', label: 'Wedstrijden', icon: '⚽',
-    activePaths: ['/wedstrijden', '/matchday', '/match-live'],
+    label: 'Trainen',
+    items: [
+      { to: '/trainingen',    label: 'Trainingen', icon: 'trainingen' },
+      { to: '/oefendatabank', label: 'Oefeningen', icon: 'oefeningen' },
+      { to: '/whiteboard',    label: 'Tekentool',  icon: 'tekentool' },
+      { to: '/tactiek',       label: 'Tactiek',    icon: 'tactiek' },
+    ],
   },
   {
-    to: '/spelers', label: 'Team', icon: '👥',
-    activePaths: ['/spelers', '/seizoen'],
+    label: 'Wedstrijd',
+    items: [
+      { to: '/wedstrijden', label: 'Wedstrijden', icon: 'wedstrijden' },
+      { to: '/spelers',     label: 'Spelers',     icon: 'spelers' },
+    ],
   },
-  {
-    to: '/trainingen', label: 'Trainingen', icon: '📝',
-    activePaths: ['/trainingen', '/oefendatabank', '/whiteboard'],
-  },
-  { to: '/tactiek', label: 'Tactiek', icon: '🧠' },
 ];
+
+/** Platte lijst (zonder groepen) — voor compacte menu's. */
+export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap(g => g.items);

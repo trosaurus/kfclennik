@@ -31,7 +31,7 @@ interface PlayerState {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function Matchday() {
+export default function Matchday({ matchId }: { matchId?: string } = {}) {
   const { teamId, category, trainer } = useTeam();
   const [allMatches, setAllMatches]     = useState<Match[]>([]);
   const [match, setMatch]               = useState<Match | null>(null);
@@ -82,7 +82,7 @@ export default function Matchday() {
 
   // ── Boot ────────────────────────────────────────────────────────────────────
 
-  useEffect(() => { boot(); return stopTimer; }, []);
+  useEffect(() => { boot(); return stopTimer; }, [matchId]);
 
   // Ploeggenoten ophalen om te bepalen of de "Voorkeur"-knop relevant is
   // (enkel zinvol bij 2+ trainers op dezelfde ploeg).
@@ -121,6 +121,14 @@ export default function Matchday() {
       const [matches, players] = await Promise.all([getMatches(tid), getPlayers(tid)]);
       setAllMatches(matches);
       setAllPlayers(players.filter(p => p.active === 'true'));
+      // Ingebed in de wedstrijdflow: altijd de wedstrijd van de flow openen.
+      if (matchId) {
+        const fixed = matches.find(x => x.id === matchId);
+        setNeedsMatchChoice(false);
+        if (fixed) await loadMatch(fixed, players.filter(p => p.active === 'true'));
+        else { setMatch(null); setLoading(false); }
+        return;
+      }
       // Staan er meerdere wedstrijden op dezelfde dag (bv. twee jeugdploegen die
       // samen op verplaatsing gaan)? Dan NIET stilzwijgend de eerste openen —
       // laat de trainer expliciet kiezen welke hij in Matchday wil opstarten.
@@ -750,7 +758,7 @@ export default function Matchday() {
               </button>
             )}
             <button className="btn btn-outline btn-sm" onClick={handleGeneratePDF} title="Opstelling PDF downloaden">📄 PDF</button>
-            <button className="btn btn-outline btn-sm" onClick={() => setMatchPicker(true)}>📋</button>
+            {!matchId && <button className="btn btn-outline btn-sm" onClick={() => setMatchPicker(true)}>📋</button>}
           </div>
         </div>
       </div>
@@ -951,7 +959,7 @@ export default function Matchday() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setSubModal(null)}>
           <div className="modal">
             <div className="modal-title">Wissel</div>
-            <p style={{ color: 'var(--text-dim)', marginBottom: 20, fontFamily: 'var(--font-heading)', fontSize: 13, letterSpacing: 1, textTransform: 'uppercase' }}>
+            <p style={{ color: 'var(--text-dim)', marginBottom: 20, fontFamily: 'var(--font-heading)', fontSize: 13, letterSpacing: 0 }}>
               Vervang <strong style={{ color: 'var(--white)' }}>{subModal.player.name}</strong>
               {isPaused && <span style={{ color: 'var(--yellow)', display: 'block', marginTop: 6, fontSize: 11 }}>⚠ Pauze — invaller start bij volgende kwart</span>}
             </p>
@@ -1199,12 +1207,12 @@ function MatchSummary({ playerStates, sessions, periods, goals, location, onSetM
             </thead>
             <tbody>
               <tr>
-                <td style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 13, letterSpacing: 1, whiteSpace: 'nowrap' }}>KFC Lennik</td>
-                {periods.map(p => <td key={p.id} style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--red)', textAlign: 'center' }}>{p[ownField]}</td>)}
-                <td style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--red)', textAlign: 'center' }}>{totalOwn}</td>
+                <td style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 13, letterSpacing: 0, whiteSpace: 'nowrap' }}>KFC Lennik</td>
+                {periods.map(p => <td key={p.id} style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent)', textAlign: 'center' }}>{p[ownField]}</td>)}
+                <td style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--accent)', textAlign: 'center' }}>{totalOwn}</td>
               </tr>
               <tr>
-                <td style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 13, letterSpacing: 1, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>Tegenstander</td>
+                <td style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 13, letterSpacing: 0, color: 'var(--text-dim)', whiteSpace: 'nowrap' }}>Tegenstander</td>
                 {periods.map(p => <td key={p.id} style={{ fontFamily: 'var(--font-display)', fontSize: 22, textAlign: 'center' }}>{p[oppField]}</td>)}
                 <td style={{ fontFamily: 'var(--font-display)', fontSize: 26, textAlign: 'center' }}>{totalOpp}</td>
               </tr>
@@ -1289,7 +1297,7 @@ function GoalsEditor({ playerStates, goals, onAddGoal, onRemoveGoal }: {
                       </td>
                     );
                   })}
-                  <td style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 20, color: total > 0 ? 'var(--red)' : 'var(--text-dim)' }}>{total}</td>
+                  <td style={{ textAlign: 'center', fontFamily: 'var(--font-display)', fontSize: 20, color: total > 0 ? 'var(--accent)' : 'var(--text-dim)' }}>{total}</td>
                 </tr>
               );
             })}
@@ -1356,7 +1364,7 @@ function PlayerSummaryTable({ playerStates, sessions, periods, goals = [], title
                 : 0;
               return (
                 <tr key={ps.player.id}>
-                  <td style={{ color: 'var(--red)', fontFamily: 'var(--font-display)', fontSize: 16, textAlign: 'right' }}>
+                  <td style={{ color: 'var(--accent)', fontFamily: 'var(--font-display)', fontSize: 16, textAlign: 'right' }}>
                     {ps.player.number ? `#${ps.player.number}` : '—'}
                   </td>
                   <td>
@@ -1409,7 +1417,7 @@ function PlayerSummaryTable({ playerStates, sessions, periods, goals = [], title
                             onClick={() => onSetManualPlaytime(ps.attendance.id, null)} style={{ fontSize: 11 }}>↺</button>
                         )}
                         <span
-                          style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: 1, color: ps.attendance.manualSeconds != null ? 'var(--yellow)' : 'var(--white)' }}
+                          style={{ fontFamily: 'var(--font-display)', fontSize: 20, letterSpacing: 0, color: ps.attendance.manualSeconds != null ? 'var(--yellow)' : 'var(--white)' }}
                           title={ps.attendance.manualSeconds != null ? 'Handmatig ingegeven speeltijd' : undefined}
                         >
                           {formatDuration(ps.totalSeconds)}
@@ -1472,7 +1480,7 @@ function ScoreModal({ match, periods, onSave, onClose }: {
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal-title">Standen per kwart</div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 4, fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 4, fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, letterSpacing: 0, color: 'var(--text-dim)' }}>
           <span style={{ width: 60, textAlign: 'center' }}>KFC Lennik</span>
           <span style={{ width: 16 }} />
           <span style={{ width: 60, textAlign: 'center' }}>{match.opponent}</span>
@@ -1491,9 +1499,9 @@ function ScoreModal({ match, periods, onSave, onClose }: {
             </div>
           </div>
         ))}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, fontFamily: 'var(--font-heading)', fontSize: 12, fontWeight: 700, letterSpacing: 0, color: 'var(--text-dim)' }}>
           <span>Eindstand</span>
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--red)', letterSpacing: 2 }}>{totalOwn} – {totalOpp}</span>
+          <span style={{ fontFamily: 'var(--font-display)', fontSize: 24, color: 'var(--accent)', letterSpacing: 0 }}>{totalOwn} – {totalOpp}</span>
         </div>
         <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-dim)' }}>
           ⓘ Doelpuntenmakers van KFC pas je aan in de tabel "Doelpuntenmakers" — dat past de stand mee aan.
@@ -1849,7 +1857,7 @@ function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignmen
               <div key={pos}>
                 <div className="md-lineup-pos-header">
                   <span className="wb-pos-tag">{POSITION_LABELS[pos] || '??'}</span>
-                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--text-dim)' }}>
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: 11, letterSpacing: 0, color: 'var(--text-dim)' }}>
                     {pos === 'keeper' ? 'Doelman' : pos === 'defender' ? 'Verdediger' : pos === 'midfielder' ? 'Middenvelder' : 'Aanvaller'}
                   </span>
                 </div>
@@ -1938,7 +1946,7 @@ function MatchPicker({ matches, current, onPick, onClose }: {
             <button key={m.id} className={`sub-player-btn ${current?.id === m.id ? 'selected' : ''}`} onClick={() => onPick(m)}>
               <span style={{ fontFamily: 'var(--font-heading)', fontSize: 12, color: 'var(--text-dim)', width: 70 }}>{fmt(m.date)}</span>
               <span className="sub-name">vs. {m.opponent}</span>
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--red)', letterSpacing: 1 }}>{m.scoreHome}–{m.scoreAway}</span>
+              <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, color: 'var(--accent)', letterSpacing: 0 }}>{m.scoreHome}–{m.scoreAway}</span>
             </button>
           ))}</>
         )}

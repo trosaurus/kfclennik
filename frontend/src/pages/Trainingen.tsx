@@ -317,7 +317,7 @@ export default function Trainingen() {
             </p>
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setConfirmDelete(null)}>Annuleer</button>
-              <button className="btn btn-primary" style={{ background: 'var(--red-dark)' }}
+              <button className="btn btn-primary" style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
                 onClick={() => handleDelete(confirmDelete)}>Verwijderen</button>
             </div>
           </div>
