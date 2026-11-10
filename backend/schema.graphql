@@ -319,6 +319,7 @@ type Player {
   name: String
   number: Int
   position: String
+  position2: String
   active: String
   team: Team
   attendances(where: AttendanceWhereInput! = {}, orderBy: [AttendanceOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: AttendanceWhereUniqueInput): [Attendance!]
@@ -341,6 +342,7 @@ input PlayerWhereInput {
   name: StringFilter
   number: IntNullableFilter
   position: StringNullableFilter
+  position2: StringNullableFilter
   active: StringNullableFilter
   team: TeamWhereInput
   attendances: AttendanceManyRelationFilter
@@ -382,6 +384,7 @@ input PlayerOrderByInput {
   name: OrderDirection
   number: OrderDirection
   position: OrderDirection
+  position2: OrderDirection
   active: OrderDirection
 }
 
@@ -389,6 +392,7 @@ input PlayerUpdateInput {
   name: String
   number: Int
   position: String
+  position2: String
   active: String
   team: TeamRelateToOneForUpdateInput
   attendances: AttendanceRelateToManyForUpdateInput
@@ -426,6 +430,7 @@ input PlayerCreateInput {
   name: String
   number: Int
   position: String
+  position2: String
   active: String
   team: TeamRelateToOneForCreateInput
   attendances: AttendanceRelateToManyForCreateInput
@@ -473,6 +478,7 @@ type Match {
   lineupProposalsCount(where: LineupProposalWhereInput! = {}): Int
   matchLineups(where: MatchLineupWhereInput! = {}, orderBy: [MatchLineupOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: MatchLineupWhereUniqueInput): [MatchLineup!]
   matchLineupsCount(where: MatchLineupWhereInput! = {}): Int
+  plannerSettings: String
 }
 
 input MatchWhereUniqueInput {
@@ -501,6 +507,7 @@ input MatchWhereInput {
   evaluations: EvaluationManyRelationFilter
   lineupProposals: LineupProposalManyRelationFilter
   matchLineups: MatchLineupManyRelationFilter
+  plannerSettings: StringFilter
 }
 
 input DateTimeFilter {
@@ -543,6 +550,7 @@ input MatchOrderByInput {
   scoreHome: OrderDirection
   scoreAway: OrderDirection
   matchStartTime: OrderDirection
+  plannerSettings: OrderDirection
 }
 
 input MatchUpdateInput {
@@ -563,6 +571,7 @@ input MatchUpdateInput {
   evaluations: EvaluationRelateToManyForUpdateInput
   lineupProposals: LineupProposalRelateToManyForUpdateInput
   matchLineups: MatchLineupRelateToManyForUpdateInput
+  plannerSettings: String
 }
 
 input PeriodRelateToManyForUpdateInput {
@@ -615,6 +624,7 @@ input MatchCreateInput {
   evaluations: EvaluationRelateToManyForCreateInput
   lineupProposals: LineupProposalRelateToManyForCreateInput
   matchLineups: MatchLineupRelateToManyForCreateInput
+  plannerSettings: String
 }
 
 input PeriodRelateToManyForCreateInput {
@@ -788,6 +798,7 @@ type Attendance {
   match: Match
   present: String
   selected: String
+  rotation: String
   playTimeSessions(where: PlayTimeSessionWhereInput! = {}, orderBy: [PlayTimeSessionOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: PlayTimeSessionWhereUniqueInput): [PlayTimeSession!]
   playTimeSessionsCount(where: PlayTimeSessionWhereInput! = {}): Int
   manualSeconds: Int
@@ -806,6 +817,7 @@ input AttendanceWhereInput {
   match: MatchWhereInput
   present: StringNullableFilter
   selected: StringNullableFilter
+  rotation: StringNullableFilter
   playTimeSessions: PlayTimeSessionManyRelationFilter
   manualSeconds: IntNullableFilter
 }
@@ -820,6 +832,7 @@ input AttendanceOrderByInput {
   id: OrderDirection
   present: OrderDirection
   selected: OrderDirection
+  rotation: OrderDirection
   manualSeconds: OrderDirection
 }
 
@@ -828,6 +841,7 @@ input AttendanceUpdateInput {
   match: MatchRelateToOneForUpdateInput
   present: String
   selected: String
+  rotation: String
   playTimeSessions: PlayTimeSessionRelateToManyForUpdateInput
   manualSeconds: Int
 }
@@ -849,6 +863,7 @@ input AttendanceCreateInput {
   match: MatchRelateToOneForCreateInput
   present: String
   selected: String
+  rotation: String
   playTimeSessions: PlayTimeSessionRelateToManyForCreateInput
   manualSeconds: Int
 }
@@ -1773,6 +1788,7 @@ type Mutation {
   removeTeamManual(teamId: ID!): Team
   upsertMatchLineup(matchId: ID!, period: Int!, assignment: String!, selectedPlayerIds: String!): MatchLineupResult
   upsertLineupProposal(matchId: ID!, period: Int!, assignment: String!): LineupProposalResult
+  savePlannerSettings(matchId: ID!, expected: String!, value: String!): Boolean!
 }
 
 union TrainerAuthenticationWithPasswordResult = TrainerAuthenticationWithPasswordSuccess | TrainerAuthenticationWithPasswordFailure

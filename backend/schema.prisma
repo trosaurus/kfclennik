@@ -49,6 +49,7 @@ model Player {
   name        String       @default("")
   number      Int?
   position    String?
+  position2   String?
   active      String?      @default("true")
   team        Team?        @relation("Player_team", fields: [teamId], references: [id])
   teamId      String?      @map("team")
@@ -80,6 +81,7 @@ model Match {
   evaluations     Evaluation[]     @relation("Evaluation_match")
   lineupProposals LineupProposal[] @relation("LineupProposal_match")
   matchLineups    MatchLineup[]    @relation("MatchLineup_match")
+  plannerSettings String           @default("")
 
   @@index([teamId])
   @@index([weekThemeId])
@@ -120,6 +122,7 @@ model Attendance {
   matchId          String?           @map("match")
   present          String?           @default("false")
   selected         String?           @default("false")
+  rotation         String?           @default("false")
   playTimeSessions PlayTimeSession[] @relation("PlayTimeSession_attendance")
   manualSeconds    Int?
 

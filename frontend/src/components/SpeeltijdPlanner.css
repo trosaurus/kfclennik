@@ -1,0 +1,115 @@
+.spt { display: flex; flex-direction: column; gap: 16px; }
+
+/* Linie-kleuren (zelfde rolkleuren als de grafieken) */
+.spt-l-gk   { --spt-c: var(--chart-role-keeper); }
+.spt-l-def  { --spt-c: var(--chart-role-defender); }
+.spt-l-mid  { --spt-c: var(--chart-role-midfielder); }
+.spt-l-fwd  { --spt-c: var(--chart-role-forward); }
+.spt-l-none { --spt-c: var(--text-dim); }
+
+/* Instellingen */
+.spt-settings { padding: 16px 20px; }
+.spt-settings-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.spt-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.spt-field .input-label { margin-bottom: 0; }
+.spt-counts { display: flex; gap: 6px; }
+.spt-count { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; min-width: 0; }
+.spt-count span { font-family: var(--font-heading); font-size: 11px; font-weight: 700; color: var(--text-dim); }
+.spt-count .input-field { text-align: center; padding-left: 4px; padding-right: 4px; width: 100%; }
+
+.spt-presence { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-soft); }
+.spt-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.spt-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px 4px 4px; border-radius: 999px; min-height: auto;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  color: var(--text); font-size: 13px; cursor: pointer; transition: opacity .12s;
+}
+.spt-chip:hover { border-color: var(--spt-c); }
+.spt-chip-linie {
+  font-family: var(--font-heading); font-size: 10px; font-weight: 700;
+  min-width: 22px; padding: 2px 4px; border-radius: 999px; text-align: center;
+  background: var(--spt-c); color: #fff;
+}
+.spt-chip.absent { opacity: .4; text-decoration: line-through; }
+.spt-hint { font-size: 11px; color: var(--text-dim); margin-top: 8px; }
+
+/* Status */
+.spt-status-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.spt-status { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--text-mid); }
+.spt-status strong { color: var(--text); }
+.spt-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.spt-warnings {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 14px; border-radius: var(--radius);
+  background: rgba(245,197,24,0.12); border: 1px solid rgba(245,197,24,0.4);
+  font-size: 13px; color: var(--text);
+}
+
+/* Tabel */
+.spt-table-wrap { overflow-x: auto; padding: 0; }
+.spt-table { min-width: 100%; }
+.spt-table th, .spt-table td { white-space: nowrap; }
+.spt-col { text-align: center; padding-left: 4px !important; padding-right: 4px !important; }
+.spt-period-start { border-left: 1px solid var(--border); }
+.spt-name { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.spt-tag {
+  display: inline-block; min-width: 26px; padding: 1px 5px; border-radius: 3px; text-align: center;
+  font-family: var(--font-heading); font-size: 10px; font-weight: 700; letter-spacing: .5px;
+  background: var(--spt-c, var(--bg-elevated)); color: #fff;
+}
+.spt-tag:not([class*="spt-l-"]) { color: var(--text-mid); }
+.spt-cell {
+  display: inline-block; min-width: 28px; padding: 3px 4px; border-radius: 3px;
+  font-family: var(--font-heading); font-size: 11px; font-weight: 700;
+  background: color-mix(in srgb, var(--spt-c) 22%, transparent);
+  color: var(--spt-c); border: 1px solid color-mix(in srgb, var(--spt-c) 50%, transparent);
+}
+.spt-cell-bench { color: var(--text-dim); }
+.spt-total { display: flex; align-items: center; gap: 8px; font-family: var(--font-heading); font-weight: 700; }
+.spt-total > span:first-child { min-width: 38px; text-align: right; }
+.spt-bar { display: inline-block; width: 70px; height: 6px; border-radius: 3px; background: var(--bg-elevated); overflow: hidden; }
+.spt-bar > span { display: block; height: 100%; background: var(--red); }
+.spt-absent-note { padding: 10px 14px; font-size: 12px; color: var(--text-dim); border-top: 1px solid var(--border-soft); }
+
+/* Kaarten per blok */
+.spt-blocks { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.spt-block { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.spt-block-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+.spt-block-title { font-family: var(--font-heading); font-size: 14px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.spt-block-time { font-family: var(--font-heading); font-size: 12px; color: var(--text-dim); }
+.spt-block-line { display: flex; align-items: baseline; gap: 8px; font-size: 13px; line-height: 1.4; }
+.spt-block-line .spt-tag { flex-shrink: 0; }
+.spt-block-bench { color: var(--text-mid); }
+.spt-block-subs {
+  margin-top: 4px; padding-top: 8px; border-top: 1px solid var(--border-soft);
+  font-size: 12px; color: var(--text-mid); display: flex; flex-direction: column; gap: 2px;
+}
+.spt-in  { color: var(--green); font-weight: 700; }
+.spt-out { color: var(--red); font-weight: 700; }
+
+/* Voorrang (★) in chips: hoofdknop = aanwezig/afwezig, ster = voorrang */
+.spt-chip { padding: 0; gap: 0; }
+.spt-chip-main, .spt-chip-star {
+  display: inline-flex; align-items: center; gap: 6px; min-height: auto;
+  background: none; border: none; color: inherit; font: inherit; cursor: pointer;
+}
+.spt-chip-main { padding: 4px 6px 4px 4px; }
+.spt-chip-star { padding: 4px 10px 4px 2px; color: var(--text-dim); font-size: 14px; line-height: 1; }
+.spt-chip-star:hover { color: #f5c518; }
+.spt-chip.prio { border-color: #f5c518; }
+.spt-chip.prio .spt-chip-star { color: #f5c518; }
+.spt-chip.absent { opacity: 1; text-decoration: none; }
+.spt-chip.absent .spt-chip-main { opacity: .4; text-decoration: line-through; }
+.spt-star { color: #f5c518; font-size: 13px; }
+
+/* Vastgezette (gespeelde) blokken */
+.spt-lock { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-soft); max-width: 420px; }
+.spt-fixed { background: var(--bg-elevated); }
+.spt-cell-absent { font-size: 10px; color: var(--text-dim); text-decoration: line-through; }
+.spt-block-fixed { opacity: .7; }
+.spt-block-lock { margin-top: 6px; align-self: flex-start; }

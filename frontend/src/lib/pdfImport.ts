@@ -106,6 +106,64 @@ async function extractExerciseDrawingImage(page: any): Promise<string | undefine
   }
 }
 
+/** Labels die niet in hun pil passen breekt PowerPoint af ("HOOFDMOME" / "NT",
+ * "TRAININGSVOORB" / "EREIDING"), en een label met een gekleurd woord erin
+ * ("WAT ZOU JIJ" "BEHOUDEN" "VAN DEZE" / "TRAINING?") komt als losse stukken
+ * terug. Zonder samenvoegen herkent de import zo'n label niet en blijft het veld
+ * leeg; bij de kop "Trainingsvoorbereiding" werd zelfs de hele pagina overgeslagen.
+ * Stukken worden enkel samengevoegd als ze vlak naast of onder elkaar staan én
+ * samen exact een bekend label vormen, zodat gewone invultekst nooit meegaat. */
+function mergeSplitLabels(segs: PosSeg[], labels: string[]): PosSeg[] {
+  const norm = (t: string) => t.toUpperCase().replace(/\s+/g, '');
+  const targets = labels.map(l => ({ label: l, key: norm(l) }));
+  const isPrefix = (t: string) => targets.some(x => x.key.startsWith(t));
+  const ROW_TOL = 2;      // zelfde regel
+  const ROW_GAP = 12;     // max. horizontale afstand tussen stukken op één regel
+  const LINE_GAP = 40;    // max. regelafstand (groot lettertype van de kop ≈ 34pt)
+  const X_SLACK = 45;     // een afgebroken regel staat gecentreerd onder de eerste
+
+  const ordered = [...segs].sort((a, b) => (b.y - a.y) || (a.xStart - b.xStart));
+  const used = new Set<PosSeg>();
+  const merged: PosSeg[] = [];
+  for (const first of ordered) {
+    if (used.has(first)) continue;
+    const firstKey = norm(first.text);
+    if (targets.some(x => x.key === firstKey) || !isPrefix(firstKey)) continue;
+
+    const group = [first];
+    let key = firstKey;
+    let xEnd = first.xEnd;
+    for (;;) {
+      const last = group[group.length - 1];
+      const fits = (c: PosSeg) => !used.has(c) && !group.includes(c) && isPrefix(key + norm(c.text));
+      const sameRow = ordered.find(c => fits(c) && Math.abs(c.y - last.y) <= ROW_TOL
+        && c.xStart >= last.xEnd - 1 && c.xStart - last.xEnd <= ROW_GAP);
+      const nextLine = ordered
+        .filter(c => fits(c) && last.y - c.y > ROW_TOL && last.y - c.y <= LINE_GAP
+          && c.xStart >= first.xStart - X_SLACK && c.xStart <= xEnd)
+        .sort((a, b) => b.y - a.y)[0];
+      const next = sameRow ?? nextLine;
+      if (!next) break;
+      group.push(next);
+      key += norm(next.text);
+      xEnd = Math.max(xEnd, next.xEnd);
+    }
+    const target = targets.find(x => x.key === key);
+    if (!target || group.length < 2) continue;
+    group.forEach(g => used.add(g));
+    const ys = group.map(g => g.y);
+    merged.push({
+      text: target.label,
+      xStart: Math.min(...group.map(g => g.xStart)),
+      xEnd,
+      // Midden van het label: zo staat het even hoog als een waarde ernaast,
+      // net zoals een label dat op één regel past.
+      y: (Math.max(...ys) + Math.min(...ys)) / 2,
+    });
+  }
+  return [...segs.filter(x => !used.has(x)), ...merged];
+}
+
 interface PdfPage { segs: PosSeg[]; page: any; }
 
 async function extractPdfPages(file: File): Promise<PdfPage[]> {
@@ -119,7 +177,7 @@ async function extractPdfPages(file: File): Promise<PdfPage[]> {
     const items: RawItem[] = (content.items as any[])
       .filter(it => typeof it.str === 'string' && it.str.trim() !== '')
       .map(it => ({ str: it.str as string, x: it.transform[4], y: it.transform[5], w: it.width as number }));
-    pages.push({ segs: reconstructPageSegments(items), page });
+    pages.push({ segs: mergeSplitLabels(reconstructPageSegments(items), ALL_LABELS), page });
   }
   return pages;
 }
@@ -175,20 +233,27 @@ function assignFieldsSpatial<K extends string>(
   // tussen het vette labellettertype en het gewone waardelettertype — vandaar
   // een iets ruimere marge dan de louter positionele afronding zou vereisen.
   const Y_TOL = 4;
-  const ROW_BAND = 10;
+  // Een label naast zijn waarde kan tot ±5pt lager uitkomen (gemeten in de
+  // export van 19/10); de afstand tot een volgend veld is altijd ruim groter.
+  const LABEL_BELOW_TOL = 6;
+  const SIDE_GAP = 150; // label-pil links, waarde-pil rechts ernaast (±90-130pt)
   const buckets = new Map<K, PosSeg[]>();
   for (const v of values) {
     const candidates = anchors
-      .filter(a => a.y >= v.y - Y_TOL) // anker moet op- of naast de waarde staan, nooit eronder
+      .filter(a => a.y >= v.y - LABEL_BELOW_TOL) // anker moet op- of naast de waarde staan, nooit eronder
       .map(a => ({
         a,
         yGap: Math.max(0, a.y - v.y), // nooit "beter dan dezelfde rij" belonen
         xGap: Math.max(a.xStart - v.xEnd, v.xStart - a.xEnd, 0),
       }));
     if (candidates.length === 0) continue;
-    const minYGap = Math.min(...candidates.map(c => c.yGap));
-    const nearRow = candidates.filter(c => c.yGap <= minYGap + ROW_BAND);
-    const best = nearRow.reduce((b, c) => (c.xGap < b.xGap ? c : b), nearRow[0]).a;
+    // Horizontale afstand telt pas mee voorbij de normale afstand tussen een label
+    // en de waarde ernaast; daarna weegt elk punt even zwaar als een punt hoger.
+    // Zo springt de laatste regel van een vak in de rechterkolom niet naar een
+    // label in de linkerkolom dat toevallig op dezelfde hoogte staat.
+    const score = (c: typeof candidates[number]) => c.yGap + Math.max(0, c.xGap - SIDE_GAP);
+    const best = candidates.reduce((b, c) =>
+      score(c) < score(b) || (score(c) === score(b) && c.xGap < b.xGap) ? c : b, candidates[0]).a;
     if (!buckets.has(best.key)) buckets.set(best.key, []);
     buckets.get(best.key)!.push(v);
   }
@@ -257,6 +322,11 @@ const EXERCISE_LABELS: Record<string, ExerciseFieldKey> = {
   'FUN': 'fun',
 };
 
+/** Alle vaste labels en koppen uit het sjabloon (voor mergeSplitLabels). */
+const ALL_LABELS = [
+  ...Object.keys(TRAINING_LABELS), ...Object.keys(EXERCISE_LABELS), ...NON_FIELD_HEADERS, 'TEKENING OEFENING',
+];
+
 export interface ParsedExercise {
   fase: ExerciseFase;
   naam: string;
@@ -272,63 +342,53 @@ export interface ParsedExercise {
   drawingImage?: string;
 }
 
-/** De fase én de naam staan samen in de grote groene bannertitel bovenaan de
- * pagina — het scheidingsteken verschilt per sjabloon-versie: een dubbele punt
- * ("OPWARMING: MULTISKILLZ - POORTJES & TIKKERS") of een liggend streepje
- * ("Opwarming – Kriskras coördinatie met bal"). Soms staat er ook nog een
- * volgnummer en/of "/ Slotvorm"-kwalificatie tussen de fase en het echte
- * scheidingsteken ("Wedstrijdvorm 2 / Slotvorm – 8 tegen 8, ..."). Om dat
- * betrouwbaar te knippen zoeken we het LAATSTE ":" of "–" op de regel op —
- * nooit een gewoon koppelteken "-", want dat komt ook vaak gewoon in de naam
- * zelf voor (bv. "1-2", "B- coachen") en zou de knip verkeerd laten vallen.
+/** Vaste instructietekst die in het sjabloon achter de titelbanner zit: "KIES JE
+ * TEKENFIGUUR EN VUL HIER HET TRAININGSONDERDEEL IN (OPWARMING, WEDSTRIJDVORM,
+ * TUSSENVORM, COOLING DOWN)". In de PDF staat ze over twee regels, net boven en
+ * net onder de echte titel, en bij sommige exports zelfs in hetzelfde fragment. */
+const INSTRUCTION_PARTS = [
+  /KIES JE TEKENFIGUUR EN VUL HIER HET TRAININGSONDERDEEL IN\s*\(?\s*(OPWARMING\s*,?)?/gi,
+  /(OPWARMING\s*,\s*)?WEDSTRIJDVORM\s*,\s*TUSSENVORM\s*,\s*COOLING\s*DOWN\s*\)/gi,
+];
+const FASE_WORD = /(OPWARMING|TUSSENVORM|WEDSTRIJDVORM|COOLING\s*DOWN)/i;
+
+/** De titel bovenaan de oefeningpagina, letterlijk zoals op de slide (bv.
+ * "OPWARMING – MULTIMOVE: TIKSPEL & REACTIEDUEL" of "STATION 1 – SCHAKELVORM
+ * 3v3"): alle tekst boven het label "Organisatie oefening", min de verborgen
+ * instructietekst. De fase komt uit het eerste fasewoord in die titel; zonder
+ * fasewoord (bv. "STATION 2 – …") is er geen fase en kiest de aanroeper zelf.
  *
- * De vaste instructietekst bovenaan elke oefeningpagina ("KIES JE TEKENFIGUUR
- * EN VUL HIER HET TRAININGSONDERDEEL IN (OPWARMING, WEDSTRIJDVORM,
- * TUSSENVORM, COOLING DOWN)") staat in sommige PDF-exports (bv. via
- * PowerPoint's eigen "Opslaan als PDF") zo dicht bij de echte banner dat ze
- * tot één tekstfragment worden samengevoegd, mét alle vier fasewoorden erin.
- * Daarom nemen we niet het EERSTE fasewoord in de (samengevoegde) regel, maar
- * het LAATSTE — dat is altijd het echte banner-fasewoord, want de
- * instructietekst met haar opsomming komt er altijd vóór. */
-function detectFaseAndNaamFromBanner(segs: PosSeg[]): { fase: ExerciseFase | null; naam: string | null } {
-  const FASE_WORD = /(OPWARMING|TUSSENVORM|WEDSTRIJDVORM|COOLING\s*DOWN)/gi;
-  const candidates = segs.filter(s => FASE_WORD.test(s.text));
-  FASE_WORD.lastIndex = 0;
-  if (candidates.length === 0) return { fase: null, naam: null };
-  const anchor = candidates.reduce((a, b) => (b.y > a.y ? b : a));
+ * Vroeger werd de bovenste regel met een fasewoord genomen, maar dat is de
+ * instructietekst — elke oefening werd daardoor "Opwarming". */
+function detectBanner(segs: PosSeg[]): { fase: ExerciseFase | null; naam: string | null } {
+  const orgAnchor = segs.find(s => s.text.trim().toUpperCase() === 'ORGANISATIE OEFENING');
+  if (!orgAnchor) return { fase: null, naam: null };
 
-  // Het lettertype/de opmaak van de banner (bv. vet "OPWARMING:" gevolgd door
-  // niet-vette naam) kan ervoor zorgen dat pdf.js dit als twee aparte
-  // tekstfragmenten teruggeeft i.p.v. één samengevoegd fragment — dus herbouwen
-  // we de volledige regel uit alle fragmenten op dezelfde rij (y-hoogte),
-  // ongeacht hoe reconstructPageSegments ze al dan niet had samengevoegd.
   const Y_TOL = 2;
-  const fullLine = segs
-    .filter(s => Math.abs(s.y - anchor.y) <= Y_TOL)
-    .sort((a, b) => a.xStart - b.xStart)
-    .map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
-
-  const faseMatches = [...fullLine.matchAll(FASE_WORD)];
-  if (faseMatches.length === 0) return { fase: null, naam: null };
-  const lastMatch = faseMatches[faseMatches.length - 1];
-  const bannerPart = fullLine.slice(lastMatch.index!);
-
-  let fase: ExerciseFase | null = null;
-  if (/^opwarming/i.test(lastMatch[0])) fase = 'opwarming';
-  else if (/^tussenvorm/i.test(lastMatch[0])) fase = 'tussenvorm';
-  else if (/^wedstrijdvorm/i.test(lastMatch[0])) fase = 'wedstrijdvorm';
-  else if (/^cooling/i.test(lastMatch[0])) fase = 'cooling_down';
-
-  let naam: string | null = null;
-  const lastSepIdx = Math.max(bannerPart.lastIndexOf(':'), bannerPart.lastIndexOf('–'));
-  if (lastSepIdx !== -1) {
-    naam = bannerPart.slice(lastSepIdx + 1).trim() || null;
-  } else {
-    // Geen scheidingsteken teruggevonden (bv. gewoon "Cooling down" zonder
-    // extra titel) — dan is er geen aparte naam, de aanroeper valt terug op
-    // de fase zelf.
-    naam = null;
+  const above = segs.filter(s => s.y > orgAnchor.y + Y_TOL).sort((a, b) => (b.y - a.y) || (a.xStart - b.xStart));
+  const rows: PosSeg[][] = [];
+  for (const seg of above) {
+    const row = rows.find(r => Math.abs(r[0].y - seg.y) <= Y_TOL);
+    if (row) row.push(seg); else rows.push([seg]);
   }
+  const naam = rows
+    .map(r => INSTRUCTION_PARTS.reduce(
+      (t, re) => t.replace(re, ' '),
+      [...r].sort((a, b) => a.xStart - b.xStart).map(x => x.text).join(' '),
+    ))
+    .map(t => t.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/^[•·▪◦\-–\s]+/, '') // opsommingsteken vóór de titel
+    || null;
+
+  const word = naam?.match(FASE_WORD)?.[0].toUpperCase().replace(/\s+/g, ' ');
+  const fase: ExerciseFase | null =
+    word === 'OPWARMING' ? 'opwarming'
+    : word === 'TUSSENVORM' ? 'tussenvorm'
+    : word === 'WEDSTRIJDVORM' ? 'wedstrijdvorm'
+    : word === 'COOLING DOWN' ? 'cooling_down'
+    : null;
   return { fase, naam };
 }
 
@@ -340,8 +400,25 @@ function detectFaseAndNaamFromBanner(segs: PosSeg[]): { fase: ExerciseFase | nul
  * (links/rechts) is de grootste horizontale kloof tussen waardefragmenten, de
  * rij (boven/onder) is de grootste verticale kloof — dat blijft correct
  * ongeacht hoeveel regels een veld inneemt of wat de tekst zelf zegt. */
-function parseOrganisatieGrid(segs: PosSeg[]): { spelers: string; duurMinuten: number; afmetingen: string; materiaal: string } {
-  const fallback = { spelers: '', duurMinuten: 10, afmetingen: '', materiaal: '' };
+/** Duur-pil → minuten. "15'" = 15, "3×15' + 2'" = 47 (blokken × minuten plus de
+ * rest). De blokken worden apart teruggegeven: volgen die stations nadien als
+ * eigen oefeningen, dan telt parseTrainingPdf ze niet dubbel. */
+interface Duur { minuten: number; blokken: { aantal: number; minuten: number }[]; rest: number }
+function parseDuur(text: string): Duur {
+  const blokken: Duur['blokken'] = [];
+  let rest = 0;
+  for (const term of text.split('+')) {
+    const blok = term.match(/(\d+)\s*[×x*]\s*(\d+)/i);
+    if (blok) { blokken.push({ aantal: parseInt(blok[1], 10), minuten: parseInt(blok[2], 10) }); continue; }
+    const getal = term.match(/\d+/);
+    if (getal) rest += parseInt(getal[0], 10);
+  }
+  const minuten = blokken.reduce((sum, b) => sum + b.aantal * b.minuten, 0) + rest;
+  return { minuten: minuten || 10, blokken, rest };
+}
+
+function parseOrganisatieGrid(segs: PosSeg[]): { spelers: string; duur: Duur; afmetingen: string; materiaal: string } {
+  const fallback = { spelers: '', duur: parseDuur(''), afmetingen: '', materiaal: '' };
   const up = (s: string) => s.trim().toUpperCase();
   const orgAnchor = segs.find(s => up(s.text) === 'ORGANISATIE OEFENING');
   if (!orgAnchor) return fallback;
@@ -395,30 +472,27 @@ function parseOrganisatieGrid(segs: PosSeg[]): { spelers: string; duurMinuten: n
   const afmetingen = joinReadingOrder(leftRows.bottom);
   const duurText = joinReadingOrder(rightRows.top);
   const materiaal = joinReadingOrder(rightRows.bottom);
-  const durMatch = duurText.match(/\d+/);
-  const duurMinuten = durMatch ? parseInt(durMatch[0], 10) : 10;
-
-  return { spelers, duurMinuten, afmetingen, materiaal };
+  return { spelers, duur: parseDuur(duurText), afmetingen, materiaal };
 }
 
-async function parseExercisePage(segs: PosSeg[], page: any): Promise<ParsedExercise> {
+async function parseExercisePage(segs: PosSeg[], page: any): Promise<{ exercise: ParsedExercise; duur: Duur }> {
   const fields = assignFieldsSpatial(segs, EXERCISE_LABELS);
   const {
-    spelers: organisatieSpelers, duurMinuten, afmetingen: organisatieAfmetingen, materiaal: organisatieMateriaal,
+    spelers: organisatieSpelers, duur, afmetingen: organisatieAfmetingen, materiaal: organisatieMateriaal,
   } = parseOrganisatieGrid(segs);
+  const duurMinuten = duur.minuten;
 
   const beschrijving = (fields.beschrijving ?? '')
     .split('\n').map(l => l.trim().replace(/^[•\-]\s*/, '')).filter(Boolean).join('\n').trim();
 
-  const { fase: bannerFase, naam: bannerNaam } = detectFaseAndNaamFromBanner(segs);
+  const { fase: bannerFase, naam: bannerNaam } = detectBanner(segs);
   const fase: ExerciseFase = bannerFase ?? 'tussenvorm';
-  // Zonder aparte naam (bv. banner is gewoon "Cooling down") valt terug op de
-  // fase zelf i.p.v. een nietszeggende placeholder — enkel als zelfs de fase
-  // niet herkend werd, is er echt niets bruikbaars en blijft de placeholder over.
+  // De naam is de volledige titel van de slide. Enkel zonder leesbare titel valt
+  // hij terug op de fase, of op een placeholder als zelfs die ontbreekt.
   const naam = bannerNaam ?? (bannerFase ? EXERCISE_FASE_LABELS[bannerFase] : 'Geïmporteerde oefening');
   const drawingImage = await extractExerciseDrawingImage(page);
 
-  return {
+  return { duur, exercise: {
     fase, naam, duurMinuten,
     organisatieSpelers, organisatieAfmetingen, organisatieMateriaal,
     beschrijving,
@@ -426,7 +500,7 @@ async function parseExercisePage(segs: PosSeg[], page: any): Promise<ParsedExerc
     maximaalActief: fields.maximaalActief ?? '',
     fun: fields.fun ?? '',
     drawingImage,
-  };
+  } };
 }
 
 export interface ParsedTrainingPdf {
@@ -456,6 +530,7 @@ export async function parseTrainingPdf(file: File): Promise<ParsedTrainingPdf> {
   const pages = await extractPdfPages(file);
   let fields: Partial<Record<TrainingFieldKey, string>> = {};
   const exercises: ParsedExercise[] = [];
+  const durations: Duur[] = [];
 
   for (let idx = 0; idx < pages.length; idx++) {
     const { segs, page } = pages[idx];
@@ -469,9 +544,24 @@ export async function parseTrainingPdf(file: File): Promise<ParsedTrainingPdf> {
       // in het eerste veld van de volgende pagina.
       fields = { ...fields, ...assignFieldsSpatial(segs, TRAINING_LABELS) };
     } else if (hasOrganisatie) {
-      exercises.push(await parseExercisePage(segs, page));
+      const { exercise, duur } = await parseExercisePage(segs, page);
+      exercises.push(exercise);
+      durations.push(duur);
     }
   }
+
+  // Overzichtsslide ("3 stations van 15'", duur "3×15' + 2'") gevolgd door die
+  // stations als eigen oefeningen: de stationstijd zit dan al in die oefeningen,
+  // dus houdt het overzicht enkel de rest (de wisseltijd) — anders telt de
+  // trainingsduur de stations dubbel.
+  durations.forEach((d, i) => {
+    if (d.blokken.length !== 1) return;
+    const { aantal, minuten } = d.blokken[0];
+    const volgende = exercises.slice(i + 1, i + 1 + aantal);
+    if (volgende.length === aantal && volgende.every(e => e.duurMinuten === minuten)) {
+      exercises[i].duurMinuten = d.rest;
+    }
+  });
 
   if (fields.speluitdagingWanneer && looksLikeDate(fields.speluitdagingWanneer)) {
     delete fields.speluitdagingWanneer;

@@ -5,6 +5,7 @@ import SectionTabs from './components/SectionTabs';
 import Login from './pages/Login';
 import Home from './pages/Home';
 import Matchday from './pages/Matchday';
+import SchemaMatchday from './pages/SchemaMatchday';
 import SpelerBeheer from './pages/SpelerBeheer';
 import WedstrijdBeheer from './pages/WedstrijdBeheer';
 import Seizoen from './pages/Seizoen';
@@ -34,15 +35,22 @@ function AppRoutes() {
       <Route path="/trainingen/:id/modus" element={<TrainingsModus />} />
       <Route element={<Layout />}>
         <Route index element={<Home />} />
-        <Route path="/matchday"    element={<Matchday />} />
+
+        <Route element={<SectionTabs tabs={[
+          { to: '/wedstrijden', label: 'Wedstrijden', icon: '📋' },
+          { to: '/matchday',    label: 'Matchday',    icon: '⚽' },
+          { to: '/match-live',  label: 'Match live',  icon: '🔴' },
+        ]} />}>
+          <Route path="/wedstrijden" element={<WedstrijdBeheer />} />
+          <Route path="/matchday"    element={<Matchday />} />
+          <Route path="/match-live"  element={<SchemaMatchday />} />
+        </Route>
 
         <Route element={<SectionTabs tabs={[
           { to: '/spelers',     label: 'Spelers',     icon: '👥' },
-          { to: '/wedstrijden', label: 'Wedstrijden', icon: '📋' },
           { to: '/seizoen',     label: 'Seizoen',      icon: '📈' },
         ]} />}>
           <Route path="/spelers"     element={<SpelerBeheer />} />
-          <Route path="/wedstrijden" element={<WedstrijdBeheer />} />
           <Route path="/seizoen"     element={<Seizoen />} />
         </Route>
 
@@ -59,6 +67,7 @@ function AppRoutes() {
         <Route path="/trainingen/:id" element={<TrainingEditor />} />
         <Route path="/tactiek"        element={<Tactiek />} />
         <Route path="/admin"       element={trainer.role === 'admin' ? <Admin /> : <Navigate to="/" replace />} />
+        <Route path="/schema"      element={<Navigate to="/match-live" replace />} />
         <Route path="/matches"     element={<Navigate to="/wedstrijden" replace />} />
         <Route path="/matches/:id" element={<Navigate to="/wedstrijden" replace />} />
         <Route path="/profiel"     element={<Navigate to="/spelers" replace />} />

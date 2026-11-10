@@ -133,9 +133,11 @@ async function addExerciseSlide(pres: Automizer, ex: ExportExercise): Promise<vo
   const pngBuffer = await renderDrawingPng(scene);
   const pngDataUri = `data:image/png;base64,${pngBuffer.toString('base64')}`;
   const faseLabel = FASE_LABELS[ex.fase] ?? ex.fase.toUpperCase();
-  // Banner-formaat "<FASE>: <naam>" — zelfde formaat als de echte KFC-template
-  // (zie ook detectFaseAndNaamFromBanner in frontend/src/lib/pdfImport.ts).
-  const banner = `${faseLabel}: ${ex.naam || 'Oefening'}`;
+  // Banner-formaat "<FASE>: <naam>" — zelfde formaat als de echte KFC-template.
+  // Een uit PDF geïmporteerde naam is al de volledige slidetitel (zie detectBanner
+  // in frontend/src/lib/pdfImport.ts); staat de fase er al in, dan niet dubbel.
+  const naam = ex.naam || 'Oefening';
+  const banner = naam.toUpperCase().includes(faseLabel) ? naam : `${faseLabel}: ${naam}`;
 
   pres.addSlide('tpl', 3, slide => {
     set(slide, EXERCISE_SHAPES.beschrijving, ex.beschrijving);

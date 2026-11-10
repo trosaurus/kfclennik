@@ -3,7 +3,7 @@ import { useRef } from 'react';
 import { useTeam } from '../lib/TeamContext';
 import {
   getMatches, createMatch, updateMatch, deleteMatch,
-  getPlayers, getAttendancesForMatch, setAttendance,
+  getPlayers, getAttendancesForMatch, setAttendance, getRotations, RotationEntry,
   getPlayTimeSessionsForMatch, PlayTimeSession,
   getWeekThemes, createWeekTheme, getEvaluationsForMatch, setEvaluation,
   getTeams, Team,
@@ -12,6 +12,8 @@ import {
   POSITION_LABELS, POSITION_FULL, THEME_CATEGORY_LABELS,
 } from '../lib/api';
 import { getJaarplanWeekForDate, formatJaarplanLabel } from '../lib/jaarplan';
+import SpeeltijdPlanner from '../components/SpeeltijdPlanner';
+import { usePlannerSettings } from '../lib/usePlannerSettings';
 import { format } from 'date-fns';
 import { nl } from 'date-fns/locale';
 import './WedstrijdBeheer.css';
@@ -23,7 +25,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
 };
 
 type View = 'list' | 'detail';
-type DetailTab = 'selectie' | 'evaluatie';
+type DetailTab = 'selectie' | 'wisselschema' | 'evaluatie';
 
 export default function WedstrijdBeheer() {
   const { teamId } = useTeam();
@@ -44,11 +46,19 @@ export default function WedstrijdBeheer() {
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null);
   const [attendances, setAttendances] = useState<Attendance[]>([]);
   const [attLoading, setAttLoading] = useState(false);
+  // Alle beurtrollen van de ploeg (over alle wedstrijden), om eerlijk te kunnen rouleren.
+  const [rotations, setRotations] = useState<RotationEntry[]>([]);
+  const [showRotationOverview, setShowRotationOverview] = useState(false);
   const [playerSearch, setPlayerSearch] = useState('');
+  // Centrale as hoort bij het wisselschema van de wedstrijd; enkel nodig op de Selectie-tab.
+  const { settings: plannerSettings, update: updatePlanner } = usePlannerSettings(
+    view !== 'list' && detailTab === 'selectie' ? selectedMatch?.id ?? null : null,
+    selectedMatch?.team?.category,
+  );
   const [editMatchForm, setEditMatchForm] = useState({ opponent: '', date: '', location: 'home', status: 'planned', scoreHome: '0', scoreAway: '0', teamId: '' });
   const [editingMatch, setEditingMatch] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Match | null>(null);
-  const [importResult, setImportResult] = useState<{ rows: Match[]; errors: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ rows: Match[]; updated: Match[]; errors: string[] } | null>(null);
   const [importing, setImporting]       = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -64,7 +74,8 @@ export default function WedstrijdBeheer() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [m, p, th, tms] = await Promise.all([getMatches(teamId ?? undefined), getPlayers(teamId ?? undefined), getWeekThemes(true), getTeams()]);
+      const [m, p, th, tms, rot] = await Promise.all([getMatches(teamId ?? undefined), getPlayers(teamId ?? undefined), getWeekThemes(true), getTeams(), getRotations(teamId ?? undefined)]);
+      setRotations(rot);
       setMatches(m);
       setPlayers(p.filter(pl => pl.active === 'true'));
       setWeekThemes(th);
@@ -203,12 +214,27 @@ export default function WedstrijdBeheer() {
     const isSelected = att?.selected === 'true';
     await setAttendance(selectedMatch.id, player.id, true, !isSelected);
     await refreshAttendances();
+    if (att?.rotation === 'true') setRotations(await getRotations(teamId ?? undefined));
+  }
+
+  /** Beurtrol aan/uit: niet geselecteerd omwille van een beurtrol (i.p.v. afwezig). */
+  async function toggleRotation(player: Player) {
+    if (!selectedMatch) return;
+    const on = !isRotation(player.id);
+    await setAttendance(selectedMatch.id, player.id, true, false, on);
+    const [att, rot] = await Promise.all([getAttendancesForMatch(selectedMatch.id), getRotations(teamId ?? undefined)]);
+    setAttendances(att);
+    setRotations(rot);
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   function isSelected(playerId: string) {
     return attendances.find(a => a.player.id === playerId)?.selected === 'true';
+  }
+
+  function isRotation(playerId: string) {
+    return attendances.find(a => a.player.id === playerId)?.rotation === 'true';
   }
 
   function fmtDate(iso: string) {
@@ -223,6 +249,26 @@ export default function WedstrijdBeheer() {
 
   const displayed = matches.filter(m => statusFilter === 'all' || m.status === statusFilter);
   const selectedCount = attendances.filter(a => a.selected === 'true').length;
+  const toggleCentral = (id: string) => updatePlanner(s => ({
+    ...s, central: s.central.includes(id) ? s.central.filter(x => x !== id) : [...s.central, id],
+  }));
+
+  // ── Beurtrol ──
+  // Teller + laatste beurtrol per speler over alle wedstrijden (rotations is chronologisch).
+  const rotationStats = new Map<string, { count: number; last: RotationEntry['match'] }>();
+  for (const r of rotations) {
+    rotationStats.set(r.playerId, { count: (rotationStats.get(r.playerId)?.count ?? 0) + 1, last: r.match });
+  }
+  const rotationCount = (id: string) => rotationStats.get(id)?.count ?? 0;
+  const rotationAttendances = attendances.filter(a => a.rotation === 'true' && a.selected !== 'true');
+  // Volgorde "aan de beurt": minste beurtrollen eerst, bij gelijkstand wie het langst geleden (of nooit) was.
+  const lastRotationTime = (id: string) => {
+    const last = rotationStats.get(id)?.last;
+    return last ? new Date(last.date).getTime() : -Infinity;
+  };
+  const rotationOrder = [...players].sort((a, b) =>
+    rotationCount(a.id) - rotationCount(b.id) || lastRotationTime(a.id) - lastRotationTime(b.id) || a.name.localeCompare(b.name));
+  const minRotations = players.length ? Math.min(...players.map(p => rotationCount(p.id))) : 0;
   const filteredPlayers = players.filter(p => p.name.toLowerCase().includes(playerSearch.toLowerCase()));
 
   // Spelers die "speelden": geselecteerd voor de wedstrijd, of hebben speeltijd geregistreerd
@@ -252,7 +298,11 @@ export default function WedstrijdBeheer() {
     if (!file) return;
     setImporting(true);
     try {
-      const result = await importMatchesCSV(file, (m) => createMatch({ ...m, teamId: teamId ?? undefined }));
+      const result = await importMatchesCSV(file, {
+        existing: matches,
+        create: m => createMatch({ ...m, teamId: teamId ?? undefined }),
+        update: (id, m) => updateMatch(id, m),
+      });
       setImportResult(result);
       await loadAll();
     } finally {
@@ -365,7 +415,10 @@ export default function WedstrijdBeheer() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setImportResult(null)}>
           <div className="modal">
             <div className="modal-title">CSV import resultaat</div>
-            <p style={{ color: 'var(--green)', marginBottom: 8 }}>✓ {importResult.rows.length} wedstrijd{importResult.rows.length !== 1 ? 'en' : ''} geïmporteerd</p>
+            <p style={{ color: 'var(--green)', marginBottom: 8 }}>
+              ✓ {importResult.rows.length} nieuwe wedstrijd{importResult.rows.length !== 1 ? 'en' : ''} toegevoegd
+              {importResult.updated.length > 0 && <>, {importResult.updated.length} bestaande bijgewerkt</>}
+            </p>
             {importResult.errors.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <p style={{ color: 'var(--red)', marginBottom: 6, fontFamily: 'var(--font-heading)', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' }}>
@@ -489,6 +542,9 @@ export default function WedstrijdBeheer() {
         <button className={`wb-tab ${detailTab === 'selectie' ? 'active' : ''}`} onClick={() => setDetailTab('selectie')}>
           ⚽ Selectie
         </button>
+        <button className={`wb-tab ${detailTab === 'wisselschema' ? 'active' : ''}`} onClick={() => setDetailTab('wisselschema')}>
+          ⏱ Wisselschema
+        </button>
         <button className={`wb-tab ${detailTab === 'evaluatie' ? 'active' : ''}`} onClick={() => setDetailTab('evaluatie')}>
           🎯 Evaluatie{evaluations.length > 0 ? ` (${evaluations.length})` : ''}
         </button>
@@ -522,16 +578,26 @@ export default function WedstrijdBeheer() {
                   </div>
                   {byPos[pos].map(p => {
                     const sel = isSelected(p.id);
+                    const rot = isRotation(p.id);
+                    const rc = rotationCount(p.id);
                     return (
-                      <button
-                        key={p.id}
-                        className={`wb-player-btn ${sel ? 'selected' : ''}`}
-                        onClick={() => toggleSelected(p)}
-                      >
-                        <span className="wb-player-num">{p.number ? `#${p.number}` : '—'}</span>
-                        <span className="wb-player-name">{p.name}</span>
-                        <span className="wb-player-check">{sel ? '✓' : '+'}</span>
-                      </button>
+                      <div key={p.id} className={`wb-player-row ${sel ? 'selected' : ''} ${rot ? 'rotation' : ''}`}>
+                        <button className={`wb-player-btn ${sel ? 'selected' : ''}`} onClick={() => toggleSelected(p)}>
+                          <span className="wb-player-num">{p.number ? `#${p.number}` : '—'}</span>
+                          <span className="wb-player-name">{p.name}</span>
+                          {rc > 0 && (
+                            <span className="wb-rot-count" title={`${rc}× niet geselecteerd wegens beurtrol`}>🔄 {rc}</span>
+                          )}
+                          <span className="wb-player-check">{sel ? '✓' : '+'}</span>
+                        </button>
+                        {!sel && (
+                          <button className={`wb-rot-btn ${rot ? 'active' : ''}`} onClick={() => toggleRotation(p)}
+                            aria-pressed={rot}
+                            title={rot ? 'Beurtrol — klik om op te heffen' : 'Niet geselecteerd wegens beurtrol'}>
+                            🔄
+                          </button>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -563,6 +629,12 @@ export default function WedstrijdBeheer() {
                     {a.player.position && (
                       <span className="tag tag-black" style={{ fontSize: 10 }}>{POSITION_LABELS[a.player.position]}</span>
                     )}
+                    <button type="button" className={`wb-axis-btn ${plannerSettings.central.includes(a.player.id) ? 'active' : ''}`}
+                      onClick={() => toggleCentral(a.player.id)}
+                      aria-pressed={plannerSettings.central.includes(a.player.id)}
+                      title="Centrale as: staat altijd op 3, 6 of 9">
+                      ◆ As
+                    </button>
                     <button className="wb-sel-remove" onClick={() => toggleSelected(a.player)} title="Verwijder uit selectie">✕</button>
                   </div>
                 ))}
@@ -573,8 +645,70 @@ export default function WedstrijdBeheer() {
               {selectedCount} speler{selectedCount !== 1 ? 's' : ''} geselecteerd
             </div>
           )}
+
+          {/* ── Beurtrol voor deze wedstrijd ── */}
+          <div className="wb-rot-section">
+            <div className="wb-panel-header">
+              <span className="wb-panel-title">Beurtrol</span>
+              <span className="wb-rot-badge">{rotationAttendances.length}</span>
+            </div>
+            {rotationAttendances.length === 0 ? (
+              <div className="wb-rot-empty">Niemand rust deze wedstrijd. Tik 🔄 naast een speler die niet geselecteerd wordt omwille van een beurtrol.</div>
+            ) : (
+              <div className="wb-sel-list">
+                {rotationAttendances
+                  .sort((a, b) => (a.player.number ?? 99) - (b.player.number ?? 99))
+                  .map(a => (
+                    <div key={a.id} className="wb-sel-row">
+                      <span className="wb-rot-icon">🔄</span>
+                      <span className="wb-sel-num">{a.player.number ? `#${a.player.number}` : '—'}</span>
+                      <span className="wb-sel-name">{a.player.name}</span>
+                      <span className="wb-rot-total" title="Totaal aantal beurtrollen dit seizoen">{rotationCount(a.player.id)}×</span>
+                      <button className="wb-sel-remove" onClick={() => toggleRotation(a.player)} title="Beurtrol opheffen">✕</button>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Overzicht: wie is aan de beurt? */}
+            <button type="button" className="wb-rot-toggle" onClick={() => setShowRotationOverview(v => !v)} aria-expanded={showRotationOverview}>
+              {showRotationOverview ? '▾' : '▸'} Beurtrol-overzicht — wie is aan de beurt?
+            </button>
+            {showRotationOverview && (
+              <div className="wb-rot-overview">
+                {rotationOrder.map(p => {
+                  const st = rotationStats.get(p.id);
+                  const now = isRotation(p.id);
+                  const isTurn = rotationCount(p.id) === minRotations && !now;
+                  return (
+                    <div key={p.id} className={`wb-rot-ov-row ${isTurn ? 'turn' : ''} ${now ? 'now' : ''}`}>
+                      <span className="wb-rot-ov-name">{p.name}</span>
+                      <span className="wb-rot-ov-last">
+                        {st ? `laatst: ${fmtShort(st.last.date)} vs. ${st.last.opponent}` : 'nog nooit'}
+                      </span>
+                      <span className="wb-rot-ov-count">{rotationCount(p.id)}×</span>
+                      {now ? <span className="wb-rot-tag now">deze match</span>
+                        : isTurn ? <span className="wb-rot-tag">aan de beurt</span>
+                        : <span className="wb-rot-tag empty" />}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+      )}
+
+      {/* Wisselschema tab — speeltijdplanner op basis van de selectie */}
+      {detailTab === 'wisselschema' && (
+        <SpeeltijdPlanner
+          key={m.id}
+          matchId={m.id}
+          category={m.team?.category}
+          title={`Wisselschema vs. ${m.opponent} (${fmtShort(m.date)})`}
+          players={attendances.filter(a => a.selected === 'true').map(a => a.player)}
+        />
       )}
 
       {/* Evaluatie tab */}

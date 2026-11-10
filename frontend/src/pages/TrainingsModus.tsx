@@ -329,7 +329,7 @@ export default function TrainingsModus() {
           )}
 
           <div className="tm-drawing">
-            <DrawingCanvas scene={parseDrawingScene(ex.drawingData)} readOnly />
+            <DrawingCanvas scene={parseDrawingScene(ex.drawingData)} readOnly allowFullscreen />
           </div>
         </div>
       )}

@@ -9,6 +9,25 @@
 }
 .dc-fullscreen .dc-canvas-container { max-width: min(94vw, 760px); }
 
+/* Read-only weergave (Trainingsmodus): enkel een volledig-scherm-knop. */
+.dc-view-toolbar { display: flex; justify-content: flex-end; }
+
+/* Read-only volledig scherm: geen bewerk-toolbars die ruimte innemen, dus de
+ * tekening mag het hele scherm vullen — zo breed als past, maar nooit hoger
+ * dan het scherm (--dc-ratio = breedte/hoogte van het canvas, inline gezet). */
+.dc-wrap.dc-fullscreen.dc-readonly { justify-content: center; align-items: center; overflow: hidden; }
+.dc-wrap.dc-fullscreen.dc-readonly .dc-view-toolbar {
+  position: absolute; top: 12px; right: 12px; z-index: 1;
+}
+.dc-wrap.dc-fullscreen.dc-readonly .dc-view-toolbar .dc-tool {
+  width: 48px; height: 48px; font-size: 22px;
+  background: var(--bg-elevated); border-color: var(--border);
+}
+.dc-fullscreen.dc-readonly .dc-canvas-container {
+  max-width: none;
+  width: min(96vw, calc((100dvh - 96px) * var(--dc-ratio)));
+}
+
 .dc-toolbar, .dc-bg-toolbar {
   display: flex; gap: 4px; flex-wrap: wrap; align-items: center;
   background: var(--bg-elevated); border: 1px solid var(--border);

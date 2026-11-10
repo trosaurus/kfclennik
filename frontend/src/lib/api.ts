@@ -33,6 +33,7 @@ export interface Player {
   name: string;
   number: number | null;
   position: string | null;
+  position2?: string | null;   // tweede (alternatieve) positie
   active: string;
   team?: { id: string };
 }
@@ -87,6 +88,7 @@ export interface Attendance {
   match: { id: string };
   present: string;
   selected: string;
+  rotation?: string;            // 'true' = niet geselecteerd omwille van een beurtrol
   manualSeconds: number | null; // handmatige speeltijd-override voor deze wedstrijd, null = automatisch (playTimeSessions)
 }
 
@@ -226,13 +228,14 @@ export interface PlayerWithTeam {
   name: string;
   number: number | null;
   position: string | null;
+  position2?: string | null;
   active: string;
   team: { id: string; name: string; category: string } | null;
 }
 
 export async function getAllPlayersWithTeam(): Promise<PlayerWithTeam[]> {
   const data = await gql(`query {
-    players(take: 2000, orderBy: { name: asc }) { id name number position active team { id name category } }
+    players(take: 2000, orderBy: { name: asc }) { id name number position position2 active team { id name category } }
   }`);
   return data.players;
 }
@@ -260,19 +263,19 @@ export async function bulkAssignPlayersToTeam(playerIds: string[], teamId: strin
 export async function getPlayers(teamId?: string): Promise<Player[]> {
   const where = teamId ? `, where: { team: { id: { equals: "${teamId}" } } }` : '';
   const data = await gql(`query {
-    players(take: 1000, orderBy: { name: asc }${where}) { id name number position active }
+    players(take: 1000, orderBy: { name: asc }${where}) { id name number position position2 active }
   }`);
   return data.players;
 }
 
-export async function createPlayer(input: { name: string; number?: number; position?: string; active?: string; teamId?: string }) {
+export async function createPlayer(input: { name: string; number?: number; position?: string; position2?: string; active?: string; teamId?: string }) {
   const { active = 'true', teamId, ...rest } = input;
   const clean: Record<string, unknown> = { ...rest, active };
   if (teamId) clean.team = { connect: { id: teamId } };
   Object.keys(clean).forEach(k => { if (clean[k] === undefined || clean[k] === '') delete clean[k]; });
   const data = await gql(
     `mutation CreatePlayer($data: PlayerCreateInput!) {
-       createPlayer(data: $data) { id name number position active }
+       createPlayer(data: $data) { id name number position position2 active }
      }`,
     { data: clean }
   );
@@ -286,7 +289,7 @@ export async function updatePlayer(id: string, input: Partial<Player> | Record<s
   }
   const data = await gql(
     `mutation UpdatePlayer($id: ID!, $data: PlayerUpdateInput!) {
-       updatePlayer(where: { id: $id }, data: $data) { id name number position active }
+       updatePlayer(where: { id: $id }, data: $data) { id name number position position2 active }
      }`,
     { id, data: clean }
   );
@@ -312,9 +315,25 @@ export async function getMatches(teamId?: string): Promise<Match[]> {
   return data.matches;
 }
 
+/** Trainers plakken het tegenstander-veld soms over uit een officiële
+ * kalender die de volledige "Thuis - Uit"-titel toont (bv. "KFC Lennik - FC
+ * Negenmanneke") i.p.v. enkel de bezoekende ploeg — dat verdubbelt "KFC
+ * Lennik" overal waar de UI het thuisteam er zelf al vóór zet (bv. de
+ * Matchday-banner "KFC Lennik vs {opponent}"). Knip een leidend "KFC Lennik"
+ * (met evt. "4157" en een scheidingsteken) er dus weg, maar enkel als er nog
+ * een echte tegenstandernaam overblijft. */
+function sanitizeOpponentName(raw: string): string {
+  const trimmed = raw.trim();
+  const stripped = trimmed.replace(/^kfc\s*lennik\s*(?:4157)?\s*[-–:]\s*/i, '').trim();
+  return stripped || trimmed;
+}
+
 export async function createMatch(input: { opponent: string; date: string; location: string; teamId?: string }) {
   const { teamId, ...rest } = input;
-  const matchData: Record<string, unknown> = { ...rest, status: 'planned', currentPeriod: 0, periodStatus: 'idle', scoreHome: 0, scoreAway: 0 };
+  const matchData: Record<string, unknown> = {
+    ...rest, opponent: sanitizeOpponentName(input.opponent),
+    status: 'planned', currentPeriod: 0, periodStatus: 'idle', scoreHome: 0, scoreAway: 0,
+  };
   if (teamId) matchData.team = { connect: { id: teamId } };
   const data = await gql(
     `mutation CreateMatch($data: MatchCreateInput!) {
@@ -326,31 +345,96 @@ export async function createMatch(input: { opponent: string; date: string; locat
 }
 
 export async function updateMatch(id: string, input: Record<string, unknown>) {
+  const data0 = typeof input.opponent === 'string' ? { ...input, opponent: sanitizeOpponentName(input.opponent) } : input;
   const data = await gql(
     `mutation UpdateMatch($id: ID!, $data: MatchUpdateInput!) {
        updateMatch(where: { id: $id }, data: $data) { id opponent date location status currentPeriod periodStatus scoreHome scoreAway matchStartTime }
      }`,
-    { id, data: input }
+    { id, data: data0 }
   );
   return data.updateMatch;
+}
+
+/** Stand en status van één wedstrijd — licht genoeg om geregeld op te vragen. */
+export async function getMatchScore(matchId: string): Promise<Pick<Match, 'status' | 'periodStatus' | 'scoreHome' | 'scoreAway'> | null> {
+  const data = await gql(
+    `query GetMatchScore($id: ID!) { match(where: { id: $id }) { status periodStatus scoreHome scoreAway } }`,
+    { id: matchId }
+  );
+  return data.match;
+}
+
+/** Wisselschema van een wedstrijd als JSON-tekst; leeg = nog niets opgeslagen. */
+export async function getPlannerSettings(matchId: string): Promise<string> {
+  const data = await gql(
+    `query GetPlannerSettings($id: ID!) { match(where: { id: $id }) { id plannerSettings } }`,
+    { id: matchId }
+  );
+  return data.match?.plannerSettings ?? '';
+}
+
+/** Bewaart het schema als de database nog `expected` bevat; false = iemand anders was eerst. */
+export async function savePlannerSettings(matchId: string, expected: string, value: string): Promise<boolean> {
+  const data = await gql(
+    `mutation SavePlannerSettings($matchId: ID!, $expected: String!, $value: String!) {
+       savePlannerSettings(matchId: $matchId, expected: $expected, value: $value)
+     }`,
+    { matchId, expected, value }
+  );
+  return data.savePlannerSettings;
 }
 
 export async function deleteMatch(id: string) {
   await gql(`mutation { deleteMatch(where: { id: "${id}" }) { id } }`);
 }
 
-export function getMatchOfTheWeek(matches: Match[]): Match | null {
+/** De drie prioriteits-lagen waaruit de "wedstrijd van de week" gekozen wordt:
+ * actief lopende wedstrijden, dan wedstrijden binnen 7 dagen, dan eender welke
+ * geplande wedstrijd in de toekomst — telkens gesorteerd op datum. Gedeeld
+ * door getMatchOfTheWeek() (kiest gewoon de eerste van de eerste niet-lege
+ * laag) en getSameDayMatchCandidates() (checkt of die keuze wel uniek is). */
+function matchOfWeekTiers(matches: Match[]): Match[][] {
   const now = new Date();
   const in7 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
   const active = matches.filter(m => m.status === 'active');
-  if (active.length) return active[0];
-  const upcoming = matches.filter(m => {
-    const d = new Date(m.date);
-    return m.status === 'planned' && d >= now && d <= in7;
-  });
-  if (upcoming.length) return upcoming.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
-  const planned = matches.filter(m => m.status === 'planned' && new Date(m.date) >= now);
-  if (planned.length) return planned.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
+  const upcoming = matches
+    .filter(m => {
+      const d = new Date(m.date);
+      return m.status === 'planned' && d >= now && d <= in7;
+    })
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const planned = matches
+    .filter(m => m.status === 'planned' && new Date(m.date) >= now)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  return [active, upcoming, planned];
+}
+
+export function getMatchOfTheWeek(matches: Match[]): Match | null {
+  for (const tier of matchOfWeekTiers(matches)) {
+    if (tier.length) return tier[0];
+  }
+  return null;
+}
+
+function isSameCalendarDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+/** Wanneer de wedstrijd die getMatchOfTheWeek() zou kiezen niet uniek is —
+ * bv. twee wedstrijden gepland op dezelfde dag — geeft dit alle
+ * gelijk-gerangschikte kandidaten terug, zodat de trainer expliciet kan
+ * kiezen welke hij in Matchday wil opstarten i.p.v. dat stilzwijgend de
+ * eerste (bv. alfabetisch/insertie-volgorde) gekozen wordt. Retourneert null
+ * wanneer er geen ambiguïteit is (0 of 1 kandidaat) — de normale
+ * auto-selectie volstaat dan. */
+export function getSameDayMatchCandidates(matches: Match[]): Match[] | null {
+  for (const tier of matchOfWeekTiers(matches)) {
+    if (tier.length === 0) continue;
+    if (tier.length === 1) return null;
+    const first = tier[0];
+    const sameDay = tier.filter(m => isSameCalendarDay(new Date(m.date), new Date(first.date)));
+    return sameDay.length > 1 ? sameDay : null;
+  }
   return null;
 }
 
@@ -394,7 +478,7 @@ export async function getAttendancesForMatch(matchId: string): Promise<Attendanc
   const data = await gql(
     `query GetAttendances($matchId: ID!) {
        attendances(where: { match: { id: { equals: $matchId } } }, take: 1000) {
-         id player { id name number position active } match { id } present selected manualSeconds
+         id player { id name number position position2 active } match { id } present selected rotation manualSeconds
        }
      }`,
     { matchId }
@@ -408,7 +492,7 @@ export async function setManualPlaytime(attendanceId: string, seconds: number | 
   const data = await gql(
     `mutation SetManualPlaytime($id: ID!, $manualSeconds: Int) {
        updateAttendance(where: { id: $id }, data: { manualSeconds: $manualSeconds }) {
-         id player { id name number position active } match { id } present selected manualSeconds
+         id player { id name number position position2 active } match { id } present selected rotation manualSeconds
        }
      }`,
     { id: attendanceId, manualSeconds: seconds }
@@ -416,24 +500,52 @@ export async function setManualPlaytime(attendanceId: string, seconds: number | 
   return data.updateAttendance;
 }
 
-export async function setAttendance(matchId: string, playerId: string, present: boolean, selected: boolean) {
+/** Zet aanwezigheid/selectie van een speler voor een wedstrijd. `rotation` =
+ * bewust niet geselecteerd omwille van een beurtrol; selecteren wist de beurtrol
+ * altijd, zonder `rotation` blijft een bestaande beurtrol verder ongemoeid. */
+export async function setAttendance(matchId: string, playerId: string, present: boolean, selected: boolean, rotation?: boolean) {
+  const fields: Record<string, string> = {
+    present: present ? 'true' : 'false',
+    selected: selected ? 'true' : 'false',
+  };
+  if (selected) fields.rotation = 'false';
+  else if (rotation !== undefined) fields.rotation = rotation ? 'true' : 'false';
   const existingData = await gql(
     `query { attendances(where: { match: { id: { equals: "${matchId}" } }, player: { id: { equals: "${playerId}" } } }, take: 1) { id } }`
   );
   const existing = existingData.attendances[0];
   if (existing) {
     const data = await gql(
-      `mutation UpdateAttendance($id: ID!, $data: AttendanceUpdateInput!) { updateAttendance(where: { id: $id }, data: $data) { id present selected } }`,
-      { id: existing.id, data: { present: present ? 'true' : 'false', selected: selected ? 'true' : 'false' } }
+      `mutation UpdateAttendance($id: ID!, $data: AttendanceUpdateInput!) { updateAttendance(where: { id: $id }, data: $data) { id present selected rotation } }`,
+      { id: existing.id, data: fields }
     );
     return data.updateAttendance;
   } else {
     const data = await gql(
-      `mutation CreateAttendance($data: AttendanceCreateInput!) { createAttendance(data: $data) { id present selected } }`,
-      { data: { match: { connect: { id: matchId } }, player: { connect: { id: playerId } }, present: present ? 'true' : 'false', selected: selected ? 'true' : 'false' } }
+      `mutation CreateAttendance($data: AttendanceCreateInput!) { createAttendance(data: $data) { id present selected rotation } }`,
+      { data: { match: { connect: { id: matchId } }, player: { connect: { id: playerId } }, ...fields } }
     );
     return data.createAttendance;
   }
+}
+
+export interface RotationEntry {
+  playerId: string;
+  match: { id: string; opponent: string; date: string };
+}
+
+/** Alle beurtrollen van een ploeg (alle ploegen zonder teamId), oudste eerst. */
+export async function getRotations(teamId?: string): Promise<RotationEntry[]> {
+  const data = await gql(
+    `query GetRotations($where: AttendanceWhereInput!) {
+       attendances(where: $where, take: 5000) { player { id } match { id opponent date } }
+     }`,
+    { where: { rotation: { equals: 'true' }, ...(teamId ? { match: { team: { id: { equals: teamId } } } } : {}) } }
+  );
+  return (data.attendances as Array<{ player: { id: string } | null; match: RotationEntry['match'] | null }>)
+    .filter(a => a.player && a.match)
+    .map(a => ({ playerId: a.player!.id, match: a.match! }))
+    .sort((a, b) => new Date(a.match.date).getTime() - new Date(b.match.date).getTime());
 }
 
 // ── PlayTime Sessions ─────────────────────────────────────────────────────────
@@ -581,6 +693,26 @@ export async function removeGoal(
   }
 }
 
+
+/** Wedstrijd opnieuw beginnen: alle doelpunten weg, stand per periode en
+ * totaal op 0, status terug naar gepland. Selectie, opstellingen en
+ * speeltijd-sessies blijven ongemoeid. */
+export async function resetMatchScore(matchId: string): Promise<void> {
+  const [goals, periods] = await Promise.all([getGoalsForMatch(matchId), getPeriodsForMatch(matchId)]);
+  if (goals.length) {
+    await gql(
+      `mutation DeleteGoals($where: [GoalWhereUniqueInput!]!) { deleteGoals(where: $where) { id } }`,
+      { where: goals.map(g => ({ id: g.id })) }
+    );
+  }
+  if (periods.length) {
+    await gql(
+      `mutation ResetPeriods($data: [PeriodUpdateArgs!]!) { updatePeriods(data: $data) { id } }`,
+      { data: periods.map(p => ({ where: { id: p.id }, data: { scoreHome: 0, scoreAway: 0 } })) }
+    );
+  }
+  await updateMatch(matchId, { scoreHome: 0, scoreAway: 0, status: 'planned', currentPeriod: 0, periodStatus: 'idle' });
+}
 
 // ── Week themes ───────────────────────────────────────────────────────────────
 
@@ -892,7 +1024,7 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
 
   const playersWhere = teamId ? `, where: { team: { id: { equals: "${teamId}" } } }` : '';
   const players = await gql(`query {
-    players(take: 1000, orderBy: { name: asc }${playersWhere}) { id name number position active }
+    players(take: 1000, orderBy: { name: asc }${playersWhere}) { id name number position position2 active }
   }`);
 
   const allSessions: Array<PlayTimeSession & { matchId: string }> = [];
@@ -987,144 +1119,272 @@ export async function getSeasonStats(teamId?: string): Promise<SeasonPlayerStats
 }
 
 // ── CSV helpers ───────────────────────────────────────────────────────────────
+// Export en import gebruiken dezelfde kolommen, zodat een geëxporteerd bestand
+// (eventueel aangepast in Excel) rechtstreeks terug geïmporteerd kan worden.
+// Import werkt bestaande rijen bij i.p.v. dubbels aan te maken: spelers op naam,
+// wedstrijden op tegenstander + dag.
+
+const POSITION_CSV_LABEL: Record<string, string> = {
+  keeper: 'doelman', defender: 'verdediger', midfielder: 'middenvelder', forward: 'aanvaller',
+};
+const POSITION_CSV_MAP: Record<string, string> = {
+  doelman: 'keeper', keeper: 'keeper', dm: 'keeper', k: 'keeper',
+  verdediger: 'defender', defender: 'defender', vd: 'defender', v: 'defender',
+  middenvelder: 'midfielder', midfielder: 'midfielder', mv: 'midfielder', m: 'midfielder',
+  aanvaller: 'forward', forward: 'forward', av: 'forward', a: 'forward', spits: 'forward',
+};
+const STATUS_CSV_LABEL: Record<string, string> = { planned: 'gepland', active: 'bezig', finished: 'afgelopen' };
+const STATUS_CSV_MAP: Record<string, string> = {
+  gepland: 'planned', planned: 'planned', bezig: 'active', live: 'active', active: 'active',
+  afgelopen: 'finished', gespeeld: 'finished', finished: 'finished',
+};
+const YES = new Set(['ja', 'j', 'yes', 'y', 'true', '1', 'actief', 'x']);
+const NO  = new Set(['nee', 'n', 'no', 'false', '0', 'inactief']);
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
 
 export function exportPlayersCSV(players: Player[]): void {
   const rows = [
-    ['naam', 'rugnummer', 'positie', 'actief'],
-    ...players.map(p => [
-      p.name,
-      p.number?.toString() ?? '',
-      p.position ?? '',
-      p.active === 'true' ? 'ja' : 'nee',
-    ]),
+    ['naam', 'rugnummer', 'positie', 'tweede_positie', 'actief'],
+    ...[...players]
+      .sort((a, b) => (a.number ?? 999) - (b.number ?? 999) || a.name.localeCompare(b.name))
+      .map(p => [
+        p.name,
+        p.number?.toString() ?? '',
+        POSITION_CSV_LABEL[p.position ?? ''] ?? '',
+        POSITION_CSV_LABEL[p.position2 ?? ''] ?? '',
+        p.active === 'true' ? 'ja' : 'nee',
+      ]),
   ];
-  downloadCSV(rows, 'spelers.csv');
+  downloadCSV(rows, `spelers-${todayStamp()}.csv`);
 }
 
 export function exportMatchesCSV(matches: Match[]): void {
   const rows = [
-    ['tegenstander', 'datum', 'locatie', 'status', 'score_thuis', 'score_uit'],
-    ...matches.map(m => [
-      m.opponent,
-      m.date ? new Date(m.date).toLocaleDateString('nl-BE') : '',
-      m.location === 'home' ? 'thuis' : 'uit',
-      m.status,
-      m.scoreHome.toString(),
-      m.scoreAway.toString(),
-    ]),
+    ['tegenstander', 'datum', 'tijd', 'locatie', 'status', 'score_thuis', 'score_uit'],
+    ...[...matches]
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map(m => {
+        const d = m.date ? new Date(m.date) : null;
+        return [
+          m.opponent,
+          d ? `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}` : '',
+          d ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : '',
+          m.location === 'home' ? 'thuis' : 'uit',
+          STATUS_CSV_LABEL[m.status] ?? m.status,
+          m.scoreHome.toString(),
+          m.scoreAway.toString(),
+        ];
+      }),
   ];
-  downloadCSV(rows, 'wedstrijden.csv');
+  downloadCSV(rows, `wedstrijden-${todayStamp()}.csv`);
+}
+
+function todayStamp(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 function downloadCSV(rows: string[][], filename: string): void {
   const content = rows
     .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(';'))
-    .join('\n');
-  const blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8;' });
+    .join('\r\n');
+  // BOM zodat Excel de UTF-8 (é, ë, ...) correct toont.
+  const blob = new Blob(['﻿' + content], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
   URL.revokeObjectURL(url);
 }
 
-export interface CSVImportResult<T> { rows: T[]; errors: string[]; }
+export interface CSVImportResult<T> {
+  rows: T[];        // nieuw aangemaakt
+  updated: T[];     // bestaande rij bijgewerkt
+  errors: string[];
+}
+
+/** Kolomindex op basis van de header; `exclude` sluit kolommen uit die ook matchen (bv. "tweede positie"). */
+function findCol(header: string[], match: (h: string) => boolean, exclude?: (h: string) => boolean): number {
+  return header.findIndex(h => match(h) && !(exclude?.(h)));
+}
+
+function normHeader(h: string): string {
+  return h.replace(/^﻿/, '').toLowerCase().trim().replace(/[\s_-]+/g, ' ');
+}
+
+const normName = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
 
 export async function importPlayersCSV(
   file: File,
-  onCreate: (p: { name: string; number?: number; position?: string }) => Promise<unknown>
+  opts: {
+    existing: Player[];
+    create: (p: { name: string; number?: number; position?: string; position2?: string; active?: string }) => Promise<unknown>;
+    update: (id: string, p: Record<string, unknown>) => Promise<unknown>;
+  },
 ): Promise<CSVImportResult<Player>> {
-  const text = await file.text();
-  const lines = parseCSV(text);
-  if (lines.length < 2) return { rows: [], errors: ['Bestand lijkt leeg of heeft geen header'] };
+  const lines = parseCSV(await file.text());
+  if (lines.length < 2) return { rows: [], updated: [], errors: ['Bestand lijkt leeg of heeft geen header'] };
 
-  const header = lines[0].map(h => h.toLowerCase().trim());
-  const nameIdx   = header.findIndex(h => h.includes('naam'));
-  const numIdx    = header.findIndex(h => h.includes('rug') || h === 'nummer' || h === '#');
-  const posIdx    = header.findIndex(h => h.includes('pos'));
+  const header = lines[0].map(normHeader);
+  const isPos2 = (h: string) => h.includes('tweede') || h.includes('2') || h.includes('alt');
+  const nameIdx = findCol(header, h => h.includes('naam') || h === 'name');
+  const numIdx  = findCol(header, h => h.includes('rug') || h === 'nummer' || h === 'nr' || h === '#' || h === 'number');
+  const posIdx  = findCol(header, h => h.includes('pos'), isPos2);
+  const pos2Idx = findCol(header, h => h.includes('pos') && isPos2(h));
+  const actIdx  = findCol(header, h => h.includes('actief') || h === 'active' || h === 'status');
 
-  if (nameIdx === -1) return { rows: [], errors: ['Kolom "naam" niet gevonden in CSV header'] };
+  if (nameIdx === -1) return { rows: [], updated: [], errors: ['Kolom "naam" niet gevonden in de CSV-header'] };
 
-  const POSITION_MAP: Record<string, string> = {
-    doelman: 'keeper', keeper: 'keeper', dm: 'keeper',
-    verdediger: 'defender', defender: 'defender', vd: 'defender',
-    middenvelder: 'midfielder', midfielder: 'midfielder', mv: 'midfielder',
-    aanvaller: 'forward', forward: 'forward', av: 'forward',
-  };
-
+  const byName = new Map(opts.existing.map(p => [normName(p.name), p]));
   const errors: string[] = [];
   const created: Player[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const row = lines[i];
-    if (row.every(c => !c.trim())) continue; // skip empty rows
-    const name = row[nameIdx]?.trim();
-    if (!name) { errors.push(`Rij ${i + 1}: naam ontbreekt`); continue; }
-
-    const numRaw = numIdx >= 0 ? row[numIdx]?.trim() : '';
-    const posRaw = (posIdx >= 0 ? row[posIdx]?.trim() : '').toLowerCase();
-    const number = numRaw ? parseInt(numRaw) : undefined;
-    const position = POSITION_MAP[posRaw] ?? undefined;
-
-    try {
-      const p = await onCreate({ name, ...(number ? { number } : {}), ...(position ? { position } : {}) });
-      created.push(p as Player);
-    } catch (e) {
-      errors.push(`Rij ${i + 1} (${name}): ${e instanceof Error ? e.message : 'onbekende fout'}`);
-    }
-  }
-  return { rows: created, errors };
-}
-
-export async function importMatchesCSV(
-  file: File,
-  onCreate: (m: { opponent: string; date: string; location: string }) => Promise<unknown>
-): Promise<CSVImportResult<Match>> {
-  const text = await file.text();
-  const lines = parseCSV(text);
-  if (lines.length < 2) return { rows: [], errors: ['Bestand lijkt leeg of heeft geen header'] };
-
-  const header = lines[0].map(h => h.toLowerCase().trim());
-  const oppIdx  = header.findIndex(h => h.includes('teg') || h.includes('opp'));
-  const dateIdx = header.findIndex(h => h.includes('dat'));
-  const locIdx  = header.findIndex(h => h.includes('loc'));
-
-  if (oppIdx === -1 || dateIdx === -1) return { rows: [], errors: ['Kolommen "tegenstander" en "datum" zijn verplicht'] };
-
-  const errors: string[] = [];
-  const created: Match[] = [];
+  const updated: Player[] = [];
+  const seen = new Set<string>();
 
   for (let i = 1; i < lines.length; i++) {
     const row = lines[i];
     if (row.every(c => !c.trim())) continue;
-    const opponent = row[oppIdx]?.trim();
-    const dateRaw  = row[dateIdx]?.trim();
-    const locRaw   = (locIdx >= 0 ? row[locIdx]?.trim() : 'thuis').toLowerCase();
+    const cell = (idx: number) => (idx >= 0 ? row[idx]?.trim() ?? '' : '');
+    const name = cell(nameIdx);
+    if (!name) { errors.push(`Rij ${i + 1}: naam ontbreekt`); continue; }
+    if (seen.has(normName(name))) { errors.push(`Rij ${i + 1} (${name}): staat meerdere keren in het bestand — enkel de eerste is gebruikt`); continue; }
+    seen.add(normName(name));
 
+    const numRaw = cell(numIdx);
+    const number = numRaw ? parseInt(numRaw.replace(/^#/, ''), 10) : undefined;
+    if (numRaw && (number === undefined || isNaN(number))) { errors.push(`Rij ${i + 1} (${name}): ongeldig rugnummer "${numRaw}"`); continue; }
+
+    const posRaw = cell(posIdx).toLowerCase(), pos2Raw = cell(pos2Idx).toLowerCase();
+    const position = POSITION_CSV_MAP[posRaw];
+    const position2Mapped = POSITION_CSV_MAP[pos2Raw];
+    const position2 = position2Mapped && position2Mapped !== position ? position2Mapped : undefined;
+    if (posRaw && !position) errors.push(`Rij ${i + 1} (${name}): onbekende positie "${posRaw}" — genegeerd`);
+    if (pos2Raw && !position2Mapped) errors.push(`Rij ${i + 1} (${name}): onbekende tweede positie "${pos2Raw}" — genegeerd`);
+
+    const actRaw = cell(actIdx).toLowerCase();
+    const active = YES.has(actRaw) ? 'true' : NO.has(actRaw) ? 'false' : undefined;
+
+    try {
+      const existing = byName.get(normName(name));
+      if (existing) {
+        // Enkel kolommen die in het bestand staan overschrijven; lege cel = wissen.
+        const input: Record<string, unknown> = {};
+        if (numIdx >= 0) input.number = number ?? null;
+        if (posIdx >= 0 && (position || !posRaw)) input.position = position ?? null;
+        if (pos2Idx >= 0 && (position2Mapped || !pos2Raw)) input.position2 = position2 ?? null;
+        if (active) input.active = active;
+        if (Object.keys(input).length) await opts.update(existing.id, input);
+        updated.push(existing);
+      } else {
+        const p = await opts.create({
+          name,
+          ...(number !== undefined ? { number } : {}),
+          ...(position ? { position } : {}),
+          ...(position2 ? { position2 } : {}),
+          ...(active ? { active } : {}),
+        });
+        created.push(p as Player);
+      }
+    } catch (e) {
+      errors.push(`Rij ${i + 1} (${name}): ${e instanceof Error ? e.message : 'onbekende fout'}`);
+    }
+  }
+  return { rows: created, updated, errors };
+}
+
+/** "12/10/2026", "12-10-26", "2026-10-12" (+ optioneel "14:30", ook in dezelfde cel). */
+function parseCSVDate(dateRaw: string, timeRaw: string): Date | null {
+  const [datePart, inlineTime] = dateRaw.trim().split(/\s+/);
+  let y: number, mo: number, d: number;
+  const iso = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/.exec(datePart);
+  const eu  = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})$/.exec(datePart);
+  if (iso) { y = +iso[1]; mo = +iso[2]; d = +iso[3]; }
+  else if (eu) { d = +eu[1]; mo = +eu[2]; y = +eu[3]; if (y < 100) y += 2000; }
+  else {
+    const fallback = new Date(dateRaw);
+    return isNaN(fallback.getTime()) ? null : fallback;
+  }
+  const t = /^(\d{1,2})[:.hu](\d{2})/.exec((timeRaw || inlineTime || '').trim());
+  const date = new Date(y, mo - 1, d, t ? +t[1] : 0, t ? +t[2] : 0);
+  return isNaN(date.getTime()) || date.getMonth() !== mo - 1 ? null : date;
+}
+
+const sameDay = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
+export async function importMatchesCSV(
+  file: File,
+  opts: {
+    existing: Match[];
+    create: (m: { opponent: string; date: string; location: string }) => Promise<unknown>;
+    update: (id: string, m: Record<string, unknown>) => Promise<unknown>;
+  },
+): Promise<CSVImportResult<Match>> {
+  const lines = parseCSV(await file.text());
+  if (lines.length < 2) return { rows: [], updated: [], errors: ['Bestand lijkt leeg of heeft geen header'] };
+
+  const header = lines[0].map(normHeader);
+  const oppIdx   = findCol(header, h => h.includes('teg') || h.includes('opp'));
+  const dateIdx  = findCol(header, h => h.includes('dat') || h === 'date');
+  const timeIdx  = findCol(header, h => h.includes('tijd') || h.includes('uur') || h === 'time' || h.includes('aftrap'));
+  const locIdx   = findCol(header, h => h.includes('loc') || h.includes('thuis/uit') || h === 'thuis of uit');
+  const statIdx  = findCol(header, h => h.includes('status'));
+  const homeIdx  = findCol(header, h => h.includes('score') && h.includes('thuis'));
+  const awayIdx  = findCol(header, h => h.includes('score') && h.includes('uit'));
+
+  if (oppIdx === -1 || dateIdx === -1) return { rows: [], updated: [], errors: ['Kolommen "tegenstander" en "datum" zijn verplicht'] };
+
+  const errors: string[] = [];
+  const created: Match[] = [];
+  const updated: Match[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const row = lines[i];
+    if (row.every(c => !c.trim())) continue;
+    const cell = (idx: number) => (idx >= 0 ? row[idx]?.trim() ?? '' : '');
+    const opponent = cell(oppIdx);
+    const dateRaw = cell(dateIdx);
     if (!opponent) { errors.push(`Rij ${i + 1}: tegenstander ontbreekt`); continue; }
     if (!dateRaw)  { errors.push(`Rij ${i + 1}: datum ontbreekt`); continue; }
 
-    // Try parse d/m/yy or d/m/yyyy or ISO
-    let date: Date | null = null;
-    const parts = dateRaw.split(/[\/\-\.]/);
-    if (parts.length === 3) {
-      const [d, mo, y] = parts.map(Number);
-      const year = y < 100 ? 2000 + y : y;
-      date = new Date(year, mo - 1, d);
-    } else {
-      date = new Date(dateRaw);
-    }
-    if (!date || isNaN(date.getTime())) { errors.push(`Rij ${i + 1}: ongeldige datum "${dateRaw}"`); continue; }
+    const date = parseCSVDate(dateRaw, cell(timeIdx));
+    if (!date) { errors.push(`Rij ${i + 1}: ongeldige datum "${dateRaw}"`); continue; }
 
-    const location = locRaw.includes('uit') || locRaw === 'away' ? 'away' : 'home';
+    const locRaw = cell(locIdx).toLowerCase();
+    const location = locRaw.includes('uit') || locRaw === 'away' || locRaw === 'u' ? 'away' : 'home';
+
+    // Optioneel: status en score (zoals de export ze wegschrijft).
+    const extra: Record<string, unknown> = {};
+    const statRaw = cell(statIdx).toLowerCase();
+    if (statRaw) {
+      const status = STATUS_CSV_MAP[statRaw];
+      if (status) extra.status = status;
+      else errors.push(`Rij ${i + 1} (${opponent}): onbekende status "${statRaw}" — genegeerd`);
+    }
+    for (const [idx, field] of [[homeIdx, 'scoreHome'], [awayIdx, 'scoreAway']] as const) {
+      const raw = cell(idx);
+      if (!raw) continue;
+      const n = parseInt(raw, 10);
+      if (isNaN(n) || n < 0) errors.push(`Rij ${i + 1} (${opponent}): ongeldige score "${raw}" — genegeerd`);
+      else extra[field] = n;
+    }
 
     try {
-      const m = await onCreate({ opponent, date: date.toISOString(), location });
-      created.push(m as Match);
+      const existing = opts.existing.find(m =>
+        normName(m.opponent) === normName(opponent) && m.date && sameDay(new Date(m.date), date));
+      if (existing) {
+        await opts.update(existing.id, { date: date.toISOString(), location, ...extra });
+        updated.push(existing);
+      } else {
+        const m = await opts.create({ opponent, date: date.toISOString(), location }) as Match;
+        if (Object.keys(extra).length) await opts.update(m.id, extra);
+        created.push(m);
+      }
     } catch (e) {
       errors.push(`Rij ${i + 1} (${opponent}): ${e instanceof Error ? e.message : 'onbekende fout'}`);
     }
   }
-  return { rows: created, errors };
+  return { rows: created, updated, errors };
 }
 
 // ── Volledige data-export / import (backup & restore) ─────────────────────────
@@ -1137,15 +1397,16 @@ export interface FullDataExport {
   teams: Array<{ id: string; name: string; category: string; club: string; active: string }>;
   weekThemes: Array<{ id: string; title: string; category: string; description: string; active: string; createdAt: string | null }>;
   trainers: Array<{ id: string; name: string; email: string; role: string; teamId: string | null }>;
-  players: Array<{ id: string; name: string; number: number | null; position: string | null; active: string; teamId: string | null }>;
+  players: Array<{ id: string; name: string; number: number | null; position: string | null; position2?: string | null; active: string; teamId: string | null }>;
   matches: Array<{
     id: string; opponent: string; date: string; location: string; status: string;
     currentPeriod: number; periodStatus: string; scoreHome: number; scoreAway: number;
     matchStartTime: string | null; teamId: string | null; weekThemeId: string | null;
+    plannerSettings?: string;
   }>;
   periods: Array<{ id: string; matchId: string | null; periodNumber: number; scoreHome: number; scoreAway: number; startTime: string | null; endTime: string | null; durationSeconds: number }>;
   goals: Array<{ id: string; playerId: string | null; matchId: string | null; periodNumber: number; scoredAt: string | null }>;
-  attendances: Array<{ id: string; playerId: string | null; matchId: string | null; present: string; selected: string }>;
+  attendances: Array<{ id: string; playerId: string | null; matchId: string | null; present: string; selected: string; rotation?: string; manualSeconds?: number | null }>;
   playTimeSessions: Array<{ id: string; attendanceId: string | null; period: number; fieldPosition: string | null; startTime: string | null; endTime: string | null; durationSeconds: number; active: string }>;
   evaluations: Array<{ id: string; playerId: string | null; matchId: string | null; themeId: string | null; score: number; createdAt: string | null }>;
   trainings: Array<{
@@ -1158,6 +1419,7 @@ export interface FullDataExport {
     actiefAanpak: string; funAanpak: string; individueleAandacht: string;
     teamprincipe: string; spelprincipe: string; focusPunten: string; jaarplanLabel: string; trainingsschema: string;
     evalBehouden: string; evalWijzigen: string; evalWarenActief: string; evalHaddenFun: string; evalBijgeleerd: string; evalIndividueleAandacht: string;
+    sharedWithIds?: string[];   // trainers met leesrechten (zie Training.sharedWith)
   }>;
   exercises: Array<{
     id: string; trainingId: string | null; order: number; fase: string; naam: string; duurMinuten: number;
@@ -1166,10 +1428,14 @@ export interface FullDataExport {
   }>;
   oefeningDatabank: Array<{
     id: string; naam: string; fase: string; categorie: string | null; doelgroep: string | null; teamprincipe: string;
-    duurMinuten: number; organisatieSpelers: string; organisatieAfmetingen: string; organisatieMateriaal: string;
+    spelprincipe?: string | null; duurMinuten: number; organisatieSpelers: string; organisatieAfmetingen: string; organisatieMateriaal: string;
     beschrijving: string; drawingData: string; coachingPunten: string; maximaalActief: string; fun: string;
     createdById: string | null; createdAt: string | null;
   }>;
+  // Later toegevoegd — ontbreken in oudere exportbestanden (dan lege lijst).
+  matchLineups: Array<{ id: string; matchId: string | null; period: number; assignment: string; selectedPlayerIds: string }>;
+  lineupProposals: Array<{ id: string; matchId: string | null; trainerId: string | null; period: number; assignment: string }>;
+  whiteboards: Array<{ id: string; naam: string; drawingData: string; trainerId: string | null; teamId: string | null; createdAt: string | null }>;
 }
 
 export async function exportAllData(): Promise<FullDataExport> {
@@ -1177,14 +1443,14 @@ export async function exportAllData(): Promise<FullDataExport> {
     teams(take: ${FULL_TAKE}) { id name category club active }
     weekThemes(take: ${FULL_TAKE}) { id title category description active createdAt }
     trainers(take: ${FULL_TAKE}) { id name email role team { id } }
-    players(take: ${FULL_TAKE}) { id name number position active team { id } }
+    players(take: ${FULL_TAKE}) { id name number position position2 active team { id } }
     matches(take: ${FULL_TAKE}) {
-      id opponent date location status currentPeriod periodStatus scoreHome scoreAway matchStartTime
+      id opponent date location status currentPeriod periodStatus scoreHome scoreAway matchStartTime plannerSettings
       team { id } weekTheme { id }
     }
     periods(take: ${FULL_TAKE}) { id periodNumber scoreHome scoreAway startTime endTime durationSeconds match { id } }
     goals(take: ${FULL_TAKE}) { id periodNumber scoredAt player { id } match { id } }
-    attendances(take: ${FULL_TAKE}) { id present selected player { id } match { id } }
+    attendances(take: ${FULL_TAKE}) { id present selected rotation manualSeconds player { id } match { id } }
     playTimeSessions(take: ${FULL_TAKE}) { id period fieldPosition startTime endTime durationSeconds active attendance { id } }
     evaluations(take: ${FULL_TAKE}) { id score createdAt player { id } match { id } theme { id } }
     trainings(take: ${FULL_TAKE}) {
@@ -1196,7 +1462,7 @@ export async function exportAllData(): Promise<FullDataExport> {
       actiefAanpak funAanpak individueleAandacht
       teamprincipe spelprincipe focusPunten jaarplanLabel trainingsschema
       evalBehouden evalWijzigen evalWarenActief evalHaddenFun evalBijgeleerd evalIndividueleAandacht
-      trainer { id } team { id }
+      trainer { id } team { id } sharedWith { id }
     }
     exercises(take: ${FULL_TAKE}) {
       id order fase naam duurMinuten
@@ -1205,11 +1471,14 @@ export async function exportAllData(): Promise<FullDataExport> {
       training { id }
     }
     oefeningDatabanks(take: ${FULL_TAKE}) {
-      id naam fase categorie doelgroep teamprincipe duurMinuten
+      id naam fase categorie doelgroep teamprincipe spelprincipe duurMinuten
       organisatieSpelers organisatieAfmetingen organisatieMateriaal
       beschrijving drawingData coachingPunten maximaalActief fun
       createdBy { id } createdAt
     }
+    matchLineups(take: ${FULL_TAKE}) { id period assignment selectedPlayerIds match { id } }
+    lineupProposals(take: ${FULL_TAKE}) { id period assignment match { id } trainer { id } }
+    whiteboards(take: ${FULL_TAKE}) { id naam drawingData createdAt trainer { id } team { id } }
   }`);
 
   return {
@@ -1218,18 +1487,18 @@ export async function exportAllData(): Promise<FullDataExport> {
     teams: data.teams,
     weekThemes: data.weekThemes,
     trainers: data.trainers.map((t: any) => ({ id: t.id, name: t.name, email: t.email, role: t.role, teamId: t.team?.id ?? null })),
-    players: data.players.map((p: any) => ({ id: p.id, name: p.name, number: p.number, position: p.position, active: p.active, teamId: p.team?.id ?? null })),
+    players: data.players.map((p: any) => ({ id: p.id, name: p.name, number: p.number, position: p.position, position2: p.position2 ?? null, active: p.active, teamId: p.team?.id ?? null })),
     matches: data.matches.map((m: any) => ({
       id: m.id, opponent: m.opponent, date: m.date, location: m.location, status: m.status,
       currentPeriod: m.currentPeriod, periodStatus: m.periodStatus, scoreHome: m.scoreHome, scoreAway: m.scoreAway,
-      matchStartTime: m.matchStartTime, teamId: m.team?.id ?? null, weekThemeId: m.weekTheme?.id ?? null,
+      matchStartTime: m.matchStartTime, teamId: m.team?.id ?? null, weekThemeId: m.weekTheme?.id ?? null, plannerSettings: m.plannerSettings ?? '',
     })),
     periods: data.periods.map((p: any) => ({
       id: p.id, matchId: p.match?.id ?? null, periodNumber: p.periodNumber, scoreHome: p.scoreHome, scoreAway: p.scoreAway,
       startTime: p.startTime, endTime: p.endTime, durationSeconds: p.durationSeconds,
     })),
     goals: data.goals.map((g: any) => ({ id: g.id, playerId: g.player?.id ?? null, matchId: g.match?.id ?? null, periodNumber: g.periodNumber, scoredAt: g.scoredAt })),
-    attendances: data.attendances.map((a: any) => ({ id: a.id, playerId: a.player?.id ?? null, matchId: a.match?.id ?? null, present: a.present, selected: a.selected })),
+    attendances: data.attendances.map((a: any) => ({ id: a.id, playerId: a.player?.id ?? null, matchId: a.match?.id ?? null, present: a.present, selected: a.selected, rotation: a.rotation ?? 'false', manualSeconds: a.manualSeconds ?? null })),
     playTimeSessions: data.playTimeSessions.map((s: any) => ({
       id: s.id, attendanceId: s.attendance?.id ?? null, period: s.period, fieldPosition: s.fieldPosition,
       startTime: s.startTime, endTime: s.endTime, durationSeconds: s.durationSeconds, active: s.active,
@@ -1249,6 +1518,7 @@ export async function exportAllData(): Promise<FullDataExport> {
       teamprincipe: t.teamprincipe, spelprincipe: t.spelprincipe, focusPunten: t.focusPunten, jaarplanLabel: t.jaarplanLabel, trainingsschema: t.trainingsschema,
       evalBehouden: t.evalBehouden, evalWijzigen: t.evalWijzigen, evalWarenActief: t.evalWarenActief,
       evalHaddenFun: t.evalHaddenFun, evalBijgeleerd: t.evalBijgeleerd, evalIndividueleAandacht: t.evalIndividueleAandacht,
+      sharedWithIds: (t.sharedWith ?? []).map((tr: any) => tr.id),
     })),
     exercises: data.exercises.map((ex: any) => ({
       id: ex.id, trainingId: ex.training?.id ?? null, order: ex.order, fase: ex.fase, naam: ex.naam, duurMinuten: ex.duurMinuten,
@@ -1257,9 +1527,18 @@ export async function exportAllData(): Promise<FullDataExport> {
     })),
     oefeningDatabank: data.oefeningDatabanks.map((o: any) => ({
       id: o.id, naam: o.naam, fase: o.fase, categorie: o.categorie ?? null, doelgroep: o.doelgroep ?? null, teamprincipe: o.teamprincipe,
-      duurMinuten: o.duurMinuten, organisatieSpelers: o.organisatieSpelers, organisatieAfmetingen: o.organisatieAfmetingen, organisatieMateriaal: o.organisatieMateriaal,
+      spelprincipe: o.spelprincipe ?? null, duurMinuten: o.duurMinuten, organisatieSpelers: o.organisatieSpelers, organisatieAfmetingen: o.organisatieAfmetingen, organisatieMateriaal: o.organisatieMateriaal,
       beschrijving: o.beschrijving, drawingData: o.drawingData, coachingPunten: o.coachingPunten, maximaalActief: o.maximaalActief, fun: o.fun,
       createdById: o.createdBy?.id ?? null, createdAt: o.createdAt,
+    })),
+    matchLineups: data.matchLineups.map((l: any) => ({
+      id: l.id, matchId: l.match?.id ?? null, period: l.period, assignment: l.assignment, selectedPlayerIds: l.selectedPlayerIds,
+    })),
+    lineupProposals: data.lineupProposals.map((l: any) => ({
+      id: l.id, matchId: l.match?.id ?? null, trainerId: l.trainer?.id ?? null, period: l.period, assignment: l.assignment,
+    })),
+    whiteboards: data.whiteboards.map((w: any) => ({
+      id: w.id, naam: w.naam, drawingData: w.drawingData, trainerId: w.trainer?.id ?? null, teamId: w.team?.id ?? null, createdAt: w.createdAt,
     })),
   };
 }
@@ -1280,6 +1559,7 @@ export function countFullDataExport(data: FullDataExport): Record<string, number
     goals: data.goals.length, attendances: data.attendances.length,
     playTimeSessions: data.playTimeSessions.length, evaluations: data.evaluations.length,
     trainings: data.trainings.length, exercises: data.exercises.length, oefeningDatabank: data.oefeningDatabank.length,
+    matchLineups: data.matchLineups.length, lineupProposals: data.lineupProposals.length, whiteboards: data.whiteboards.length,
   };
 }
 
@@ -1292,7 +1572,7 @@ export async function parseFullDataExportFile(file: File): Promise<FullDataExpor
     if (!Array.isArray(json[key])) throw new Error(`Ontbrekend of ongeldig veld "${key}" in het bestand`);
   }
   // Later toegevoegd — oudere exports hebben deze velden nog niet, dus optioneel met lege lijst als fallback.
-  for (const key of ['trainings', 'exercises', 'oefeningDatabank']) {
+  for (const key of ['trainings', 'exercises', 'oefeningDatabank', 'matchLineups', 'lineupProposals', 'whiteboards']) {
     if (!Array.isArray(json[key])) json[key] = [];
   }
   return json as FullDataExport;
@@ -1311,6 +1591,9 @@ async function deleteAllOf(listQueryField: string, deleteManyMutation: string): 
 
 export async function wipeAllSportData(): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
+  counts.matchLineups     = await deleteAllOf('matchLineups', 'deleteMatchLineups');
+  counts.lineupProposals  = await deleteAllOf('lineupProposals', 'deleteLineupProposals');
+  counts.whiteboards      = await deleteAllOf('whiteboards', 'deleteWhiteboards');
   counts.evaluations      = await deleteAllOf('evaluations', 'deleteEvaluations');
   counts.playTimeSessions = await deleteAllOf('playTimeSessions', 'deletePlayTimeSessions');
   counts.goals            = await deleteAllOf('goals', 'deleteGoals');
@@ -1409,6 +1692,8 @@ export async function importAllData(
     if (t.createdAt) input.createdAt = t.createdAt;
     if (teamId) input.team = { connect: { id: teamId } };
     if (trainerId) input.trainer = { connect: { id: trainerId } };
+    const shared = (t.sharedWithIds ?? []).map(id => trainerMap.get(id)).filter((id): id is string => !!id);
+    if (shared.length) input.sharedWith = { connect: shared.map(id => ({ id })) };
     const created = await gql(`mutation($data: TrainingCreateInput!) { createTraining(data: $data) { id } }`, { data: input });
     trainingMap.set(t.id, created.createTraining.id);
   });
@@ -1433,6 +1718,7 @@ export async function importAllData(
     };
     if (o.categorie) input.categorie = o.categorie;
     if (o.doelgroep) input.doelgroep = o.doelgroep;
+    if (o.spelprincipe) input.spelprincipe = o.spelprincipe;
     if (o.createdAt) input.createdAt = o.createdAt;
     if (trainerId) input.createdBy = { connect: { id: trainerId } };
     await gql(`mutation($data: OefeningDatabankCreateInput!) { createOefeningDatabank(data: $data) { id } }`, { data: input });
@@ -1443,6 +1729,7 @@ export async function importAllData(
     const input: Record<string, unknown> = { name: p.name, active: p.active };
     if (p.number != null) input.number = p.number;
     if (p.position) input.position = p.position;
+    if (p.position2) input.position2 = p.position2;
     if (teamId) input.team = { connect: { id: teamId } };
     const created = await gql(`mutation($data: PlayerCreateInput!) { createPlayer(data: $data) { id } }`, { data: input });
     playerMap.set(p.id, created.createPlayer.id);
@@ -1456,6 +1743,11 @@ export async function importAllData(
       currentPeriod: m.currentPeriod, periodStatus: m.periodStatus, scoreHome: m.scoreHome, scoreAway: m.scoreAway,
     };
     if (m.matchStartTime) input.matchStartTime = m.matchStartTime;
+    // Het schema verwijst naar spelers: oude id's vervangen door de nieuw aangemaakte.
+    if (m.plannerSettings) input.plannerSettings = m.plannerSettings.replace(/"([^"]+)"/g, (q, id) => {
+      const mapped = playerMap.get(id);
+      return mapped ? JSON.stringify(mapped) : q;
+    });
     if (teamId) input.team = { connect: { id: teamId } };
     if (themeId) input.weekTheme = { connect: { id: themeId } };
     const created = await gql(`mutation($data: MatchCreateInput!) { createMatch(data: $data) { id } }`, { data: input });
@@ -1487,7 +1779,8 @@ export async function importAllData(
   counts.attendances = await step('Aanwezigheden', data.attendances, async a => {
     const matchId = a.matchId ? matchMap.get(a.matchId) : undefined;
     if (!matchId) throw new Error('bijhorende wedstrijd ontbreekt');
-    const input: Record<string, unknown> = { match: { connect: { id: matchId } }, present: a.present, selected: a.selected };
+    const input: Record<string, unknown> = { match: { connect: { id: matchId } }, present: a.present, selected: a.selected, ...(a.rotation ? { rotation: a.rotation } : {}) };
+    if (a.manualSeconds != null) input.manualSeconds = a.manualSeconds;
     const playerId = a.playerId ? playerMap.get(a.playerId) : undefined;
     if (playerId) input.player = { connect: { id: playerId } };
     const created = await gql(`mutation($data: AttendanceCreateInput!) { createAttendance(data: $data) { id } }`, { data: input });
@@ -1515,6 +1808,47 @@ export async function importAllData(
     const playerId = e.playerId ? playerMap.get(e.playerId) : undefined;
     if (playerId) input.player = { connect: { id: playerId } };
     await gql(`mutation($data: EvaluationCreateInput!) { createEvaluation(data: $data) { id } }`, { data: input });
+  });
+
+  // Opstellingen bevatten speler-id's in JSON — omzetten naar de nieuwe id's.
+  const remapAssignment = (json: string) => {
+    try {
+      const obj = JSON.parse(json || '{}') as Record<string, string>;
+      return JSON.stringify(Object.fromEntries(
+        Object.entries(obj).map(([pos, pid]) => [pos, playerMap.get(pid)]).filter(([, pid]) => pid)));
+    } catch { return '{}'; }
+  };
+  const remapIds = (json: string) => {
+    try { return JSON.stringify((JSON.parse(json || '[]') as string[]).map(id => playerMap.get(id)).filter(Boolean)); }
+    catch { return '[]'; }
+  };
+
+  counts.matchLineups = await step('Opstellingen', data.matchLineups, async l => {
+    const matchId = l.matchId ? matchMap.get(l.matchId) : undefined;
+    if (!matchId) throw new Error('bijhorende wedstrijd ontbreekt');
+    await gql(`mutation($data: MatchLineupCreateInput!) { createMatchLineup(data: $data) { id } }`, { data: {
+      match: { connect: { id: matchId } }, period: l.period,
+      assignment: remapAssignment(l.assignment), selectedPlayerIds: remapIds(l.selectedPlayerIds),
+    } });
+  });
+
+  counts.lineupProposals = await step('Opstellingsvoorstellen', data.lineupProposals, async l => {
+    const matchId = l.matchId ? matchMap.get(l.matchId) : undefined;
+    if (!matchId) throw new Error('bijhorende wedstrijd ontbreekt');
+    const input: Record<string, unknown> = { match: { connect: { id: matchId } }, period: l.period, assignment: remapAssignment(l.assignment) };
+    const trainerId = l.trainerId ? trainerMap.get(l.trainerId) : undefined;
+    if (trainerId) input.trainer = { connect: { id: trainerId } };
+    await gql(`mutation($data: LineupProposalCreateInput!) { createLineupProposal(data: $data) { id } }`, { data: input });
+  });
+
+  counts.whiteboards = await step('Whiteboards', data.whiteboards, async w => {
+    const input: Record<string, unknown> = { naam: w.naam, drawingData: w.drawingData };
+    if (w.createdAt) input.createdAt = w.createdAt;
+    const teamId = w.teamId ? teamMap.get(w.teamId) : undefined;
+    const trainerId = w.trainerId ? trainerMap.get(w.trainerId) : undefined;
+    if (teamId) input.team = { connect: { id: teamId } };
+    if (trainerId) input.trainer = { connect: { id: trainerId } };
+    await gql(`mutation($data: WhiteboardCreateInput!) { createWhiteboard(data: $data) { id } }`, { data: input });
   });
 
   return { counts, errors, trainerCredentials };

@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   getMatches, getPlayers, getAttendancesForMatch, setAttendance, setManualPlaytime,
   getPlayTimeSessionsForMatch, startPlayTimeSession, stopPlayTimeSession,
-  updateMatch, getMatchOfTheWeek,
+  updateMatch, getMatchOfTheWeek, getSameDayMatchCandidates,
   getPeriodsForMatch, createPeriod, updatePeriod,
   getGoalsForMatch, addGoal, removeGoal,
   getMatchLineups, upsertMatchLineup,
@@ -63,6 +63,11 @@ export default function Matchday() {
   const [tick, setTick]                 = useState(0);
   const [subModal, setSubModal]         = useState<PlayerState | null>(null);
   const [matchPicker, setMatchPicker]   = useState(false);
+  // Wanneer boot() meerdere wedstrijden op dezelfde dag vindt, wordt de
+  // matchPicker meteen geopend i.p.v. stilzwijgend de eerste te kiezen — dit
+  // stuurt dan enkel de tekst op het lege-staat scherm erachter, zodat
+  // duidelijk is WAAROM er om een keuze gevraagd wordt.
+  const [needsMatchChoice, setNeedsMatchChoice] = useState(false);
   const [scoreModal, setScoreModal]     = useState(false);
   // De opstelling-planner (kwart 1-4) blijft na de aftrap enkel INklapbaar
   // bereikbaar i.p.v. volledig te verdwijnen — de opgeslagen opstellingen voor
@@ -100,6 +105,15 @@ export default function Matchday() {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   }
 
+  // Toon de "opstelling per kwart" automatisch zodra een kwart net beëindigd
+  // is (i.p.v. enkel op handmatig verzoek), zodat de trainer de opstelling
+  // van het volgende kwart altijd eerst ziet — en nog kan aanpassen — vóórdat
+  // die effectief gestart wordt. Ook nuttig na een pagina-herlaad terwijl de
+  // match al gepauzeerd stond.
+  useEffect(() => {
+    if (match?.periodStatus === 'paused') setShowLineupPlanner(true);
+  }, [match?.periodStatus, match?.currentPeriod]);
+
   async function boot() {
     setLoading(true);
     try {
@@ -107,6 +121,17 @@ export default function Matchday() {
       const [matches, players] = await Promise.all([getMatches(tid), getPlayers(tid)]);
       setAllMatches(matches);
       setAllPlayers(players.filter(p => p.active === 'true'));
+      // Staan er meerdere wedstrijden op dezelfde dag (bv. twee jeugdploegen die
+      // samen op verplaatsing gaan)? Dan NIET stilzwijgend de eerste openen —
+      // laat de trainer expliciet kiezen welke hij in Matchday wil opstarten.
+      if (getSameDayMatchCandidates(matches)) {
+        setMatch(null);
+        setNeedsMatchChoice(true);
+        setMatchPicker(true);
+        setLoading(false);
+        return;
+      }
+      setNeedsMatchChoice(false);
       const motw = getMatchOfTheWeek(matches);
       if (motw) await loadMatch(motw, players.filter(p => p.active === 'true'));
       else { setMatch(null); setLoading(false); }
@@ -246,7 +271,14 @@ export default function Matchday() {
     } finally { setBusy(false); }
   }
 
-  /** Pause: stop all active sessions, mark period as paused */
+  /** Pause: stop all active sessions, mark period as paused.
+   * Zaait daarna meteen de opstelling van het VOLGENDE kwart, zodat de
+   * trainer die na het beëindigen van een kwart direct te zien krijgt (i.p.v.
+   * pas bij het effectief starten) — zonder dit leek het volgende kwart met
+   * een lege opstelling te beginnen, terwijl startPeriod() achter de schermen
+   * gewoon terugviel op de posities van het voorbije kwart. Enkel zaaien als
+   * er voor dat kwart nog niets vooraf ingesteld werd, zodat een reeds
+   * geplande opstelling nooit overschreven wordt. */
   async function pausePeriod() {
     if (!match) return;
     setBusy(true);
@@ -257,6 +289,33 @@ export default function Matchday() {
       // Mark period end time
       const period = periods.find(p => p.periodNumber === match.currentPeriod);
       if (period) await updatePeriod(period.id, { endTime: new Date().toISOString() });
+
+      const nextPeriod = match.currentPeriod + 1;
+      if (nextPeriod <= TOTAL_PERIODS) {
+        const hasSavedLineup = (periodLineupsRef.current[nextPeriod] || []).length > 0;
+        const hasSavedAssignment = Object.keys(fieldAssignmentsRef.current[nextPeriod] || {}).length > 0;
+        if (!hasSavedLineup && !hasSavedAssignment) {
+          const endingPeriodSessions = sessions.filter(s => s.period === match.currentPeriod && s.fieldPosition);
+          const seededAssignment: Record<string, string> = {};
+          const seededPlayerIds: string[] = [];
+          for (const s of endingPeriodSessions) {
+            const att = attendances.find(a => a.id === s.attendance.id);
+            if (att && s.fieldPosition) {
+              seededAssignment[s.fieldPosition] = att.player.id;
+              seededPlayerIds.push(att.player.id);
+            }
+          }
+          if (seededPlayerIds.length > 0) {
+            const nextFas = { ...fieldAssignmentsRef.current, [nextPeriod]: seededAssignment };
+            fieldAssignmentsRef.current = nextFas;
+            setFieldAssignments(nextFas);
+            const nextLus = { ...periodLineupsRef.current, [nextPeriod]: seededPlayerIds };
+            periodLineupsRef.current = nextLus;
+            setPeriodLineups(nextLus);
+            persistMatchLineup(nextPeriod, seededAssignment, seededPlayerIds);
+          }
+        }
+      }
 
       await updateMatch(match.id, { periodStatus: 'paused' });
       const updated = await refreshMatch();
@@ -607,10 +666,14 @@ export default function Matchday() {
   if (!loading && !m) return (
     <div className="page md-empty">
       <div className="md-empty-icon">⚽</div>
-      <div className="md-empty-title">Geen wedstrijd</div>
-      <p className="md-empty-sub">Geen geplande wedstrijd gevonden.</p>
+      <div className="md-empty-title">{needsMatchChoice ? 'Meerdere wedstrijden vandaag' : 'Geen wedstrijd'}</div>
+      <p className="md-empty-sub">
+        {needsMatchChoice
+          ? 'Er staan meerdere wedstrijden op dezelfde dag gepland — kies hieronder welke je wilt opstarten.'
+          : 'Geen geplande wedstrijd gevonden.'}
+      </p>
       <button className="btn btn-outline" onClick={() => setMatchPicker(true)}>Kies een wedstrijd</button>
-      {matchPicker && <MatchPicker matches={allMatches} onPick={async m => { setMatchPicker(false); setLoading(true); await loadMatch(m); }} onClose={() => setMatchPicker(false)} />}
+      {matchPicker && <MatchPicker matches={allMatches} onPick={async m => { setMatchPicker(false); setNeedsMatchChoice(false); setLoading(true); await loadMatch(m); }} onClose={() => setMatchPicker(false)} />}
     </div>
   );
 
@@ -1536,6 +1599,12 @@ function PeriodLineupSelector({ matchId, allPlayers, attendances, fieldAssignmen
   initialPeriod?: number;
 }) {
   const [activePeriod, setActivePeriod] = useState(initialPeriod ?? 1);
+  // Springt mee naar het volgende kwart wanneer dat wijzigt (bv. na "Einde
+  // kwart") — zonder dit bleef het paneel, als het al open stond, op het
+  // net-afgelopen kwart staan i.p.v. automatisch door te schakelen.
+  useEffect(() => {
+    if (initialPeriod != null) setActivePeriod(initialPeriod);
+  }, [initialPeriod]);
   const [saving, setSaving] = useState(false);
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [lineupView, setLineupView] = useState<'list' | 'field'>('field');

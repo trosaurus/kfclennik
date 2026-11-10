@@ -108,6 +108,16 @@ export const lists: Lists = {
           { label: 'Aanvaller',    value: 'forward' },
         ],
       }),
+      // Tweede (alternatieve) positie — de wisselplanner zet de speler hier in
+      // wanneer zijn hoofdpositie al bezet is.
+      position2: select({
+        options: [
+          { label: 'Doelman',      value: 'keeper' },
+          { label: 'Verdediger',   value: 'defender' },
+          { label: 'Middenvelder', value: 'midfielder' },
+          { label: 'Aanvaller',    value: 'forward' },
+        ],
+      }),
       active: select({
         defaultValue: 'true',
         options: [
@@ -169,6 +179,10 @@ export const lists: Lists = {
       evaluations: relationship({ ref: 'Evaluation.match',  many: true }),
       lineupProposals: relationship({ ref: 'LineupProposal.match', many: true }),
       matchLineups:    relationship({ ref: 'MatchLineup.match',    many: true }),
+      // Wisselschema (JSON: PlannerSettings) — gedeeld tussen de trainers van de
+      // ploeg; leeg = nog geen schema ingesteld. Schrijven gaat via de mutatie
+      // savePlannerSettings, die gelijktijdige wijzigingen opvangt.
+      plannerSettings: text({ ui: { displayMode: 'textarea' }, defaultValue: '' }),
     },
     ui: { labelField: 'opponent' },
   }),
@@ -230,6 +244,16 @@ export const lists: Lists = {
         options: [
           { label: 'Geselecteerd',      value: 'true' },
           { label: 'Niet geselecteerd', value: 'false' },
+        ],
+      }),
+      // Niet geselecteerd omwille van een beurtrol (bewust rouleren, geen
+      // afwezigheid) — enkel zinvol samen met selected = 'false'. Wordt per
+      // speler over het seizoen geteld om de beurtrol eerlijk te verdelen.
+      rotation: select({
+        defaultValue: 'false',
+        options: [
+          { label: 'Beurtrol', value: 'true' },
+          { label: 'Geen',     value: 'false' },
         ],
       }),
       playTimeSessions: relationship({ ref: 'PlayTimeSession.attendance', many: true }),

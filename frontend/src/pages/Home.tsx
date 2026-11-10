@@ -3,7 +3,7 @@ import { useTeam } from '../lib/TeamContext';
 import './Home.css';
 
 const TILES = [
-  { to: '/matchday',      icon: '⚽', label: 'Matchday',            desc: 'Live speeltijden & opstelling' },
+  { to: '/match-live',    icon: '🔴', label: 'Match live',          desc: 'Wisselschema, doelpunten & stand' },
   { to: '/spelers',       icon: '👥', label: 'Spelers',              desc: 'Spelerslijst & profielen' },
   { to: '/wedstrijden',   icon: '📋', label: 'Wedstrijden',          desc: 'Matchen beheren' },
   { to: '/seizoen',       icon: '📈', label: 'Seizoensoverzicht',    desc: 'Speeltijd & statistieken' },

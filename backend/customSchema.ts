@@ -140,10 +140,33 @@ export function extendGraphqlSchema(schema: GraphQLSchema): GraphQLSchema {
         removeTeamManual(teamId: ID!): Team
         upsertMatchLineup(matchId: ID!, period: Int!, assignment: String!, selectedPlayerIds: String!): MatchLineupResult
         upsertLineupProposal(matchId: ID!, period: Int!, assignment: String!): LineupProposalResult
+        savePlannerSettings(matchId: ID!, expected: String!, value: String!): Boolean!
       }
     `,
     resolvers: {
       Mutation: {
+        // Schrijft enkel als de database nog `expected` bevat, en geeft anders
+        // false terug zodat de frontend zijn wijziging op de nieuwste versie kan
+        // overdoen. Twee trainers die tegelijk iets aanpassen lezen allebei
+        // dezelfde versie: zonder deze controle zou de tweede schrijver de
+        // wijziging van de eerste stilletjes wissen. context.query houdt de
+        // gewone toegangscontrole aan: een wedstrijd van een andere ploeg bestaat
+        // hier gewoon niet.
+        savePlannerSettings: async (
+          _root: unknown,
+          { matchId, expected, value }: { matchId: string; expected: string; value: string },
+          context: any
+        ) => {
+          requireSignedIn(context);
+          return withKeyLock(`plannerSettings:${matchId}`, async () => {
+            const match = await context.query.Match.findOne({ where: { id: matchId }, query: 'id plannerSettings' });
+            if (!match) throw new Error('Wedstrijd niet gevonden');
+            if (match.plannerSettings !== expected) return false;
+            await context.query.Match.updateOne({ where: { id: matchId }, data: { plannerSettings: value }, query: 'id' });
+            return true;
+          });
+        },
+
         // Vervangt de vroegere aanpak waarbij de frontend zelf "bestaat er al een
         // rij" opzocht en dan create/update koos — dat is een klassieke
         // check-then-act race: bij snel na elkaar opslaan (meerdere posities

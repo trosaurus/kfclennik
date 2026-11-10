@@ -2,7 +2,7 @@
 // header/mobiele nav) als TrainingsModus (het navigatiemenu daar), zodat er
 // maar één plek is om bij te werken wanneer een rubriek toegevoegd/hernoemd wordt.
 //
-// Spelers/Wedstrijden/Seizoen en Trainingen/Oefeningen/Whiteboard zijn elk
+// Wedstrijden/Matchday, Spelers/Seizoen en Trainingen/Oefeningen/Whiteboard zijn elk
 // samengevoegd tot 1 navigatie-item (linkt naar de eerste van de groep) —
 // de onderlinge pagina's zelf blijven gewoon aparte routes, maar krijgen een
 // tabstrip erboven (zie App.tsx's SectionTabs) om tussen elkaar te wisselen.
@@ -23,10 +23,13 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { to: '/',           label: 'Start',       icon: '🏠', end: true },
-  { to: '/matchday',   label: 'Matchday',    icon: '⚽' },
+  {
+    to: '/wedstrijden', label: 'Wedstrijden', icon: '⚽',
+    activePaths: ['/wedstrijden', '/matchday', '/match-live'],
+  },
   {
     to: '/spelers', label: 'Team', icon: '👥',
-    activePaths: ['/spelers', '/wedstrijden', '/seizoen'],
+    activePaths: ['/spelers', '/seizoen'],
   },
   {
     to: '/trainingen', label: 'Trainingen', icon: '📝',

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { computeSnap, NO_SNAP, SnapResult, SnapShape } from '../lib/snapGuides';
 import {
   DrawingScene, DrawingElement, DrawingElementType, DrawingBackground, AnimationFrame,
   PlayerColor, ConeColor, PLAYER_COLORS, CONE_COLORS,
@@ -17,6 +18,11 @@ interface Props {
   scene: DrawingScene;
   onChange?: (scene: DrawingScene) => void;
   readOnly?: boolean;
+  /** Toont in read-only modus een knop om de tekening op volledig scherm te
+   * bekijken (bv. Trainingsmodus). Opt-in, zodat kleine read-only previews in
+   * keuzelijsten geen extra knop krijgen. In bewerkmodus zit die knop altijd al
+   * in de toolbar. */
+  allowFullscreen?: boolean;
 }
 
 type Tool = 'select' | DrawingElementType;
@@ -147,7 +153,7 @@ function coneHex(color?: string): string {
   return CONE_COLORS.find(c => c.value === color)?.hex ?? CONE_COLORS[0].hex;
 }
 
-export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
+export default function DrawingCanvas({ scene, onChange, readOnly, allowFullscreen }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   // Bij een geïmporteerde achtergrond (PDF) bepaalt de afbeelding zelf staand/liggend
   // (async, want we moeten de afbeelding laden om de verhouding te kennen). Zonder
@@ -193,10 +199,10 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   const selectedElement = selectedId ? scene.elements.find(el => el.id === selectedId) ?? null : null;
   const [history, setHistory] = useState<DrawingScene[]>([]);
   const [future, setFuture] = useState<DrawingScene[]>([]);
-  // Uitlijnhulplijnen tijdens het verslepen (in scene-%): getoond zodra het
-  // versleepte element op dezelfde x en/of y valt als een ander element (of het
-  // veldmidden), zodat spelers makkelijk t.o.v. elkaar uitgelijnd kunnen worden.
-  const [dragGuides, setDragGuides] = useState<{ x?: number; y?: number }>({});
+  // Slimme uitlijnhulplijnen (zie lib/snapGuides.ts): getoond tijdens het
+  // verslepen, bij het plaatsen van een nieuw object en bij het tekenen van
+  // pijlen/lijnen/zones. Alt ingedrukt houden = vrij bewegen zonder vastklikken.
+  const [guides, setGuides] = useState<SnapResult>(NO_SNAP);
   const dragRef = useRef<{ id: string; dx: number; dy: number } | null>(null);
   const rotateDragRef = useRef<{ id: string } | null>(null);
   const resizeDragRef = useRef<{ id: string; startScale: number; startDist: number } | null>(null);
@@ -537,7 +543,10 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   function onCanvasPointerDown(e: React.PointerEvent<SVGSVGElement>) {
     if (readOnly || playing) return;
     (e.target as Element).setPointerCapture?.(e.pointerId);
-    const { x, y } = toSvgCoords(e);
+    const raw = toSvgCoords(e);
+    // Nieuwe objecten en het beginpunt van pijlen/lijnen klikken vast op de hulplijnen.
+    const placeSnap = tool === 'select' ? NO_SNAP : snapShape(raw, null, e);
+    const x = raw.x + placeSnap.dx, y = raw.y + placeSnap.dy;
 
     if (tool === 'select') {
       setSelectedIds([]);
@@ -583,43 +592,41 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
     return next <= 11 ? String(next) : '';
   }
 
-  const SNAP_PX = 6; // vangafstand in schermpixels, onafhankelijk van veldformaat
-
-  // Zoekt of (nx,ny) — in scene-% — dicht genoeg bij de x en/of y van een ander
-  // element (of het veldmidden) ligt om op te vangen, zodat spelers vlot exact
-  // naast/onder elkaar of gecentreerd op het veld gezet kunnen worden.
-  function computeDragSnap(nx: number, ny: number, excludeId: string): { x: number; y: number; guideX?: number; guideY?: number } {
-    const candX = [50], candY = [50]; // veldmidden als extra hulplijn
-    for (const other of scene.elements) {
-      if (other.id === excludeId) continue;
-      const pos = effectivePosition(other);
-      candX.push(pos.x);
-      if (pos.x2 !== undefined) candX.push(pos.x2);
-      candY.push(pos.y);
-      if (pos.y2 !== undefined) candY.push(pos.y2);
-    }
-    let snappedX = nx, guideX: number | undefined, bestDx = SNAP_PX;
-    for (const cx of candX) {
-      const dPx = Math.abs((nx - cx) / 100) * W;
-      if (dPx < bestDx) { bestDx = dPx; snappedX = cx; guideX = cx; }
-    }
-    let snappedY = ny, guideY: number | undefined, bestDy = SNAP_PX;
-    for (const cy of candY) {
-      const dPx = Math.abs((ny - cy) / 100) * H;
-      if (dPx < bestDy) { bestDy = dPx; snappedY = cy; guideY = cy; }
-    }
-    return { x: snappedX, y: snappedY, guideX, guideY };
+  /** Vastklikken + hulplijnen voor een object op de voorgestelde plek. Alt = uit. */
+  function snapShape(shape: SnapShape, excludeId: string | null, e: { altKey: boolean }, extra?: { x: number; y: number }): SnapResult {
+    if (e.altKey) return NO_SNAP;
+    const others = scene.elements.filter(o => o.id !== excludeId).map(o => effectivePosition(o));
+    const res = computeSnap(shape, others, {
+      W, H,
+      extraX: [50, ...(extra ? [extra.x] : [])],   // veldmidden (+ beginpunt bij het tekenen van een pijl)
+      extraY: [50, ...(extra ? [extra.y] : [])],
+    });
+    // Niets uit te lijnen → steeds hetzelfde object, zodat React niet onnodig hertekent.
+    return res.align.length || res.spacing.length ? res : NO_SNAP;
   }
+
+  function clearGuides() {
+    if (guides.align.length || guides.spacing.length) setGuides(NO_SNAP);
+  }
+
+  /** Te plaatsen enkelvoudig object (geen select/tekst/pijl-tool)? */
+  const isPointTool = tool !== 'select' && tool !== 'text' && !TWO_POINT_TYPES.has(tool as DrawingElementType);
 
   function onCanvasPointerMove(e: React.PointerEvent<SVGSVGElement>) {
     if (readOnly) return;
     const { x, y } = toSvgCoords(e);
 
-    if (!dragRef.current && (dragGuides.x !== undefined || dragGuides.y !== undefined)) setDragGuides({});
-
     if (draftArrowRef.current) {
-      setDraftArrow({ x: draftArrowRef.current.x, y: draftArrowRef.current.y, x2: x, y2: y });
+      const start = draftArrowRef.current;
+      const snap = snapShape({ x, y }, null, e, start);
+      setGuides(snap);
+      setDraftArrow({ x: start.x, y: start.y, x2: x + snap.dx, y2: y + snap.dy });
       return;
+    }
+    // Zweven met een plaatsingstool: alvast tonen waar het object zal vastklikken.
+    if (!dragRef.current && !rotateDragRef.current && !resizeDragRef.current && !curveDragRef.current) {
+      if (isPointTool && !playing) setGuides(snapShape({ x, y }, null, e));
+      else clearGuides();
     }
     if (rotateDragRef.current) {
       const { id } = rotateDragRef.current;
@@ -681,9 +688,15 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
       const { id, dx, dy } = dragRef.current;
       const el = scene.elements.find(el => el.id === id);
       if (!el) return;
-      const snap = computeDragSnap(x - dx, y - dy, id);
-      const nx = snap.x, ny = snap.y;
-      setDragGuides({ x: snap.guideX, y: snap.guideY });
+      const cur = effectivePosition(el);
+      const px = x - dx, py = y - dy;
+      const snap = snapShape({
+        x: px, y: py,
+        x2: cur.x2 !== undefined ? cur.x2 + (px - cur.x) : undefined,
+        y2: cur.y2 !== undefined ? cur.y2 + (py - cur.y) : undefined,
+      }, id, e);
+      const nx = px + snap.dx, ny = py + snap.dy;
+      setGuides(snap);
       if (animMode) {
         // In animatiemodus verplaatst slepen enkel de positie binnen de actieve
         // stap — de basisplaatsing van het element blijft ongewijzigd.
@@ -709,7 +722,7 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
 
   function onCanvasPointerUp() {
     if (readOnly) return;
-    setDragGuides({});
+    setGuides(NO_SNAP);
     if (draftArrowRef.current && draftArrow) {
       const dist = Math.hypot(draftArrow.x2 - draftArrow.x, draftArrow.y2 - draftArrow.y);
       if (dist > 3) {
@@ -886,7 +899,24 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
   }
 
   return (
-    <div className={`dc-wrap ${fullscreen ? 'dc-fullscreen' : ''}`}>
+    <div
+      className={`dc-wrap ${fullscreen ? 'dc-fullscreen' : ''} ${readOnly ? 'dc-readonly' : ''}`}
+      style={{ ['--dc-ratio' as string]: W / H }}
+    >
+      {/* Read-only (bv. Trainingsmodus): de bewerk-toolbar is verborgen, maar
+          volledig scherm moet er ook dan zijn — net daar wil je de tekening op
+          het veld groot kunnen tonen aan de spelers. */}
+      {readOnly && allowFullscreen && (
+        <div className="dc-view-toolbar">
+          <button
+            className={`dc-tool ${fullscreen ? 'active' : ''}`}
+            title={fullscreen ? 'Volledig scherm verlaten (Esc)' : 'Volledig scherm'}
+            onClick={() => setFullscreen(v => !v)}
+          >
+            {fullscreen ? '⤢' : '⛶'}
+          </button>
+        </div>
+      )}
       {!readOnly && (
         <div className="dc-toolbar">
           <button
@@ -1104,6 +1134,7 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
           onPointerMove={onCanvasPointerMove}
           onPointerUp={onCanvasPointerUp}
           onPointerCancel={onCanvasPointerUp}
+          onPointerLeave={() => { if (!dragRef.current && !draftArrowRef.current) clearGuides(); }}
         >
           <defs>
             <marker id="dc-arrowhead" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
@@ -1112,7 +1143,13 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
           </defs>
 
           {scene.backgroundImage
-            ? <image href={scene.backgroundImage} x="0" y="0" width={W} height={H} preserveAspectRatio="xMidYMid slice" />
+            // "meet" (i.p.v. "slice") toont de volledige geïmporteerde
+            // veldtekening — het vaste PORTRAIT/LANDSCAPE-canvasformaat komt
+            // zelden exact overeen met de beeldverhouding van de uit de PDF
+            // gesneden afbeelding, en "slice" (= cover-gedrag) sneed dan
+            // stukken van de tekening (bv. brede layouts met meerdere
+            // groepen naast elkaar) buiten beeld af.
+            ? <image href={scene.backgroundImage} x="0" y="0" width={W} height={H} preserveAspectRatio="xMidYMid meet" />
             : renderBackground(scene.background, W, H)}
 
           {scene.elements.map(el => {
@@ -1128,14 +1165,7 @@ export default function DrawingCanvas({ scene, onChange, readOnly }: Props) {
 
           {draftArrow && renderLineOrShape({ id: 'draft', type: tool as DrawingElementType, x: draftArrow.x, y: draftArrow.y, x2: draftArrow.x2, y2: draftArrow.y2 }, false, W, H)}
 
-          {dragGuides.x !== undefined && (
-            <line x1={(dragGuides.x / 100) * W} y1={0} x2={(dragGuides.x / 100) * W} y2={H}
-              stroke="#00E5FF" strokeWidth="1" strokeDasharray="4 3" pointerEvents="none" />
-          )}
-          {dragGuides.y !== undefined && (
-            <line x1={0} y1={(dragGuides.y / 100) * H} x2={W} y2={(dragGuides.y / 100) * H}
-              stroke="#00E5FF" strokeWidth="1" strokeDasharray="4 3" pointerEvents="none" />
-          )}
+          {renderGuides(guides, W, H)}
         </svg>
       </div>
     </div>
@@ -1625,6 +1655,62 @@ function renderCurveHandle(el: { x: number; y: number; x2?: number; y2?: number;
       <circle cx={peakX} cy={peakY} r="18" fill="transparent"
         style={{ cursor: 'grab', touchAction: 'none' }} onPointerDown={onPointerDown} />
       <circle cx={peakX} cy={peakY} r="6" fill="white" stroke="var(--red, #CC1A1A)" strokeWidth="1.5" style={{ pointerEvents: 'none' }} />
+    </g>
+  );
+}
+
+// ── Uitlijnhulplijnen ─────────────────────────────────────────────────────────
+// Magenta valt op zowel op het groene veld als op een witte/geïmporteerde achtergrond.
+const GUIDE_COLOR = '#FF2D95';
+
+function renderGuides(g: SnapResult, W: number, H: number) {
+  if (!g.align.length && !g.spacing.length) return null;
+  const X = (v: number) => (v / 100) * W;
+  const Y = (v: number) => (v / 100) * H;
+  const cross = (x: number, y: number, key: string) => (
+    <g key={key}>
+      <line x1={x - 3} y1={y - 3} x2={x + 3} y2={y + 3} />
+      <line x1={x - 3} y1={y + 3} x2={x + 3} y2={y - 3} />
+    </g>
+  );
+  return (
+    <g pointerEvents="none" stroke={GUIDE_COLOR} strokeWidth={1} fill="none">
+      {g.align.map((a, i) => {
+        const full = a.from <= 0 && a.to >= 100; // veldmidden: gestreept over het hele veld
+        return (
+          <g key={`a${i}`}>
+            {a.axis === 'x'
+              ? <line x1={X(a.at)} y1={Y(a.from)} x2={X(a.at)} y2={Y(a.to)} strokeDasharray={full ? '4 3' : undefined} />
+              : <line x1={X(a.from)} y1={Y(a.at)} x2={X(a.to)} y2={Y(a.at)} strokeDasharray={full ? '4 3' : undefined} />}
+            {!full && a.marks.map((m, j) => cross(X(m.x), Y(m.y), `m${i}-${j}`))}
+          </g>
+        );
+      })}
+      {g.spacing.map((s, i) => (
+        <g key={`s${i}`}>
+          {s.segments.map(([from, to], j) => {
+            // Maatlijn met eindstreepjes, een beetje naast de rij zodat ze de objecten niet raakt.
+            if (s.axis === 'x') {
+              const y = Y(s.at) + 14, x1 = X(from) + 4, x2 = X(to) - 4;
+              return (
+                <g key={j}>
+                  <line x1={x1} y1={y} x2={x2} y2={y} />
+                  <line x1={x1} y1={y - 4} x2={x1} y2={y + 4} />
+                  <line x1={x2} y1={y - 4} x2={x2} y2={y + 4} />
+                </g>
+              );
+            }
+            const x = X(s.at) + 14, y1 = Y(from) + 4, y2 = Y(to) - 4;
+            return (
+              <g key={j}>
+                <line x1={x} y1={y1} x2={x} y2={y2} />
+                <line x1={x - 4} y1={y1} x2={x + 4} y2={y1} />
+                <line x1={x - 4} y1={y2} x2={x + 4} y2={y2} />
+              </g>
+            );
+          })}
+        </g>
+      ))}
     </g>
   );
 }

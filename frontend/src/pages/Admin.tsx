@@ -27,6 +27,7 @@ const ENTITY_LABELS: Record<string, string> = {
   playTimeSessions: 'Speeltijdsessies', evaluations: 'Evaluaties',
   trainings: 'Trainingen', exercises: 'Oefeningen (in trainingen)', oefeningDatabank: 'Oefendatabank',
   trainingen: 'Trainingen', oefeningen: 'Oefeningen',
+  matchLineups: 'Opstellingen', lineupProposals: 'Opstellingsvoorstellen', whiteboards: 'Whiteboards',
 };
 
 const WIPE_CONFIRM_WORD = 'VERWIJDER';

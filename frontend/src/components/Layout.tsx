@@ -1,3 +1,4 @@
+import ErrorBoundary from './ErrorBoundary';
 import { useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { logout } from '../lib/auth';
@@ -28,7 +29,7 @@ export default function Layout() {
   ];
 
   // NavLink's eigen isActive-check kijkt enkel naar `to` — voor de
-  // samengevoegde items (Team/Trainingen) moet het ook oplichten op de andere
+  // samengevoegde items (Wedstrijden/Team/Trainingen) moet het ook oplichten op de andere
   // paden uit de groep (activePaths), dus die state berekenen we hier zelf.
   function isItemActive(item: (typeof NAV_ITEMS)[number]): boolean {
     const paths = item.activePaths ?? [item.to];
@@ -86,7 +87,7 @@ export default function Layout() {
       </header>
 
       <main className="main-content">
-        <Outlet />
+        <ErrorBoundary resetKey={location.pathname}><Outlet /></ErrorBoundary>
       </main>
 
       <nav className="mobile-nav">

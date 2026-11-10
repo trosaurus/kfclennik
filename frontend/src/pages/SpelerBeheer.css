@@ -70,6 +70,8 @@
 .sb-pos-midfielder { background: rgba(245,158,11,0.15); color: #fcd34d; }
 .sb-pos-forward    { background: rgba(239,68,68,0.2);   color: #fca5a5; }
 .sb-pos-none { color: var(--text-dim); }
+/* Tweede positie: zelfde kleur, maar lichter en met stippellijn */
+.sb-pos-second { margin-left: 4px; background: transparent !important; outline: 1px dashed currentColor; outline-offset: -1px; opacity: .85; }
 
 .sb-row-actions { display: flex; gap: 4px; justify-content: flex-end; opacity: 0; transition: opacity .12s; }
 tr:hover .sb-row-actions { opacity: 1; }

@@ -21,14 +21,14 @@ export default function SpelerBeheer() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editPlayer, setEditPlayer] = useState<Player | null>(null);
-  const [form, setForm] = useState({ name: '', number: '', position: '', active: 'true', teamId: '' });
+  const [form, setForm] = useState({ name: '', number: '', position: '', position2: '', active: 'true', teamId: '' });
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('');
   const [posFilter, setPosFilter] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'active' | 'inactive'>('active');
   const [sortKey, setSortKey] = useState<SortKey>('number');
   const [confirmDelete, setConfirmDelete] = useState<Player | null>(null);
-  const [importResult, setImportResult] = useState<{ rows: Player[]; errors: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ rows: Player[]; updated: Player[]; errors: string[] } | null>(null);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -48,13 +48,13 @@ export default function SpelerBeheer() {
 
   function openCreate() {
     setEditPlayer(null);
-    setForm({ name: '', number: '', position: '', active: 'true', teamId: teamId ?? '' });
+    setForm({ name: '', number: '', position: '', position2: '', active: 'true', teamId: teamId ?? '' });
     setShowModal(true);
   }
 
   function openEdit(p: Player) {
     setEditPlayer(p);
-    setForm({ name: p.name, number: p.number?.toString() ?? '', position: p.position ?? '', active: p.active, teamId: '' });
+    setForm({ name: p.name, number: p.number?.toString() ?? '', position: p.position ?? '', position2: p.position2 ?? '', active: p.active, teamId: '' });
     setShowModal(true);
   }
 
@@ -65,6 +65,10 @@ export default function SpelerBeheer() {
       // Build clean input — never send empty strings to Keystone select fields
       const input: Record<string, unknown> = { name: form.name.trim() };
       if (form.position) input.position = form.position;
+      // Tweede positie: bij bewerken expliciet null om ze te kunnen wissen.
+      const pos2 = form.position2 && form.position2 !== form.position ? form.position2 : '';
+      if (pos2) input.position2 = pos2;
+      else if (editPlayer) input.position2 = null;
       if (form.number && form.number !== '') input.number = parseInt(form.number);
       if (editPlayer) {
         input.active = form.active;
@@ -95,7 +99,7 @@ export default function SpelerBeheer() {
     .filter(p => {
       if (activeFilter === 'active' && p.active !== 'true') return false;
       if (activeFilter === 'inactive' && p.active === 'true') return false;
-      if (posFilter && p.position !== posFilter) return false;
+      if (posFilter && p.position !== posFilter && p.position2 !== posFilter) return false;
       if (filter && !p.name.toLowerCase().includes(filter.toLowerCase())) return false;
       return true;
     })
@@ -116,7 +120,11 @@ export default function SpelerBeheer() {
     if (!file) return;
     setImporting(true);
     try {
-      const result = await importPlayersCSV(file, (p) => createPlayer({ ...p, teamId: teamId ?? undefined }));
+      const result = await importPlayersCSV(file, {
+        existing: players,
+        create: p => createPlayer({ ...p, teamId: teamId ?? undefined }),
+        update: (id, p) => updatePlayer(id, p),
+      });
       setImportResult(result);
       await load();
     } finally {
@@ -230,7 +238,10 @@ export default function SpelerBeheer() {
                   <td className="sb-name">{p.name}</td>
                   <td>
                     {p.position
-                      ? <span className={`sb-pos-badge sb-pos-${p.position}`}>{POSITION_FULL[p.position]}</span>
+                      ? <>
+                          <span className={`sb-pos-badge sb-pos-${p.position}`}>{POSITION_FULL[p.position]}</span>
+                          {p.position2 && <span className={`sb-pos-badge sb-pos-second sb-pos-${p.position2}`} title="Tweede positie">{POSITION_FULL[p.position2]}</span>}
+                        </>
                       : <span className="sb-pos-none">—</span>}
                   </td>
                   <td><span className={`tag ${p.active === 'true' ? 'tag-green' : 'tag-black'}`}>{p.active === 'true' ? 'Actief' : 'Inactief'}</span></td>
@@ -254,6 +265,7 @@ export default function SpelerBeheer() {
                   <div className="sb-mobile-name">{p.name}</div>
                   <div className="sb-mobile-meta">
                     {p.position && <span className={`sb-pos-badge sb-pos-${p.position}`}>{POSITION_FULL[p.position]}</span>}
+                    {p.position2 && <span className={`sb-pos-badge sb-pos-second sb-pos-${p.position2}`} title="Tweede positie">{POSITION_FULL[p.position2]}</span>}
                     <span className={`tag ${p.active === 'true' ? 'tag-green' : 'tag-black'}`} style={{ fontSize: 10 }}>{p.active === 'true' ? 'Actief' : 'Inactief'}</span>
                   </div>
                 </div>
@@ -303,6 +315,13 @@ export default function SpelerBeheer() {
                   {POSITIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
               </div>
+              <div className="form-group">
+                <label className="input-label">Tweede positie</label>
+                <select className="input-field" value={form.position2} onChange={e => setForm({ ...form, position2: e.target.value })}>
+                  <option value="">Geen</option>
+                  {POSITIONS.filter(p => p.value !== form.position).map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
             </div>
             {editPlayer && (
               <div className="form-group">
@@ -345,7 +364,10 @@ export default function SpelerBeheer() {
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setImportResult(null)}>
           <div className="modal">
             <div className="modal-title">CSV import resultaat</div>
-            <p style={{ color: 'var(--green)', marginBottom: 8 }}>✓ {importResult.rows.length} speler{importResult.rows.length !== 1 ? 's' : ''} geïmporteerd</p>
+            <p style={{ color: 'var(--green)', marginBottom: 8 }}>
+              ✓ {importResult.rows.length} nieuwe speler{importResult.rows.length !== 1 ? 's' : ''} toegevoegd
+              {importResult.updated.length > 0 && <>, {importResult.updated.length} bestaande bijgewerkt</>}
+            </p>
             {importResult.errors.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <p style={{ color: 'var(--red)', marginBottom: 6, fontFamily: 'var(--font-heading)', fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' }}>
