@@ -24,8 +24,17 @@ export interface Team {
   id: string;
   name: string;
   category: string;
-  club: string;
+  club: { id: string; name: string } | null;
   active: string;
+}
+
+export interface ClubRecord {
+  id: string;
+  name: string;
+  stamnummer: string;
+  /** Data-URL (PNG/JPEG) of lege string. */
+  logo: string;
+  teamsCount: number;
 }
 
 export interface Player {
@@ -115,16 +124,17 @@ export interface Goal {
 
 export async function getTeams(): Promise<Team[]> {
   const data = await gql(`query {
-    teams(take: 100, orderBy: { name: asc }) { id name category club active }
+    teams(take: 100, orderBy: { name: asc }) { id name category club { id name } active }
   }`);
   return data.teams;
 }
 
-export async function createTeam(input: { name: string; category: string; club?: string; trainerId?: string }): Promise<Team> {
-  const teamData: Record<string, unknown> = { name: input.name, category: input.category, club: input.club ?? '', active: 'true' };
+export async function createTeam(input: { name: string; category: string; clubId?: string; trainerId?: string }): Promise<Team> {
+  const teamData: Record<string, unknown> = { name: input.name, category: input.category, active: 'true' };
+  if (input.clubId) teamData.club = { connect: { id: input.clubId } };
   if (input.trainerId) teamData.trainers = { connect: { id: input.trainerId } };
   const data = await gql(
-    `mutation CreateTeam($data: TeamCreateInput!) { createTeam(data: $data) { id name category club active } }`,
+    `mutation CreateTeam($data: TeamCreateInput!) { createTeam(data: $data) { id name category club { id name } active } }`,
     { data: teamData }
   );
   return data.createTeam;
@@ -132,10 +142,69 @@ export async function createTeam(input: { name: string; category: string; club?:
 
 export async function updateTeam(id: string, input: Record<string, unknown>): Promise<Team> {
   const data = await gql(
-    `mutation UpdateTeam($id: ID!, $data: TeamUpdateInput!) { updateTeam(where: { id: $id }, data: $data) { id name category club active } }`,
+    `mutation UpdateTeam($id: ID!, $data: TeamUpdateInput!) { updateTeam(where: { id: $id }, data: $data) { id name category club { id name } active } }`,
     { id, data: input }
   );
   return data.updateTeam;
+}
+
+/** Relatie-input om de club van een ploeg te zetten of los te koppelen. */
+export function teamClubInput(clubId: string): Record<string, unknown> {
+  return clubId ? { connect: { id: clubId } } : { disconnect: true };
+}
+
+// ── Clubs (admin) ─────────────────────────────────────────────────────────────
+
+const CLUB_FIELDS = 'id name stamnummer logo teamsCount';
+
+export async function getClubs(): Promise<ClubRecord[]> {
+  const data = await gql(`query { clubs(take: 500, orderBy: { name: asc }) { ${CLUB_FIELDS} } }`);
+  return data.clubs;
+}
+
+export async function createClub(input: { name: string; stamnummer: string; logo: string }): Promise<ClubRecord> {
+  const data = await gql(
+    `mutation($data: ClubCreateInput!) { createClub(data: $data) { ${CLUB_FIELDS} } }`,
+    { data: input }
+  );
+  return data.createClub;
+}
+
+export async function updateClub(id: string, input: { name?: string; stamnummer?: string; logo?: string }): Promise<ClubRecord> {
+  const data = await gql(
+    `mutation($id: ID!, $data: ClubUpdateInput!) { updateClub(where: { id: $id }, data: $data) { ${CLUB_FIELDS} } }`,
+    { id, data: input }
+  );
+  return data.updateClub;
+}
+
+export async function deleteClub(id: string): Promise<void> {
+  await gql(`mutation($id: ID!) { deleteClub(where: { id: $id }) { id } }`, { id });
+}
+
+/** Leest een afbeeldingsbestand in, verkleint het tot max. `maxSize` px (lange
+ * zijde) en geeft een PNG-data-URL terug — houdt het in de database bewaarde
+ * logo klein, ongeacht hoe groot het geüploade bestand is. */
+export function imageFileToLogoDataUrl(file: File, maxSize = 256): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!/^image\//.test(file.type)) { reject(new Error('Kies een afbeelding (PNG, JPEG, SVG…).')); return; }
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSize / Math.max(img.naturalWidth || maxSize, img.naturalHeight || maxSize));
+      const w = Math.max(1, Math.round((img.naturalWidth || maxSize) * scale));
+      const h = Math.max(1, Math.round((img.naturalHeight || maxSize) * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      URL.revokeObjectURL(url);
+      if (!ctx) { reject(new Error('Afbeelding kon niet verwerkt worden.')); return; }
+      ctx.drawImage(img, 0, 0, w, h);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Afbeelding kon niet gelezen worden.')); };
+    img.src = url;
+  });
 }
 
 export async function deleteTeam(id: string): Promise<void> {
@@ -315,16 +384,23 @@ export async function getMatches(teamId?: string): Promise<Match[]> {
   return data.matches;
 }
 
+/** Naam van de eigen club — gezet door TeamContext zodra de trainer gekend is. */
+let homeClubName = '';
+export function setHomeClubName(name: string): void { homeClubName = name.trim(); }
+
 /** Trainers plakken het tegenstander-veld soms over uit een officiële
- * kalender die de volledige "Thuis - Uit"-titel toont (bv. "KFC Lennik - FC
- * Negenmanneke") i.p.v. enkel de bezoekende ploeg — dat verdubbelt "KFC
- * Lennik" overal waar de UI het thuisteam er zelf al vóór zet (bv. de
- * Matchday-banner "KFC Lennik vs {opponent}"). Knip een leidend "KFC Lennik"
- * (met evt. "4157" en een scheidingsteken) er dus weg, maar enkel als er nog
- * een echte tegenstandernaam overblijft. */
+ * kalender die de volledige "Thuis - Uit"-titel toont (bv. "<Eigen club> - FC
+ * Negenmanneke") i.p.v. enkel de bezoekende ploeg — dat verdubbelt de eigen
+ * clubnaam overal waar de UI het thuisteam er zelf al vóór zet (bv. de
+ * Matchday-banner "<club> vs {opponent}"). Knip een leidende eigen clubnaam
+ * (met evt. een stamnummer en een scheidingsteken) er dus weg, maar enkel als
+ * er nog een echte tegenstandernaam overblijft. */
 function sanitizeOpponentName(raw: string): string {
   const trimmed = raw.trim();
-  const stripped = trimmed.replace(/^kfc\s*lennik\s*(?:4157)?\s*[-–:]\s*/i, '').trim();
+  if (!homeClubName) return trimmed;
+  const namePattern = homeClubName.split(/\s+/).map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s*');
+  const re = new RegExp(`^${namePattern}\\s*(?:\\d+)?\\s*[-–:]\\s*`, 'i');
+  const stripped = trimmed.replace(re, '').trim();
   return stripped || trimmed;
 }
 
@@ -1394,7 +1470,10 @@ const FULL_TAKE = 20000;
 export interface FullDataExport {
   version: 1;
   exportedAt: string;
-  teams: Array<{ id: string; name: string; category: string; club: string; active: string }>;
+  /** Ontbreekt in exportbestanden van vóór het Club-model. */
+  clubs?: Array<{ id: string; name: string; stamnummer: string; logo: string }>;
+  /** `club` = clubnaam (oudere bestanden hebben enkel dit), `clubId` verwijst naar `clubs`. */
+  teams: Array<{ id: string; name: string; category: string; club: string; clubId?: string | null; active: string }>;
   weekThemes: Array<{ id: string; title: string; category: string; description: string; active: string; createdAt: string | null }>;
   trainers: Array<{ id: string; name: string; email: string; role: string; teamId: string | null }>;
   players: Array<{ id: string; name: string; number: number | null; position: string | null; position2?: string | null; active: string; teamId: string | null }>;
@@ -1440,7 +1519,8 @@ export interface FullDataExport {
 
 export async function exportAllData(): Promise<FullDataExport> {
   const data = await gql(`query {
-    teams(take: ${FULL_TAKE}) { id name category club active }
+    clubs(take: ${FULL_TAKE}) { id name stamnummer logo }
+    teams(take: ${FULL_TAKE}) { id name category club { id name } active }
     weekThemes(take: ${FULL_TAKE}) { id title category description active createdAt }
     trainers(take: ${FULL_TAKE}) { id name email role team { id } }
     players(take: ${FULL_TAKE}) { id name number position position2 active team { id } }
@@ -1484,7 +1564,11 @@ export async function exportAllData(): Promise<FullDataExport> {
   return {
     version: 1,
     exportedAt: new Date().toISOString(),
-    teams: data.teams,
+    clubs: data.clubs,
+    teams: data.teams.map((t: any) => ({
+      id: t.id, name: t.name, category: t.category, active: t.active,
+      club: t.club?.name ?? '', clubId: t.club?.id ?? null,
+    })),
     weekThemes: data.weekThemes,
     trainers: data.trainers.map((t: any) => ({ id: t.id, name: t.name, email: t.email, role: t.role, teamId: t.team?.id ?? null })),
     players: data.players.map((p: any) => ({ id: p.id, name: p.name, number: p.number, position: p.position, position2: p.position2 ?? null, active: p.active, teamId: p.team?.id ?? null })),
@@ -1554,6 +1638,7 @@ export function downloadJSON(data: unknown, filename: string): void {
 
 export function countFullDataExport(data: FullDataExport): Record<string, number> {
   return {
+    clubs: data.clubs?.length ?? 0,
     teams: data.teams.length, weekThemes: data.weekThemes.length, trainers: data.trainers.length,
     players: data.players.length, matches: data.matches.length, periods: data.periods.length,
     goals: data.goals.length, attendances: data.attendances.length,
@@ -1650,10 +1735,32 @@ export async function importAllData(
 
   const counts: Record<string, number> = {};
 
+  // Clubs worden niet gewist (zie wipeAllSportData) — hergebruik dus een
+  // bestaande club met dezelfde naam i.p.v. een dubbele aan te maken.
+  const clubMap = new Map<string, string>();
+  const clubIdByName = new Map<string, string>();
+  for (const c of await getClubs()) clubIdByName.set(c.name.trim().toLowerCase(), c.id);
+  async function ensureClub(name: string, extra: { stamnummer?: string; logo?: string } = {}): Promise<string> {
+    const key = name.trim().toLowerCase();
+    const existing = clubIdByName.get(key);
+    if (existing) return existing;
+    const created = await createClub({ name: name.trim(), stamnummer: extra.stamnummer ?? '', logo: extra.logo ?? '' });
+    clubIdByName.set(key, created.id);
+    return created.id;
+  }
+
+  counts.clubs = await step('Clubs', data.clubs ?? [], async c => {
+    clubMap.set(c.id, await ensureClub(c.name, { stamnummer: c.stamnummer, logo: c.logo }));
+  });
+
   counts.teams = await step('Ploegen', data.teams, async t => {
+    const teamData: Record<string, unknown> = { name: t.name, category: t.category, active: t.active };
+    const clubId = (t.clubId && clubMap.get(t.clubId))
+      || (typeof t.club === 'string' && t.club.trim() ? await ensureClub(t.club) : '');
+    if (clubId) teamData.club = { connect: { id: clubId } };
     const created = await gql(
       `mutation($data: TeamCreateInput!) { createTeam(data: $data) { id } }`,
-      { data: { name: t.name, category: t.category, club: t.club, active: t.active } }
+      { data: teamData }
     );
     teamMap.set(t.id, created.createTeam.id);
   });

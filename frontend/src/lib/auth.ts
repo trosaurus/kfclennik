@@ -5,8 +5,23 @@ export interface Trainer {
   name: string;
   email: string;
   role: string;
-  team: { id: string; name: string; category: string } | null;
+  team: {
+    id: string; name: string; category: string;
+    club: Club | null;
+  } | null;
 }
+
+/** De club (klant/organisatie) waartoe de ploeg van de trainer behoort —
+ * naam, stamnummer en logo worden per club ingesteld in het admin-scherm. */
+export interface Club {
+  id: string;
+  name: string;
+  stamnummer: string;
+  /** Data-URL (PNG/JPEG) of lege string. */
+  logo: string;
+}
+
+const TRAINER_FIELDS = 'id name email role team { id name category club { id name stamnummer logo } }';
 
 async function gqlAuth(query: string, variables?: Record<string, unknown>) {
   const res = await fetch(GQL_URL, {
@@ -25,7 +40,7 @@ export async function login(email: string, password: string): Promise<{ ok: bool
     `mutation Login($email: String!, $password: String!) {
        authenticateTrainerWithPassword(email: $email, password: $password) {
          ... on TrainerAuthenticationWithPasswordSuccess {
-           item { id name email role team { id name category } }
+           item { ${TRAINER_FIELDS} }
          }
          ... on TrainerAuthenticationWithPasswordFailure {
            message
@@ -46,7 +61,7 @@ export async function logout(): Promise<void> {
 export async function getMe(): Promise<Trainer | null> {
   try {
     const data = await gqlAuth(
-      `query { authenticatedItem { ... on Trainer { id name email role team { id name category } } } }`
+      `query { authenticatedItem { ... on Trainer { ${TRAINER_FIELDS} } } }`
     );
     return data.authenticatedItem ?? null;
   } catch {

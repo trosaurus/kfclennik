@@ -28,11 +28,20 @@ model Trainer {
   @@index([teamId])
 }
 
+model Club {
+  id         String @id @default(cuid())
+  name       String @default("")
+  stamnummer String @default("")
+  logo       String @default("")
+  teams      Team[] @relation("Team_club")
+}
+
 model Team {
   id                   String       @id @default(cuid())
   name                 String       @default("")
   category             String
-  club                 String       @default("")
+  club                 Club?        @relation("Team_club", fields: [clubId], references: [id])
+  clubId               String?      @map("club")
   active               String?      @default("true")
   manualFileName       String       @default("")
   manualUploadedAt     DateTime?
@@ -42,6 +51,8 @@ model Team {
   matches              Match[]      @relation("Match_team")
   trainings            Training[]   @relation("Training_team")
   from_Whiteboard_team Whiteboard[] @relation("Whiteboard_team")
+
+  @@index([clubId])
 }
 
 model Player {

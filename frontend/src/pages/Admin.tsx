@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  getTeams, createTeam, updateTeam, deleteTeam, Team,
+  getTeams, createTeam, updateTeam, deleteTeam, Team, teamClubInput,
+  getClubs, createClub, updateClub, deleteClub, ClubRecord, imageFileToLogoDataUrl,
   getTrainers, createTrainer, updateTrainer, deleteTrainer, TrainerRecord,
   getAllPlayersWithTeam, assignPlayerToTeam, bulkAssignPlayersToTeam, PlayerWithTeam,
   createPlayer, deletePlayer,
@@ -12,6 +13,7 @@ import {
   exportOefendatabankData, countOefendatabankExport, parseOefendatabankExportFile, importOefendatabankData, OefendatabankExport,
 } from '../lib/api';
 import { useTeam } from '../lib/TeamContext';
+import { getMe } from '../lib/auth';
 import './Admin.css';
 
 const CATEGORIES = ['U6','U7','U8','U9','U10','U11','U12','U13','U15','U17'];
@@ -22,7 +24,7 @@ const FORMAT_MAP: Record<string,string> = {
 };
 
 const ENTITY_LABELS: Record<string, string> = {
-  teams: 'Ploegen', weekThemes: "Weekthema's", trainers: 'Trainers', players: 'Spelers',
+  clubs: 'Clubs', teams: 'Ploegen', weekThemes: "Weekthema's", trainers: 'Trainers', players: 'Spelers',
   matches: 'Wedstrijden', periods: 'Periodes', goals: 'Doelpunten', attendances: 'Aanwezigheden',
   playTimeSessions: 'Speeltijdsessies', evaluations: 'Evaluaties',
   trainings: 'Trainingen', exercises: 'Oefeningen (in trainingen)', oefeningDatabank: 'Oefendatabank',
@@ -32,11 +34,12 @@ const ENTITY_LABELS: Record<string, string> = {
 
 const WIPE_CONFIRM_WORD = 'VERWIJDER';
 
-type Tab = 'teams' | 'trainers' | 'players' | 'themes' | 'data';
+type Tab = 'clubs' | 'teams' | 'trainers' | 'players' | 'themes' | 'data';
 
 export default function Admin() {
-  const { trainer: currentTrainer } = useTeam();
+  const { trainer: currentTrainer, setTrainer } = useTeam();
   const [teams, setTeams]       = useState<Team[]>([]);
+  const [clubs, setClubs]       = useState<ClubRecord[]>([]);
   const [trainers, setTrainers] = useState<TrainerRecord[]>([]);
   const [allPlayers, setAllPlayers] = useState<PlayerWithTeam[]>([]);
   const [themes, setThemes]     = useState<WeekTheme[]>([]);
@@ -46,7 +49,13 @@ export default function Admin() {
   // ── Team form state ───────────────────────────────────────────────────────
   const [teamModal, setTeamModal] = useState(false);
   const [editTeam, setEditTeam]   = useState<Team | null>(null);
-  const [teamForm, setTeamForm]   = useState({ name: '', category: 'U8', club: '' });
+  const [teamForm, setTeamForm]   = useState({ name: '', category: 'U8', clubId: '' });
+
+  // ── Club state ──
+  const [clubModal, setClubModal]   = useState(false);
+  const [editClub, setEditClub]     = useState<ClubRecord | null>(null);
+  const [clubForm, setClubForm]     = useState({ name: '', stamnummer: '', logo: '' });
+  const [clubSaving, setClubSaving] = useState(false);
   const [saving, setSaving]       = useState(false);
 
   // ── Trainer form state ────────────────────────────────────────────────────
@@ -115,8 +124,8 @@ export default function Admin() {
   async function load() {
     setLoading(true);
     try {
-      const [t, tr, p, th] = await Promise.all([getTeams(), getTrainers(), getAllPlayersWithTeam(), getWeekThemes()]);
-      setTeams(t); setTrainers(tr); setAllPlayers(p); setThemes(th);
+      const [c, t, tr, p, th] = await Promise.all([getClubs(), getTeams(), getTrainers(), getAllPlayersWithTeam(), getWeekThemes()]);
+      setClubs(c); setTeams(t); setTrainers(tr); setAllPlayers(p); setThemes(th);
     } finally { setLoading(false); }
   }
 
@@ -153,7 +162,7 @@ export default function Admin() {
     try {
       const data = await exportAllData();
       const stamp = new Date().toISOString().slice(0, 10);
-      downloadJSON(data, `kfc-lennik-export-${stamp}.json`);
+      downloadJSON(data, `voetbaltraining-export-${stamp}.json`);
     } catch (e) {
       setExportError(e instanceof Error ? e.message : 'Export mislukt');
     } finally { setExporting(false); }
@@ -205,7 +214,7 @@ export default function Admin() {
     try {
       const data = await exportTrainingenData();
       const stamp = new Date().toISOString().slice(0, 10);
-      downloadJSON(data, `kfc-lennik-trainingen-${stamp}.json`);
+      downloadJSON(data, `voetbaltraining-trainingen-${stamp}.json`);
     } catch (e) {
       setTrExportError(e instanceof Error ? e.message : 'Export mislukt');
     } finally { setTrExporting(false); }
@@ -243,7 +252,7 @@ export default function Admin() {
     try {
       const data = await exportOefendatabankData();
       const stamp = new Date().toISOString().slice(0, 10);
-      downloadJSON(data, `kfc-lennik-oefendatabank-${stamp}.json`);
+      downloadJSON(data, `voetbaltraining-oefendatabank-${stamp}.json`);
     } catch (e) {
       setOdExportError(e instanceof Error ? e.message : 'Export mislukt');
     } finally { setOdExporting(false); }
@@ -274,20 +283,54 @@ export default function Admin() {
     }
   }
 
+  // ── Club CRUD ──────────────────────────────────────────────────────────────
+
+  function openClubCreate() {
+    setEditClub(null); setClubForm({ name: '', stamnummer: '', logo: '' }); setError(''); setClubModal(true);
+  }
+  function openClubEdit(c: ClubRecord) {
+    setEditClub(c); setClubForm({ name: c.name, stamnummer: c.stamnummer, logo: c.logo }); setError(''); setClubModal(true);
+  }
+  async function handleClubLogoFile(file: File | undefined) {
+    if (!file) return;
+    setError('');
+    try { setClubForm(f => ({ ...f, logo: '' })); const logo = await imageFileToLogoDataUrl(file); setClubForm(f => ({ ...f, logo })); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Logo kon niet verwerkt worden'); }
+  }
+  async function handleSaveClub() {
+    if (!clubForm.name.trim()) return;
+    setClubSaving(true); setError('');
+    try {
+      const input = { name: clubForm.name.trim(), stamnummer: clubForm.stamnummer.trim(), logo: clubForm.logo };
+      if (editClub) await updateClub(editClub.id, input);
+      else await createClub(input);
+      setClubModal(false); await load();
+      // Eigen club gewijzigd → zijbalk/logo meteen bijwerken.
+      if (editClub && currentTrainer?.team?.club?.id === editClub.id) setTrainer(await getMe());
+    } catch (e) { setError(e instanceof Error ? e.message : 'Fout'); } finally { setClubSaving(false); }
+  }
+  async function handleDeleteClub(c: ClubRecord) {
+    const extra = c.teamsCount > 0 ? `\n\n${c.teamsCount} ploeg(en) worden losgekoppeld (niet verwijderd).` : '';
+    if (!confirm(`Club "${c.name}" verwijderen?${extra}`)) return;
+    try { await deleteClub(c.id); await load(); }
+    catch (e) { alert(e instanceof Error ? e.message : 'Verwijderen mislukt'); }
+  }
+
   // ── Team CRUD ──────────────────────────────────────────────────────────────
 
   function openTeamCreate() {
-    setEditTeam(null); setTeamForm({ name: '', category: 'U8', club: '' }); setError(''); setTeamModal(true);
+    // Met maar één club (de gewone situatie) die alvast voorinvullen.
+    setEditTeam(null); setTeamForm({ name: '', category: 'U8', clubId: clubs.length === 1 ? clubs[0].id : '' }); setError(''); setTeamModal(true);
   }
   function openTeamEdit(t: Team) {
-    setEditTeam(t); setTeamForm({ name: t.name, category: t.category, club: t.club }); setError(''); setTeamModal(true);
+    setEditTeam(t); setTeamForm({ name: t.name, category: t.category, clubId: t.club?.id ?? '' }); setError(''); setTeamModal(true);
   }
   async function handleSaveTeam() {
     if (!teamForm.name) return;
     setSaving(true); setError('');
     try {
-      if (editTeam) await updateTeam(editTeam.id, { name: teamForm.name, category: teamForm.category, club: teamForm.club });
-      else await createTeam({ name: teamForm.name, category: teamForm.category, club: teamForm.club });
+      if (editTeam) await updateTeam(editTeam.id, { name: teamForm.name, category: teamForm.category, club: teamClubInput(teamForm.clubId) });
+      else await createTeam({ name: teamForm.name, category: teamForm.category, clubId: teamForm.clubId || undefined });
       setTeamModal(false); await load();
     } catch(e) { setError(e instanceof Error ? e.message : 'Fout'); } finally { setSaving(false); }
   }
@@ -407,13 +450,14 @@ export default function Admin() {
       <div className="adm-header">
         <div>
           <h1 className="page-title">Beheer</h1>
-          <p className="page-subtitle">Ploegen, Trainers & Spelers</p>
+          <p className="page-subtitle">Clubs, ploegen, trainers & spelers</p>
         </div>
       </div>
 
       {/* ── TABS ── */}
       <div className="adm-tabs">
         {([
+          { key: 'clubs' as Tab,    icon: '🏟️', label: 'Clubs',     count: clubs.length },
           { key: 'teams' as Tab,    icon: '🏆', label: 'Ploegen',   count: teams.length },
           { key: 'trainers' as Tab, icon: '👤', label: 'Trainers',  count: trainers.length },
           { key: 'players' as Tab,  icon: '👥', label: 'Spelers',   count: allPlayers.length },
@@ -425,6 +469,44 @@ export default function Admin() {
           </button>
         ))}
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* ── CLUBS TAB ──────────────────────────────────────────────────────── */}
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {tab === 'clubs' && (
+        <div>
+          <div className="adm-toolbar">
+            <button className="btn btn-primary" onClick={openClubCreate}>+ Nieuwe club</button>
+          </div>
+          <p className="adm-club-intro">
+            Elke ploeg hoort bij een club. Naam, stamnummer en logo van de club verschijnen in de
+            zijbalk, op de wedstrijdschermen en in de PDF-exports van de trainers van die club.
+          </p>
+          {clubs.length === 0 ? (
+            <div className="empty-state"><div className="empty-icon">🏟️</div>Nog geen clubs</div>
+          ) : (
+            <div className="adm-club-grid">
+              {clubs.map(c => (
+                <div key={c.id} className="adm-club-card card">
+                  <div className="adm-club-logo">
+                    {c.logo ? <img src={c.logo} alt="" /> : <span>{c.name.slice(0, 2).toUpperCase()}</span>}
+                  </div>
+                  <div className="adm-club-info">
+                    <div className="adm-club-name">{c.name}</div>
+                    <div className="adm-club-meta">
+                      {c.stamnummer ? `Stamnummer ${c.stamnummer} · ` : ''}{c.teamsCount} ploeg{c.teamsCount === 1 ? '' : 'en'}
+                    </div>
+                  </div>
+                  <div className="adm-tc-actions">
+                    <button className="btn btn-ghost btn-sm" onClick={() => openClubEdit(c)} aria-label="Bewerken">✏️</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => handleDeleteClub(c)} aria-label="Verwijderen">🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {/* ── PLOEGEN TAB ────────────────────────────────────────────────────── */}
@@ -454,7 +536,7 @@ export default function Admin() {
                     </div>
                     <div className="adm-tc-body">
                       <div className="adm-tc-name">{t.name}</div>
-                      {t.club && <div className="adm-tc-club">{t.club}</div>}
+                      {t.club ? <div className="adm-tc-club">{t.club.name}</div> : <div className="adm-tc-club adm-tc-club-missing">Geen club gekoppeld</div>}
                     </div>
                     <div className="adm-tc-trainers">
                       <div className="adm-tc-trainers-label">Trainers <span className="adm-tc-trainers-count">{teamTrainers.length}</span></div>
@@ -797,7 +879,7 @@ export default function Admin() {
                       </tbody>
                     </table>
                     <button className="btn btn-outline btn-sm" style={{ marginTop: 10 }}
-                      onClick={() => downloadJSON(importResult.trainerCredentials, 'kfc-lennik-tijdelijke-wachtwoorden.json')}>
+                      onClick={() => downloadJSON(importResult.trainerCredentials, 'voetbaltraining-tijdelijke-wachtwoorden.json')}>
                       ⬇ Download als bestand
                     </button>
                   </div>
@@ -1008,7 +1090,7 @@ export default function Admin() {
               <label className="input-label">Ploegnaam *</label>
               <input className="input-field" autoFocus value={teamForm.name}
                 onChange={e => setTeamForm({...teamForm, name: e.target.value})}
-                onKeyDown={e => e.key === 'Enter' && handleSaveTeam()} placeholder="bv. KFC Lennik U10A" />
+                onKeyDown={e => e.key === 'Enter' && handleSaveTeam()} placeholder="bv. U10A" />
             </div>
             <div className="form-row">
               <div className="form-group">
@@ -1020,8 +1102,11 @@ export default function Admin() {
               </div>
               <div className="form-group">
                 <label className="input-label">Club</label>
-                <input className="input-field" value={teamForm.club}
-                  onChange={e => setTeamForm({...teamForm, club: e.target.value})} placeholder="KFC Lennik" />
+                <select className="input-field" value={teamForm.clubId}
+                  onChange={e => setTeamForm({...teamForm, clubId: e.target.value})}>
+                  <option value="">— Geen club —</option>
+                  {clubs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
               </div>
             </div>
             {error && <div className="adm-error">⚠ {error}</div>}
@@ -1029,6 +1114,51 @@ export default function Admin() {
               <button className="btn btn-outline" onClick={() => setTeamModal(false)}>Annuleer</button>
               <button className="btn btn-primary" disabled={saving || !teamForm.name} onClick={handleSaveTeam}>
                 {saving ? 'Opslaan...' : 'Opslaan'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Club modal */}
+      {clubModal && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setClubModal(false)}>
+          <div className="modal">
+            <div className="modal-title">{editClub ? 'Club bewerken' : 'Nieuwe club'}</div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="input-label">Clubnaam *</label>
+                <input className="input-field" autoFocus value={clubForm.name}
+                  onChange={e => setClubForm({...clubForm, name: e.target.value})}
+                  onKeyDown={e => e.key === 'Enter' && handleSaveClub()} placeholder="bv. KFC Lennik" />
+              </div>
+              <div className="form-group">
+                <label className="input-label">Stamnummer</label>
+                <input className="input-field" value={clubForm.stamnummer} inputMode="numeric"
+                  onChange={e => setClubForm({...clubForm, stamnummer: e.target.value})} placeholder="bv. 4157" />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="input-label">Logo</label>
+              <div className="adm-club-logo-edit">
+                <div className="adm-club-logo">
+                  {clubForm.logo ? <img src={clubForm.logo} alt="" /> : <span>{(clubForm.name || '?').slice(0, 2).toUpperCase()}</span>}
+                </div>
+                <label className="btn btn-outline btn-sm">
+                  {clubForm.logo ? 'Ander logo…' : 'Logo kiezen…'}
+                  <input type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden
+                    onChange={e => { handleClubLogoFile(e.target.files?.[0]); e.target.value = ''; }} />
+                </label>
+                {clubForm.logo && (
+                  <button className="btn btn-ghost btn-sm" onClick={() => setClubForm({...clubForm, logo: ''})}>Verwijderen</button>
+                )}
+              </div>
+            </div>
+            {error && <div className="adm-error">⚠ {error}</div>}
+            <div className="modal-actions">
+              <button className="btn btn-outline" onClick={() => setClubModal(false)}>Annuleer</button>
+              <button className="btn btn-primary" disabled={clubSaving || !clubForm.name.trim()} onClick={handleSaveClub}>
+                {clubSaving ? 'Opslaan...' : 'Opslaan'}
               </button>
             </div>
           </div>

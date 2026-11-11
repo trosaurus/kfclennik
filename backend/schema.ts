@@ -5,9 +5,12 @@ import {
   isSignedIn, isAdmin, anySignedInFilter, selfOrAdminFilter, ownTeamFilter,
   teamOwnedFilter, matchScopedFilter, attendanceScopedFilter, matchScopedOwnTrainerFilter,
   trainingOwnedFilter, exerciseScopedFilter, trainingVisibleFilter, exerciseVisibleFilter,
-  selfOrAdminFieldRead,
+  selfOrAdminFieldRead, ownClubFilter,
   relationGuard,
 } from './access';
+
+/** ±1 MB aan afbeelding (base64 is ~4/3 van de ruwe grootte). */
+const MAX_LOGO_DATA_URL_LENGTH = 1_400_000;
 
 // ── Lists ──────────────────────────────────────────────────────────────────────
 
@@ -44,6 +47,41 @@ export const lists: Lists = {
     ui: { labelField: 'name' },
   }),
 
+  // ── Club (organisatie/klant) ────────────────────────────────────────────────
+  // Bovenste laag boven Team: elke ploeg hoort bij één club. Clubnaam,
+  // stamnummer en logo worden hier per club ingesteld i.p.v. hardgecodeerd in
+  // de app (eerste stap richting meerdere clubs met elk een eigen abonnement).
+  // Lezen: een trainer ziet enkel de club van de eigen ploeg; aanmaken/
+  // wijzigen/verwijderen blijft admin-only.
+  Club: list({
+    access: {
+      operation: { query: isSignedIn, create: isAdmin, update: isAdmin, delete: isAdmin },
+      filter: { query: ownClubFilter, update: ownClubFilter, delete: ownClubFilter },
+    },
+    hooks: {
+      validateInput: ({ resolvedData, addValidationError }) => {
+        const logo = resolvedData.logo;
+        if (typeof logo === 'string' && logo !== '') {
+          if (!/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(logo)) {
+            addValidationError('Logo moet een PNG- of JPEG-afbeelding zijn.');
+          } else if (logo.length > MAX_LOGO_DATA_URL_LENGTH) {
+            addValidationError('Logo is te groot (max. ±1 MB).');
+          }
+        }
+      },
+    },
+    fields: {
+      name:       text({ validation: { isRequired: true } }),
+      stamnummer: text({ defaultValue: '' }),
+      // Logo als data-URL (PNG/JPEG, base64) — klein genoeg om in de database
+      // te bewaren, zodat er geen aparte bestandsopslag/route nodig is en de
+      // PDF-export het rechtstreeks kan gebruiken.
+      logo:       text({ defaultValue: '', ui: { displayMode: 'textarea' } }),
+      teams:      relationship({ ref: 'Team.club', many: true }),
+    },
+    ui: { labelField: 'name' },
+  }),
+
   // ── Team ────────────────────────────────────────────────────────────────────
   Team: list({
     access: {
@@ -67,7 +105,7 @@ export const lists: Lists = {
           { label: 'U17 (11v11)', value: 'U17' },
         ],
       }),
-      club:    text({ defaultValue: '' }),
+      club:    relationship({ ref: 'Club.teams', many: false }),
       active: select({
         defaultValue: 'true',
         options: [

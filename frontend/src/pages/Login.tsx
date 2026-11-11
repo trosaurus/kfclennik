@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { login } from '../lib/auth';
+import { login, getMe } from '../lib/auth';
 import { useTeam } from '../lib/TeamContext';
-import logo from '../assets/Logo-KFC-Lennik.png';
+import { APP_NAME, APP_LOGO } from '../lib/brand';
 import './Login.css';
 
 export default function Login() {
@@ -19,7 +19,10 @@ export default function Login() {
     try {
       const result = await login(email, password);
       if (result.ok && result.trainer) {
-        setTrainer(result.trainer);
+        // Opnieuw ophalen ná het aanmelden: tijdens de login-mutatie zelf is er
+        // nog geen sessie, waardoor de (ploeg-gescopete) ploeg en club in het
+        // antwoord van die mutatie nog leeg zijn.
+        setTrainer((await getMe()) ?? result.trainer);
       } else {
         setError(result.message ?? 'Ongeldig e-mailadres of wachtwoord');
       }
@@ -40,7 +43,7 @@ export default function Login() {
           <span className="pitch-box pitch-box-bottom" />
         </div>
         <div className="login-hero-text">
-          <img src={logo} alt="" className="login-hero-logo" />
+          <img src={APP_LOGO} alt="" className="login-hero-logo" />
           <h1>Trainen, coachen,<br />speeltijd eerlijk verdelen.</h1>
           <p>Trainingen · Oefeningen · Tekentool · Tactiek · Wedstrijd live</p>
         </div>
@@ -48,10 +51,10 @@ export default function Login() {
 
       <div className="login-card">
         <div className="login-brand">
-          <img src={logo} alt="KFC Lennik" />
+          <img src={APP_LOGO} alt={APP_NAME} />
           <div>
-            <div className="login-title">KFC Lennik</div>
-            <div className="login-subtitle">Voetbaltraining · trainersportaal</div>
+            <div className="login-title">{APP_NAME}</div>
+            <div className="login-subtitle">Trainersportaal voor jeugdvoetbal</div>
           </div>
         </div>
         <h2 className="login-heading">Aanmelden</h2>
@@ -64,7 +67,7 @@ export default function Login() {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              placeholder="trainer@kfclennik.be"
+              placeholder="trainer@jouwclub.be"
               autoFocus
               autoComplete="email"
             />

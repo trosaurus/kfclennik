@@ -1,6 +1,6 @@
-# KFC Lennik 4157 — Speeltijdbeheer
+# Voetbaltraining.app
 
-Voetbalapplicatie voor KFC Lennik. Beheer je spelerslijst, volg aanwezigheid per match, en registreer speeltijden live.
+Trainersportaal voor jeugdvoetbal: bereid trainingen voor, beheer je spelerslijst, volg aanwezigheid per match en registreer speeltijden live. Oorspronkelijk gebouwd voor KFC Lennik; clubnaam, stamnummer en logo zijn nu een instelling per club.
 
 ## Mappenstructuur
 
@@ -70,9 +70,12 @@ cd backend && npm install --legacy-peer-deps && npm run dev
 Keystone vraagt bij de eerste start om een **eerste admin account** aan te maken op http://localhost:3000/admin. Dit is je admin-login.
 
 ### Daarna via Admin UI of via de app (⚙️ Admin pagina)
-1. Maak ploegen aan (bv. KFC Lennik U10A — categorie U10)
-2. Maak trainers aan en koppel ze aan een ploeg
-3. Elke trainer logt in en ziet enkel zijn eigen ploeg
+1. Maak een club aan (tabblad **Clubs**: naam, stamnummer, logo)
+2. Maak ploegen aan en koppel ze aan die club (bv. U10A — categorie U10)
+3. Maak trainers aan en koppel ze aan een ploeg
+4. Elke trainer logt in en ziet enkel de eigen ploeg, met naam en logo van de eigen club
+
+Bij een bestaande database van vóór het Club-model maakt de backend bij het opstarten automatisch één club aan (standaard "KFC Lennik", stamnummer 4157 en het logo uit `backend/assets/images/`, aan te passen met `LEGACY_CLUB_NAME`/`LEGACY_CLUB_STAMNUMMER`) en koppelt alle ploegen eraan. Dat gebeurt enkel zolang er nog geen enkele club bestaat.
 
 ### Categorieën & veldformaten
 | Categorie | Formaat | Kwartduur |

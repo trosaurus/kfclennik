@@ -16,7 +16,7 @@ import './Matchday.css';
 import FieldView, { PositionTimeStats } from './FieldView';
 import VoorkeurOpstellingPanel from './VoorkeurOpstellingPanel';
 import { getPositionsForCategory, getPeriodDuration } from '../lib/teamConfig';
-import { useTeam } from '../lib/TeamContext';
+import { useTeam, useHomeLabel } from '../lib/TeamContext';
 import { generateLineupPDF } from '../lib/generateLineupPDF';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -32,6 +32,7 @@ interface PlayerState {
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function Matchday({ matchId }: { matchId?: string } = {}) {
+  const homeLabel = useHomeLabel();
   const { teamId, category, trainer } = useTeam();
   const [allMatches, setAllMatches]     = useState<Match[]>([]);
   const [match, setMatch]               = useState<Match | null>(null);
@@ -467,7 +468,8 @@ export default function Matchday({ matchId }: { matchId?: string } = {}) {
     generateLineupPDF({
       match,
       category: cat,
-      teamName: trainer?.team?.name ?? 'KFC Lennik',
+      teamName: trainer?.team?.name ?? homeLabel,
+      clubTitle: [trainer?.team?.club?.name, trainer?.team?.club?.stamnummer].filter(Boolean).join(' '),
       quarters: quarterData,
       allPlayers,
       sessions,
@@ -695,7 +697,7 @@ export default function Matchday({ matchId }: { matchId?: string } = {}) {
   const remaining  = periodRemainingSeconds();
   const elapsed    = periodElapsedSeconds();
   // scoreHome/scoreAway zijn de letterlijke thuis-/uitploeg-kolommen (zo schrijft
-  // addGoal ze ook weg, o.b.v. match.location) — voor weergave naast "KFC Lennik"
+  // addGoal ze ook weg, o.b.v. match.location) — voor weergave naast de eigen clubnaam
   // moeten we altijd ONS cijfer tonen, niet zomaar scoreHome.
   const ownScore = m!.location === 'home' ? m!.scoreHome : m!.scoreAway;
   const oppScore = m!.location === 'home' ? m!.scoreAway : m!.scoreHome;
@@ -713,7 +715,7 @@ export default function Matchday({ matchId }: { matchId?: string } = {}) {
              'VOLGENDE WEDSTRIJD'}
           </div>
           <div className="md-banner-vs">
-            KFC Lennik <span className="md-vs-sep">vs</span> {m!.opponent}
+            {homeLabel} <span className="md-vs-sep">vs</span> {m!.opponent}
           </div>
           <div className="md-banner-meta">
             {new Date(m!.date).toLocaleDateString('nl-BE', { weekday:'long', day:'numeric', month:'long' })}
@@ -1005,6 +1007,7 @@ function PeriodTracker({ currentPeriod, periodStatus, periods, elapsed, remainin
   onScoreEdit: (id: string, h: number, a: number) => void; isFinished: boolean;
   location: string; opponent: string;
 }) {
+  const homeLabel = useHomeLabel();
   const [editId, setEditId]     = useState<string | null>(null);
   const [editHome, setEditHome] = useState(0);
   const [editAway, setEditAway] = useState(0);
@@ -1027,7 +1030,7 @@ function PeriodTracker({ currentPeriod, periodStatus, periods, elapsed, remainin
     return (
       <div className="md-score-btns">
         <div className="md-score-team">
-          <span className="md-score-team-label">KFC Lennik</span>
+          <span className="md-score-team-label">{homeLabel}</span>
           <div className="md-score-ctrl">
             <button className="md-score-btn md-score-minus" onClick={() => bumpOwn(-1)}>−</button>
             <span className="md-score-val">{ownVal}</span>
@@ -1073,7 +1076,7 @@ function PeriodTracker({ currentPeriod, periodStatus, periods, elapsed, remainin
                     <input type="number" min={0} className="input-field md-score-inp"
                       value={ownIsHome ? editHome : editAway}
                       onChange={e => (ownIsHome ? setEditHome : setEditAway)(+e.target.value)}
-                      title="KFC Lennik" />
+                      title={homeLabel} />
                     <span className="md-score-sep">–</span>
                     <input type="number" min={0} className="input-field md-score-inp"
                       value={ownIsHome ? editAway : editHome}
@@ -1178,6 +1181,7 @@ function MatchSummary({ playerStates, sessions, periods, goals, location, onSetM
   onRemoveGoal: (goalId: string, periodNumber: number) => Promise<void>;
   onEditScores: () => void;
 }) {
+  const homeLabel = useHomeLabel();
   // p.scoreHome/scoreAway zijn de letterlijke thuis-/uitploeg-kolommen — welke
   // daarvan "ons" is hangt af van match.location (zie ook addGoal in lib/api.ts).
   const ownField = location === 'home' ? 'scoreHome' : 'scoreAway';
@@ -1207,7 +1211,7 @@ function MatchSummary({ playerStates, sessions, periods, goals, location, onSetM
             </thead>
             <tbody>
               <tr>
-                <td style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 13, letterSpacing: 0, whiteSpace: 'nowrap' }}>KFC Lennik</td>
+                <td style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: 13, letterSpacing: 0, whiteSpace: 'nowrap' }}>{homeLabel}</td>
                 {periods.map(p => <td key={p.id} style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'var(--accent)', textAlign: 'center' }}>{p[ownField]}</td>)}
                 <td style={{ fontFamily: 'var(--font-display)', fontSize: 26, color: 'var(--accent)', textAlign: 'center' }}>{totalOwn}</td>
               </tr>
@@ -1442,6 +1446,7 @@ function ScoreModal({ match, periods, onSave, onClose }: {
   match: Match; periods: Period[];
   onSave: (periodNumber: number, h: number, a: number) => void | Promise<void>; onClose: () => void;
 }) {
+  const homeLabel = useHomeLabel();
   // Toon altijd alle kwarten (ook die zonder Period-rij) — die worden bij het
   // opslaan aangemaakt. Geïndexeerd op kwartnummer i.p.v. Period-id.
   const quarters = Array.from({ length: TOTAL_PERIODS }, (_, i) => i + 1);
@@ -1453,7 +1458,7 @@ function ScoreModal({ match, periods, onSave, onClose }: {
   );
   const [saving, setSaving] = useState(false);
   // scoreHome/scoreAway in de data zijn de letterlijke thuis-/uitploeg-kolommen —
-  // toon "KFC Lennik" hier altijd links, ongeacht welk letterlijk veld dat is,
+  // toon de eigen club hier altijd links, ongeacht welk letterlijk veld dat is,
   // zodat de volgorde overeenkomt met de banner erboven (zie ownScore/oppScore).
   const ownIsHome = match.location === 'home';
   const ownKey: 'home' | 'away' = ownIsHome ? 'home' : 'away';
@@ -1481,7 +1486,7 @@ function ScoreModal({ match, periods, onSave, onClose }: {
       <div className="modal">
         <div className="modal-title">Standen per kwart</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 4, fontFamily: 'var(--font-heading)', fontSize: 11, fontWeight: 700, letterSpacing: 0, color: 'var(--text-dim)' }}>
-          <span style={{ width: 60, textAlign: 'center' }}>KFC Lennik</span>
+          <span style={{ width: 60, textAlign: 'center' }}>{homeLabel}</span>
           <span style={{ width: 16 }} />
           <span style={{ width: 60, textAlign: 'center' }}>{match.opponent}</span>
         </div>

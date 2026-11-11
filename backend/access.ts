@@ -40,6 +40,15 @@ export function ownTeamFilter({ session }: AccessArgs) {
   return { id: { equals: teamId } };
 }
 
+/** Club: enkel de club van de eigen ploeg, admin ziet alles. */
+export function ownClubFilter({ session }: AccessArgs) {
+  if (!session) return false;
+  if (session.data.role === 'admin') return true;
+  const teamId = session.data.team?.id;
+  if (!teamId) return false;
+  return { teams: { some: { id: { equals: teamId } } } };
+}
+
 /** Lijsten met een rechtstreeks `team`-veld (Player, Match, Training). */
 export function teamOwnedFilter({ session }: AccessArgs) {
   if (!session) return false;

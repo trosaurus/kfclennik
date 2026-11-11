@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-KFC Lennik 4157 — Speeltijdbeheer: a Dutch-language playing-time / training-management app for a youth football club. Track player rosters per team, live playing time per match period, and prepare/export trainings. UI copy, comments, and domain vocabulary are in Dutch (ploeg = team, speler = player, wedstrijd = match, training = training session, oefening = exercise, speeltijd = playing time).
+Voetbaltraining.app (originally built for KFC Lennik 4157): a Dutch-language playing-time / training-management app for youth football clubs. Track player rosters per team, live playing time per match period, and prepare/export trainings. UI copy, comments, and domain vocabulary are in Dutch (ploeg = team, speler = player, wedstrijd = match, training = training session, oefening = exercise, speeltijd = playing time).
 
 ```
 kfc-lennik/
@@ -51,12 +51,14 @@ Backend: 3000 (GraphQL at `/api/graphql` in prod, `/graphql` directly via Keysto
 ## Architecture
 
 ### Data model & multi-tenancy (the core thing to understand)
+`Club` sits above `Team`: each team belongs to one club (`Team.club`), and the club's name, stamnummer and logo (a PNG/JPEG data URL stored in the DB) drive the branding the trainer sees (sidebar, match screens, lineup/training PDF exports). Nothing club-specific should be hardcoded; the app's own brand is in `frontend/src/lib/brand.ts`. A trainer can read only their own team's club (`ownClubFilter`); club create/update/delete is admin-only. `backend/lib/migrateLegacyClub.ts` (run from `db.onConnect`) creates a single club for pre-Club databases, and only while zero clubs exist.
+
 Every list in `backend/schema.ts` is scoped to a `Team`, directly or transitively:
 - Direct `team` relation: `Player`, `Match`, `Training`.
 - Via `match`: `Period`, `Goal`, `Attendance`, `Evaluation`.
 - Via `attendance.match`: `PlayTimeSession`.
 - Via `training`: `Exercise`.
-- Club-wide (not team-scoped): `WeekTheme`, `OefeningDatabank` (shared exercise library) — any signed-in trainer can read/create these; `WeekTheme` update/delete is admin-only.
+- Shared across everyone (not team-scoped, and not yet club-scoped either): `WeekTheme`, `OefeningDatabank` (shared exercise library) — any signed-in trainer can read/create these; `WeekTheme` update/delete is admin-only.
 
 A `Trainer` has a `role` (`admin` | `trainer`) and an optional `team`. **Admins bypass all scoping; a `trainer` only sees their own team's data.** This is enforced server-side in `backend/access.ts`, not just filtered client-side — every list's `access.operation`/`access.filter` uses one of the helper functions there (`teamOwnedFilter`, `matchScopedFilter`, `attendanceScopedFilter`, `trainingOwnedFilter`/`trainingVisibleFilter`, `exerciseScopedFilter`/`exerciseVisibleFilter`, `selfOrAdminFilter`, `ownTeamFilter`, `anySignedInFilter`). When adding a new list or relation, follow this same pattern — plug in (or extend) one of these filters rather than defaulting to `allowAll`.
 
@@ -79,7 +81,7 @@ Session shape (`sessionData` in `backend/keystone.ts`): `{ id, email, name, role
 
 ### Frontend structure
 - `App.tsx` — route table. `/` is the tile-based `Home` dashboard; module pages live under distinct paths (`/matchday`, `/spelers`, `/wedstrijden`, `/seizoen`, `/trainingen`, `/oefendatabank`); `/admin` is gated on `trainer.role === 'admin'` in the route itself (in addition to backend enforcement).
-- `lib/TeamContext.tsx` — the auth/session context (`trainer`, `teamId`, `category`, `isAdmin`); populated from `lib/auth.ts`'s `getMe()`. Nearly every page reads `teamId`/`isAdmin` from here to scope its own queries client-side (mirroring, not replacing, the backend scoping).
+- `lib/TeamContext.tsx` — the auth/session context (`trainer`, `teamId`, `category`, `isAdmin`, `club`, `clubName`; `useHomeLabel()` gives the own-team label for match screens); populated from `lib/auth.ts`'s `getMe()`. Nearly every page reads `teamId`/`isAdmin` from here to scope its own queries client-side (mirroring, not replacing, the backend scoping).
 - `lib/api.ts` — a single large GraphQL client module (~2000 lines): every query/mutation the frontend makes, plus CSV import/export and full-data backup/restore helpers. There is no codegen — GraphQL query strings are hand-written here, and many use raw string interpolation for `where` clauses (e.g. ``where: { id: { equals: "${id}" } }``) instead of GraphQL variables; this is an existing/inconsistent pattern in the file, not a template to copy for new IDs from untrusted input.
 - `lib/teamConfig.ts` — the category → format table (U6 2v2 / 10 min quarters up to U13/U15/U17 11v11 / 25 min quarters) and per-category field positions; this drives period duration, field layout, and role labels throughout the app.
 - `lib/jaarplan.ts`, `lib/trainingsschema.ts`, `lib/oefeningenbibliotheek.ts`, `lib/manualOefeningen.ts` — static/derived training-content helpers (season plan by week, training-structure templates, built-in exercise suggestions, and suggestions parsed from an uploaded team manual).

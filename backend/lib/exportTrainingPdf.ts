@@ -4,8 +4,6 @@
 // tekening-rasterisatie (parseDrawingScene + renderDrawingPng) als de
 // PowerPoint-export, en dezelfde ExportTraining/ExportExercise data-vorm.
 
-import path from 'path';
-import fs from 'fs';
 import PDFDocument from 'pdfkit';
 import { parseDrawingScene } from './drawingSvg';
 import { renderDrawingPng } from './renderDrawingPng';
@@ -20,17 +18,31 @@ const DARK = '#16161D';
 const DIM = '#6b7280';
 const MARGIN = 44;
 
-const LOGO_PATH = path.join(__dirname, '..', 'assets', 'images', 'logo-kfc-lennik.png');
-const LOGO_ASPECT = 455 / 491; // breedte/hoogte van het bronbestand
-const LOGO_BUFFER: Buffer | null = fs.existsSync(LOGO_PATH) ? fs.readFileSync(LOGO_PATH) : null;
+/** Clublogo (per club ingesteld als data-URL in de database), gedecodeerd per
+ * export en expliciet doorgegeven — geen module-globale toestand, want
+ * meerdere exports van verschillende clubs kunnen tegelijk lopen. */
+type Logo = { buffer: Buffer; aspect: number } | null;
+
+function decodeLogo(dataUrl: string | undefined): Logo {
+  const m = /^data:image\/(png|jpeg);base64,(.+)$/.exec(dataUrl ?? '');
+  if (!m) return null;
+  try {
+    const buffer = Buffer.from(m[2], 'base64');
+    // openImage() valideert het bestand en geeft de afmetingen.
+    const img = (new PDFDocument() as any).openImage(buffer);
+    return { buffer, aspect: img.width / img.height };
+  } catch {
+    return null;
+  }
+}
 
 /** Klein clublogo linksboven op elke pagina — puur decoratief, staat los van
  * de tekst-flow (vaste positie) zodat de strakke een-pagina-per-oefening
  * budgettering in addExercisePage() er niet door verschuift. */
-function addHeaderLogo(doc: PDFKit.PDFDocument) {
-  if (!LOGO_BUFFER) return;
-  const h = 24, w = h * LOGO_ASPECT;
-  doc.image(LOGO_BUFFER, doc.page.margins.left, 14, { width: w, height: h });
+function addHeaderLogo(doc: PDFKit.PDFDocument, logo: Logo) {
+  if (!logo) return;
+  const h = 24, w = h * logo.aspect;
+  doc.image(logo.buffer, doc.page.margins.left, 14, { width: w, height: h });
 }
 
 function collectBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
@@ -85,9 +97,9 @@ function drawTableRow(doc: PDFKit.PDFDocument, x: number, y: number, width: numb
  * daarna overblijft. Dit past meestal nog op één pagina, maar bij een erg
  * lange tekst verhuist de tekening + onderste rij bewust mee naar een nieuwe
  * pagina i.p.v. tekst te laten verdwijnen. */
-async function addExercisePage(doc: PDFKit.PDFDocument, ex: ExportExercise) {
+async function addExercisePage(doc: PDFKit.PDFDocument, ex: ExportExercise, logo: Logo) {
   doc.addPage();
-  addHeaderLogo(doc);
+  addHeaderLogo(doc, logo);
   const left = doc.page.margins.left;
   const cw = contentWidth(doc);
   const pageBottom = () => doc.page.height - doc.page.margins.bottom;
@@ -124,7 +136,7 @@ async function addExercisePage(doc: PDFKit.PDFDocument, ex: ExportExercise) {
   // pagina beginnen i.p.v. ze halverwege af te snijden.
   if (y + beschrijvingH > pageBottom()) {
     doc.addPage();
-    addHeaderLogo(doc);
+    addHeaderLogo(doc, logo);
     y = doc.page.margins.top;
   }
   doc.fillColor(DARK).text(beschrijvingText, left, y, { width: cw });
@@ -151,7 +163,7 @@ async function addExercisePage(doc: PDFKit.PDFDocument, ex: ExportExercise) {
   let imgBoxH = pageBottom() - bottomRowH - 12 - y;
   if (imgBoxH < MIN_IMG_H) {
     doc.addPage();
-    addHeaderLogo(doc);
+    addHeaderLogo(doc, logo);
     y = doc.page.margins.top;
     imgBoxH = pageBottom() - bottomRowH - 12 - y;
   }
@@ -168,7 +180,7 @@ async function addExercisePage(doc: PDFKit.PDFDocument, ex: ExportExercise) {
 /** Titelpagina met het clublogo in een rode kopbalk (zelfde stijl als de
  * officiële KFC-documenten: rode banner met logo + clubnaam bovenaan, een
  * dunne rode balk onderaan), i.p.v. gewoon losse gecentreerde tekstregels. */
-function addTitlePage(doc: PDFKit.PDFDocument, training: ExportTraining, dateLabel: string) {
+function addTitlePage(doc: PDFKit.PDFDocument, training: ExportTraining, dateLabel: string, logo: Logo) {
   const pageW = doc.page.width;
   const cw = contentWidth(doc);
   const bannerH = 110;
@@ -176,11 +188,14 @@ function addTitlePage(doc: PDFKit.PDFDocument, training: ExportTraining, dateLab
 
   doc.rect(0, 0, pageW, bannerH).fill(RED);
   const logoH = 66;
-  const logoW = LOGO_BUFFER ? logoH * LOGO_ASPECT : 0;
-  if (LOGO_BUFFER) doc.image(LOGO_BUFFER, MARGIN, (bannerH - logoH) / 2, { width: logoW, height: logoH });
+  const logoW = logo ? logoH * logo.aspect : 0;
+  if (logo) doc.image(logo.buffer, MARGIN, (bannerH - logoH) / 2, { width: logoW, height: logoH });
   const textX = MARGIN + (logoW ? logoW + 20 : 0);
-  doc.fillColor('white').font('Helvetica-Bold').fontSize(27).text('KFC LENNIK 4157', textX, 34, { characterSpacing: 0.5 });
-  doc.font('Helvetica-Oblique').fontSize(13).text('Onze club, onze trots!', textX, 68);
+  const clubTitle = training.club?.name
+    ? [training.club.name, training.club.stamnummer].filter(Boolean).join(' ').toUpperCase()
+    : 'VOETBALTRAINING.APP';
+  doc.fillColor('white').font('Helvetica-Bold').fontSize(27).text(clubTitle, textX, 34, { characterSpacing: 0.5, width: doc.page.width - textX - MARGIN, lineBreak: false, ellipsis: true });
+  doc.font('Helvetica-Oblique').fontSize(13).text(training.club?.name ? 'Onze club, onze trots!' : 'Trainen, coachen, speeltijd eerlijk verdelen.', textX, 68);
 
   // Samenvattingsregel ("3 oefeningen · 90 min") — extra houvast, en vult de
   // ruimte tussen kop en balk zinvoller op dan enkel witruimte.
@@ -228,11 +243,12 @@ export async function exportTrainingPdf(training: ExportTraining): Promise<Buffe
     ? new Date(training.date).toLocaleDateString('nl-BE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : '';
 
-  addTitlePage(doc, training, dateLabel);
+  const logo = decodeLogo(training.club?.logo);
+  addTitlePage(doc, training, dateLabel, logo);
 
   // ── Trainingsvoorbereiding / Leren / Actief-Fun-Individuele aandacht ──
   doc.addPage();
-  addHeaderLogo(doc);
+  addHeaderLogo(doc, logo);
   sectionTitle(doc, 'Trainingsvoorbereiding');
   field(doc, 'Coach', training.coachNaam);
   field(doc, 'Datum', dateLabel);
@@ -257,15 +273,15 @@ export async function exportTrainingPdf(training: ExportTraining): Promise<Buffe
   field(doc, 'Individuele aandacht', training.individueleAandacht);
 
   // ── Eén pagina per oefening ──
-  for (const ex of training.exercises) await addExercisePage(doc, ex);
+  for (const ex of training.exercises) await addExercisePage(doc, ex, logo);
 
   // ── Evaluatie ──
   doc.addPage();
-  addHeaderLogo(doc);
+  addHeaderLogo(doc, logo);
   doc.fontSize(20).fillColor(RED).font('Helvetica-Bold').text('EVALUATIE NA TRAINING', { align: 'center' });
 
   doc.addPage();
-  addHeaderLogo(doc);
+  addHeaderLogo(doc, logo);
   sectionTitle(doc, 'Reflectie · 360° evaluatie');
   field(doc, 'Behouden', training.evalBehouden);
   field(doc, 'Wijzigen', training.evalWijzigen);

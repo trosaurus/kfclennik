@@ -162,11 +162,79 @@ input TrainingRelateToManyForCreateInput {
   connect: [TrainingWhereUniqueInput!]
 }
 
+type Club {
+  id: ID!
+  name: String
+  stamnummer: String
+  logo: String
+  teams(where: TeamWhereInput! = {}, orderBy: [TeamOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TeamWhereUniqueInput): [Team!]
+  teamsCount(where: TeamWhereInput! = {}): Int
+}
+
+input ClubWhereUniqueInput {
+  id: ID
+}
+
+input ClubWhereInput {
+  AND: [ClubWhereInput!]
+  OR: [ClubWhereInput!]
+  NOT: [ClubWhereInput!]
+  id: IDFilter
+  name: StringFilter
+  stamnummer: StringFilter
+  logo: StringFilter
+  teams: TeamManyRelationFilter
+}
+
+input TeamManyRelationFilter {
+  every: TeamWhereInput
+  some: TeamWhereInput
+  none: TeamWhereInput
+}
+
+input ClubOrderByInput {
+  id: OrderDirection
+  name: OrderDirection
+  stamnummer: OrderDirection
+  logo: OrderDirection
+}
+
+input ClubUpdateInput {
+  name: String
+  stamnummer: String
+  logo: String
+  teams: TeamRelateToManyForUpdateInput
+}
+
+input TeamRelateToManyForUpdateInput {
+  disconnect: [TeamWhereUniqueInput!]
+  set: [TeamWhereUniqueInput!]
+  create: [TeamCreateInput!]
+  connect: [TeamWhereUniqueInput!]
+}
+
+input ClubUpdateArgs {
+  where: ClubWhereUniqueInput!
+  data: ClubUpdateInput!
+}
+
+input ClubCreateInput {
+  name: String
+  stamnummer: String
+  logo: String
+  teams: TeamRelateToManyForCreateInput
+}
+
+input TeamRelateToManyForCreateInput {
+  create: [TeamCreateInput!]
+  connect: [TeamWhereUniqueInput!]
+}
+
 type Team {
   id: ID!
   name: String
   category: String
-  club: String
+  club: Club
   active: String
   manualFileName: String
   manualUploadedAt: DateTime
@@ -194,7 +262,7 @@ input TeamWhereInput {
   id: IDFilter
   name: StringFilter
   category: StringFilter
-  club: StringFilter
+  club: ClubWhereInput
   active: StringNullableFilter
   manualFileName: StringFilter
   manualUploadedAt: DateTimeNullableFilter
@@ -238,7 +306,6 @@ input TeamOrderByInput {
   id: OrderDirection
   name: OrderDirection
   category: OrderDirection
-  club: OrderDirection
   active: OrderDirection
   manualFileName: OrderDirection
   manualUploadedAt: OrderDirection
@@ -248,7 +315,7 @@ input TeamOrderByInput {
 input TeamUpdateInput {
   name: String
   category: String
-  club: String
+  club: ClubRelateToOneForUpdateInput
   active: String
   manualFileName: String
   manualUploadedAt: DateTime
@@ -257,6 +324,12 @@ input TeamUpdateInput {
   players: PlayerRelateToManyForUpdateInput
   matches: MatchRelateToManyForUpdateInput
   trainings: TrainingRelateToManyForUpdateInput
+}
+
+input ClubRelateToOneForUpdateInput {
+  create: ClubCreateInput
+  connect: ClubWhereUniqueInput
+  disconnect: Boolean
 }
 
 input TrainerRelateToManyForUpdateInput {
@@ -288,7 +361,7 @@ input TeamUpdateArgs {
 input TeamCreateInput {
   name: String
   category: String
-  club: String
+  club: ClubRelateToOneForCreateInput
   active: String
   manualFileName: String
   manualUploadedAt: DateTime
@@ -297,6 +370,11 @@ input TeamCreateInput {
   players: PlayerRelateToManyForCreateInput
   matches: MatchRelateToManyForCreateInput
   trainings: TrainingRelateToManyForCreateInput
+}
+
+input ClubRelateToOneForCreateInput {
+  create: ClubCreateInput
+  connect: ClubWhereUniqueInput
 }
 
 input TrainerRelateToManyForCreateInput {
@@ -1688,6 +1766,12 @@ type Mutation {
   updateTrainers(data: [TrainerUpdateArgs!]!): [Trainer]
   deleteTrainer(where: TrainerWhereUniqueInput!): Trainer
   deleteTrainers(where: [TrainerWhereUniqueInput!]!): [Trainer]
+  createClub(data: ClubCreateInput!): Club
+  createClubs(data: [ClubCreateInput!]!): [Club]
+  updateClub(where: ClubWhereUniqueInput!, data: ClubUpdateInput!): Club
+  updateClubs(data: [ClubUpdateArgs!]!): [Club]
+  deleteClub(where: ClubWhereUniqueInput!): Club
+  deleteClubs(where: [ClubWhereUniqueInput!]!): [Club]
   createTeam(data: TeamCreateInput!): Team
   createTeams(data: [TeamCreateInput!]!): [Team]
   updateTeam(where: TeamWhereUniqueInput!, data: TeamUpdateInput!): Team
@@ -1812,6 +1896,9 @@ type Query {
   trainers(where: TrainerWhereInput! = {}, orderBy: [TrainerOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TrainerWhereUniqueInput): [Trainer!]
   trainer(where: TrainerWhereUniqueInput!): Trainer
   trainersCount(where: TrainerWhereInput! = {}): Int
+  clubs(where: ClubWhereInput! = {}, orderBy: [ClubOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: ClubWhereUniqueInput): [Club!]
+  club(where: ClubWhereUniqueInput!): Club
+  clubsCount(where: ClubWhereInput! = {}): Int
   teams(where: TeamWhereInput! = {}, orderBy: [TeamOrderByInput!]! = [], take: Int, skip: Int! = 0, cursor: TeamWhereUniqueInput): [Team!]
   team(where: TeamWhereUniqueInput!): Team
   teamsCount(where: TeamWhereInput! = {}): Int

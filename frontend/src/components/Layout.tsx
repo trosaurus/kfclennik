@@ -7,13 +7,16 @@ import { useTheme } from '../lib/ThemeContext';
 import { NAV_GROUPS, NavItem } from '../lib/navItems';
 import { getActiveTraining } from '../lib/activeTraining';
 import { NavIcon } from './icons/NavIcons';
-import logo from '../assets/Logo-KFC-Lennik.png';
+import { APP_NAME, APP_LOGO } from '../lib/brand';
 import './Layout.css';
 
 // App-schil: vaste zijbalk op tablet/desktop, op telefoon een bovenbalk met
 // een uitschuifmenu (dezelfde zijbalk als drawer).
 export default function Layout() {
-  const { trainer, setTrainer, isAdmin } = useTeam();
+  const { trainer, setTrainer, isAdmin, club } = useTeam();
+  // Clublogo/-naam als die ingesteld zijn, anders het logo/de naam van de app.
+  const brandLogo = club?.logo || APP_LOGO;
+  const brandName = club?.name || APP_NAME;
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -40,11 +43,11 @@ export default function Layout() {
   const sidebar = (
     <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
       <Link to="/trainingen" className="sidebar-brand">
-        <img src={logo} alt="" className="sidebar-logo" />
+        <img src={brandLogo} alt="" className="sidebar-logo" />
         <div className="sidebar-brand-text">
-          <span className="sidebar-brand-name">KFC Lennik</span>
+          <span className="sidebar-brand-name">{brandName}</span>
           <span className="sidebar-brand-sub">
-            {trainer?.team ? `${trainer.team.name} · ${trainer.team.category}` : 'Voetbaltraining'}
+            {trainer?.team ? `${trainer.team.name} · ${trainer.team.category}` : isAdmin ? 'Beheer' : 'Geen ploeg gekoppeld'}
           </span>
         </div>
       </Link>
@@ -83,6 +86,8 @@ export default function Layout() {
         )}
       </nav>
 
+      {club && <div className="sidebar-powered">via {APP_NAME}</div>}
+
       <div className="sidebar-footer">
         <div className="sidebar-user">
           <span className="sidebar-avatar">{initials}</span>
@@ -109,8 +114,8 @@ export default function Layout() {
           <NavIcon name="menu" />
         </button>
         <Link to="/trainingen" className="topbar-brand">
-          <img src={logo} alt="" />
-          <span>KFC Lennik</span>
+          <img src={brandLogo} alt="" />
+          <span>{brandName}</span>
         </Link>
         {activeTraining ? (
           <Link to={`/trainingen/${activeTraining.id}/modus`} className="topbar-resume" aria-label="Training hervatten">

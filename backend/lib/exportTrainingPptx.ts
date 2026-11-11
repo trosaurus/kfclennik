@@ -119,6 +119,8 @@ export interface ExportTraining {
   evalBijgeleerd: string;
   evalIndividueleAandacht: string;
   exercises: ExportExercise[];
+  /** Club van de ploeg (naam/stamnummer/logo als data-URL) — voor de kop van de PDF. */
+  club?: { name: string; stamnummer: string; logo: string } | null;
 }
 
 function set(slide: ISlide, shape: string, value: string) {

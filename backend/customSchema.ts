@@ -47,6 +47,7 @@ function withKeyLock<T>(key: string, run: () => Promise<T>): Promise<T> {
 
 const TRAINING_QUERY = `
   id titel date jaarplanLabel
+  team { club { name stamnummer logo } }
   coachNaam tijdstip leeftijdscategorie niveau
   hoofdmoment spelfase basisvaardigheid
   speluitdagingWie speluitdagingWat speluitdagingWaar speluitdagingWanneer
@@ -90,6 +91,9 @@ function buildExportTrainingData(training: any): ExportTraining {
     evalHaddenFun: training.evalHaddenFun ?? '',
     evalBijgeleerd: training.evalBijgeleerd ?? '',
     evalIndividueleAandacht: training.evalIndividueleAandacht ?? '',
+    club: training.team?.club
+      ? { name: training.team.club.name ?? '', stamnummer: training.team.club.stamnummer ?? '', logo: training.team.club.logo ?? '' }
+      : null,
     exercises: (training.exercises ?? []).map((ex: any) => ({
       fase: ex.fase ?? 'tussenvorm',
       naam: ex.naam ?? '',

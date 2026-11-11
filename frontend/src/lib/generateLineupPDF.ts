@@ -1,3 +1,4 @@
+import { APP_NAME } from './brand';
 import jsPDF from 'jspdf';
 import { Match, PlayTimeSession, Attendance, Player, formatDuration } from './api';
 import { FieldPos, getPositionsForCategory, getFormatForCategory, FORMAT_LABEL } from './teamConfig';
@@ -18,6 +19,8 @@ interface LineupPDFInput {
   allPlayers: Player[];
   sessions: PlayTimeSession[];
   attendances: Attendance[];
+  /** Clubnaam + stamnummer voor de kop (bv. "KFC Lennik 4157"); leeg → appnaam. */
+  clubTitle?: string;
 }
 
 // ── Colours ───────────────────────────────────────────────────────────────────
@@ -36,6 +39,7 @@ const C = {
 };
 
 export function generateLineupPDF(input: LineupPDFInput): void {
+  const clubTitle = input.clubTitle?.trim() || APP_NAME;
   const { match, category, teamName, quarters, allPlayers } = input;
   const positions: FieldPos[] = getPositionsForCategory(category);
   const format = getFormatForCategory(category);
@@ -59,7 +63,7 @@ export function generateLineupPDF(input: LineupPDFInput): void {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(20);
     doc.setTextColor(...C.black);
-    doc.text('KFC LENNIK 4157', M, 14);
+    doc.text(clubTitle.toUpperCase(), M, 14);
 
     doc.setFontSize(10);
     doc.setTextColor(...C.gray);
@@ -103,7 +107,7 @@ export function generateLineupPDF(input: LineupPDFInput): void {
     // Footer
     doc.setFontSize(7);
     doc.setTextColor(...C.gray);
-    doc.text(`KFC Lennik 4157  ·  Pagina ${pageNum}/${totalPages}`, PW / 2, PH - 5, { align: 'center' });
+    doc.text(`${clubTitle}  ·  Pagina ${pageNum}/${totalPages}`, PW / 2, PH - 5, { align: 'center' });
   }
 
   // ── Draw the SVG-like field ────────────────────────────────────────────────
@@ -431,7 +435,7 @@ export function generateLineupPDF(input: LineupPDFInput): void {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(...C.gray);
-    doc.text(`KFC Lennik 4157  ·  Pagina ${i}/${np}`, PW / 2, PH - 5, { align: 'center' });
+    doc.text(`${clubTitle}  ·  ${APP_NAME}  ·  Pagina ${i}/${np}`, PW / 2, PH - 5, { align: 'center' });
   }
 
   // Save

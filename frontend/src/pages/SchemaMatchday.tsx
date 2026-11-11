@@ -5,7 +5,7 @@ import {
   getMatches, getMatchOfTheWeek, getAttendancesForMatch, getPeriodsForMatch, getGoalsForMatch, getMatchScore,
   createPeriod, updatePeriod, updateMatch, addGoal, removeGoal, resetMatchScore,
 } from '../lib/api';
-import { useTeam } from '../lib/TeamContext';
+import { useTeam, useHomeLabel } from '../lib/TeamContext';
 import { fmtMin, FIELD_LINIES, LINIE_SHORT, Linie, blockChanges, swapInBlock } from '../lib/speeltijd';
 import { toPlanPlayers, buildPlan } from '../lib/speeltijdSettings';
 import { usePlannerSettings } from '../lib/usePlannerSettings';
@@ -50,6 +50,7 @@ const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString('nl-BE', { weekday: 'short', day: 'numeric', month: 'short' });
 
 export default function SchemaMatchday({ matchId: fixedMatchId }: { matchId?: string } = {}) {
+  const homeLabel = useHomeLabel();
   const { teamId, category } = useTeam();
   const [matches, setMatches] = useState<Match[]>([]);
   const [match, setMatch] = useState<Match | null>(null);
@@ -428,7 +429,7 @@ export default function SchemaMatchday({ matchId: fixedMatchId }: { matchId?: st
 
         <div className="smd-board">
           <div className="smd-board-team">
-            <span className="smd-board-name">KFC Lennik</span>
+            <span className="smd-board-name">{homeLabel}</span>
           </div>
           <div className="smd-board-score">
             <span>{tussenstand.own}</span><span className="smd-board-sep">–</span><span>{tussenstand.opp}</span>
@@ -570,7 +571,7 @@ export default function SchemaMatchday({ matchId: fixedMatchId }: { matchId?: st
       {/* ── Alle doelpunten (ook buiten het schema om te corrigeren) ── */}
       <details className="card smd-goallist" open={goals.length > 0 && goals.length <= 6}>
         <summary>
-          <span>Doelpunten KFC Lennik</span>
+          <span>Doelpunten {homeLabel}</span>
           <span className="smd-goallist-count">{goals.length}</span>
         </summary>
         {goals.length === 0

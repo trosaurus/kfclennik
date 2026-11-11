@@ -3,6 +3,7 @@ import { statelessSessions } from '@keystone-6/core/session';
 import { createAuth } from '@keystone-6/auth';
 import { lists } from './schema';
 import { extendGraphqlSchema } from './customSchema';
+import { migrateLegacyClub } from './lib/migrateLegacyClub';
 
 const { withAuth } = createAuth({
   listKey: 'Trainer',
@@ -26,6 +27,8 @@ export default withAuth(
       provider: 'postgresql',
       url: process.env.DATABASE_URL ?? 'postgresql://postgres:postgres123@127.0.0.1:5432/kfc_lennik',
       shadowDatabaseUrl: process.env.SHADOW_DATABASE_URL ?? 'postgresql://postgres:postgres123@127.0.0.1:5432/kfc_lennik_shadow',
+      // Bestaande single-club-database → één Club aanmaken en ploegen koppelen.
+      onConnect: async context => { await migrateLegacyClub(context); },
     },
     lists,
     session,

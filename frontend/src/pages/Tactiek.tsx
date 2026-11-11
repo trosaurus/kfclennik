@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { TACTIEK, TactiekFase, TactiekPrincipe } from '../lib/tactiek';
+import { useTeam } from '../lib/TeamContext';
 import './Tactiek.css';
 
 export default function Tactiek() {
+  const { clubName } = useTeam();
   const [activeChapter, setActiveChapter] = useState(TACTIEK[0].key);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const chapter = TACTIEK.find(c => c.key === activeChapter)!;
@@ -12,7 +14,7 @@ export default function Tactiek() {
       <div className="tac-header">
         <div>
           <h1 className="page-title">Tactiek</h1>
-          <p className="page-subtitle">Het gamemodel van KFC Lennik — aanvallen, omschakelen, verdedigen</p>
+          <p className="page-subtitle">Het gamemodel{clubName ? ` van ${clubName}` : ''} — aanvallen, omschakelen, verdedigen</p>
         </div>
       </div>
 
